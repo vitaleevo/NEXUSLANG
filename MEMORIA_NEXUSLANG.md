@@ -111,11 +111,10 @@ Resultado:
   falhou corretamente em `strict_status=failed:gh-not-authenticated`.
 - `scripts/release-dry-run.sh`: passou com quality gate completo, pacote,
   validacao local, validacao Docker e assinatura GPG efemera de dry-run.
-- Relatorio local final registrou:
-  - `sha256=82b3d0c8be98e66b082ca11a62b8ba6ae1cb8d87b8a12d35f2ca98c0d7bf5b05`;
-  - `signing_status=signed-ephemeral-dry-run`;
-  - `remote_ci_status=not-observed:gh-not-authenticated`;
-  - `second_environment=docker:ruby:3.3-bookworm`.
+- Relatorio local final registrou assinatura efemera de dry-run,
+  `remote_ci_status=not-observed:gh-not-authenticated` e segundo ambiente
+  `docker:ruby:3.3-bookworm`. O SHA do pacote muda a cada reconstrucao porque
+  o archive inclui metadados gerados no momento.
 - `vitaleevo/nexuslang` nao existe ainda pelo conector GitHub.
 
 Estado atual:
