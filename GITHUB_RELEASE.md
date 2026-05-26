@@ -86,3 +86,12 @@ dist/release-dry-run-report.txt
 
 The project should only be marked as production/public release ready when the
 strict dry-run passes with a maintained signing key and observed remote CI.
+
+## Current Status
+
+The strict dry-run has passed for the NexusLang 0.1.0 release scope using:
+
+```text
+Repository: https://github.com/vitaleevo/NEXUSLANG
+Signing key: 3237F7CC5CE2514FC9671BB93CB6808B55385273
+```

@@ -45,12 +45,14 @@ The current local release process validates:
 - Package smoke in a clean temporary directory
 - SHA-256 checksum before package extraction
 
-Latest recorded local state:
+Latest recorded release state:
 
-- Project score: 99/100 after the final local dry-run phase
-- Strict public-release gate: scripted, but not passed in this local workspace
-  because GitHub auth, Git repository metadata, and a maintained GPG key are
-  external prerequisites
+- Project score: 100/100 for the 0.1.0 release scope after the strict
+  public-release dry-run phase
+- GitHub repository: `https://github.com/vitaleevo/NEXUSLANG`
+- GitHub Actions: observed successful `NexusLang Quality Gate` for the pushed
+  release commit
+- Signing key fingerprint: `3237F7CC5CE2514FC9671BB93CB6808B55385273`
 - WASM size: 347437 bytes
 - Rust tests: 9 internal + 145 core/integration tests
 - CLI smoke: 18 passed, 0 failed
@@ -73,9 +75,8 @@ NexusLang 0.1.0 focuses on a practical ERP subset:
 
 ## Known Limitations
 
-- This is not a signed public production release.
-- Version/tag policy is documented, but no remote public tag has been observed
-  in this local workspace.
+- A signed release dry-run passed, but the final GitHub Release and public
+  `v0.1.0` tag still need to be published.
 - The packaged binary is local-platform oriented and has not been validated as
   a cross-platform installer.
 - Remote GitHub Actions should still be observed after a real push or PR.
@@ -89,12 +90,9 @@ NexusLang 0.1.0 focuses on a practical ERP subset:
   arbitrary custom OpenAPI extensions or every possible route shape.
 - Playground loading is validated locally; it is not yet deployed as a hosted
   public web product.
-- Public signing path is documented and scripted, but local artifacts are
-  unsigned unless a maintainer signs them with GPG.
-- Final local dry-run can create ephemeral signatures to validate signing
-  mechanics; those signatures are not a maintained public release identity.
 - Strict release dry-run refuses ephemeral keys and requires observed GitHub
-  Actions for the current commit.
+  Actions for the current commit; this gate has passed with the maintained
+  NexusLang release key.
 
 ## Upgrade Notes
 
@@ -108,7 +106,8 @@ exists from an earlier phase, rebuild it:
 
 ## Next Release Focus
 
-- Produce signed public artifacts with a maintained release key.
-- Pass `./scripts/release-dry-run-strict.sh` against the real GitHub repo.
+- Publish the `v0.1.0` source tag and GitHub Release.
+- Attach signed artifacts, checksums, signatures, and the public release key to
+  the GitHub Release.
 - Public install guide polish and expanded examples.
 - Clear storage compatibility policy for JSON and SQLite.

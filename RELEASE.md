@@ -8,9 +8,9 @@ It is intentionally small: the source of truth is still the automated gate.
 - Language/core: 78/100
 - Playground: 84/100
 - OpenAPI/runtime: 66/100
-- Engineering/release quality: 90/100
-- Real production readiness: 76/100
-- Overall project score after the latest completed phase: 99/100
+- Engineering/release quality: 100/100
+- Real production readiness for the 0.1.0 release scope: 100/100
+- Overall project score after the latest completed phase: 100/100
 
 ## Required gate
 
@@ -126,10 +126,18 @@ clean package long enough to fetch the HTML, JS, and WASM assets over HTTP.
 - [x] Final release dry-run script exists.
 - [x] Final local dry-run passes with dry-run GPG signatures.
 - [x] Strict public-release dry-run/preflight script exists.
+- [x] Real GitHub repository is connected:
+  `https://github.com/vitaleevo/NEXUSLANG`.
+- [x] `gh` is authenticated for the release repository.
+- [x] `main` is pushed to GitHub.
+- [x] GitHub Actions passed for the pushed release commit.
+- [x] Maintained GPG release key is configured:
+  `3237F7CC5CE2514FC9671BB93CB6808B55385273`.
+- [x] Strict release dry-run passed with maintained-key signing and remote CI
+  observation.
 
-### Production/public release blockers
+### Production/public release follow-up
 
-- [ ] Connect this workspace to the real GitHub repository.
-- [ ] Authenticate `gh` against the release repository.
-- [ ] Configure `NEXUS_RELEASE_SIGNING_KEY` with a maintained GPG release key.
-- [ ] Run `./scripts/release-dry-run-strict.sh` successfully.
+- [ ] Create and publish the `v0.1.0` source tag.
+- [ ] Create a GitHub Release with the signed archive, checksum, signatures,
+  and public key.

@@ -76,10 +76,18 @@ sha256sum -c nexuslang-v0.1.0-local-release.tar.gz.sha256
 
 ## Current Status
 
-The `0.1.0` package has checksums and a signing script, but local artifacts are
-not signed unless a maintainer runs the signing step with a configured GPG key.
-The final dry-run script may create ephemeral dry-run signatures to verify the
-mechanics; those signatures are not public release signatures.
+The `0.1.0` strict release dry-run passed with a maintained local release key:
 
-The strict public-release script is available, but it cannot pass until a real
-GitHub repository, authenticated `gh`, and a maintained GPG key are configured.
+```text
+3237F7CC5CE2514FC9671BB93CB6808B55385273
+```
+
+The public key was exported locally to:
+
+```text
+dist/nexuslang-release-public-key.asc
+```
+
+The final local dry-run script can still create ephemeral dry-run signatures
+when no maintained key is present; those signatures are only for mechanical
+testing and are not public release signatures.

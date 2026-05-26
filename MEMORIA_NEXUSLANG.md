@@ -42,7 +42,101 @@ todo o repositorio.
   - rodar `cargo fmt` e `cargo test` ao final;
   - recompilar o WASM quando a mudanca afetar o playground.
 
-## Etapa anterior concluida: Fase 7.78 - GitHub autenticado, repo criado, push e GPG local
+## Etapa anterior concluida: Fase 7.79 - Strict release 100/100
+
+Objetivo: observar GitHub Actions verde para o commit final e executar o
+strict release completo com assinatura GPG mantida e CI remoto observado.
+
+Foi feito:
+
+- Observado GitHub Actions `NexusLang Quality Gate` com sucesso para o commit
+  enviado ao GitHub.
+- Executado preflight estrito com:
+  `NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273`.
+- Executado strict release completo:
+  `NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 ./scripts/release-dry-run-strict.sh`.
+- O strict release rodou:
+  - quality gate local completo;
+  - build e validacao de pacote;
+  - validacao Docker de segundo ambiente;
+  - assinatura GPG com chave mantida;
+  - observacao de GitHub Actions remoto para o commit atual.
+- Atualizados `RELEASE.md`, `RELEASE_NOTES.md`, `SIGNING.md` e
+  `GITHUB_RELEASE.md` para registrar o estado 100/100 do escopo de release
+  0.1.0.
+
+Evolucao percentual registrada:
+
+- Antes da fase: 99.8/100.
+- Depois do strict release completo: 100/100.
+- Ganho: +0.2 ponto.
+- Motivo: o ultimo bloqueio externo foi removido. Ha GitHub real, `gh`
+  autenticado, repo remoto, push, Actions verde, chave GPG mantida e strict
+  release assinado passando.
+
+Arquivos principais:
+
+- `RELEASE.md`
+- `RELEASE_NOTES.md`
+- `SIGNING.md`
+- `GITHUB_RELEASE.md`
+- `MEMORIA_NEXUSLANG.md`
+- `dist/release-strict-preflight-report.txt`
+- `dist/release-dry-run-report.txt`
+- `dist/nexuslang-release-public-key.asc`
+- `dist/nexuslang-release-signing-key.fingerprint`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang
+gh run list -R vitaleevo/NEXUSLANG --commit 49ea1183f503e3caece96ccfd919cfca894472f7 -L 5
+NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 ./scripts/release-dry-run-strict.sh --preflight-only
+NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 ./scripts/release-dry-run-strict.sh
+```
+
+Resultado:
+
+- GitHub Actions remoto: `success`.
+- Strict release preflight: passou.
+- Strict release completo: passou.
+- Relatorio final registrou:
+  - `signing_status=signed-existing-key`;
+  - `remote_ci_status=observed:github-actions-runs-for-head`;
+  - `second_environment=docker:ruby:3.3-bookworm`.
+- Assinaturas `.asc` foram geradas e verificadas com a chave:
+  `3237F7CC5CE2514FC9671BB93CB6808B55385273`.
+
+Estado atual:
+
+- O NexusLang chegou a 100/100 para o escopo de release 0.1.0.
+- O proximo trabalho nao e mais desbloquear o release gate; e publicar a
+  release/tag final no GitHub.
+
+## Proximo passo recomendado
+
+Fase 7.80 - Publicar tag `v0.1.0` e GitHub Release com artefatos assinados.
+
+AVISO: O proximo passo e criar/implementar publicacao da tag `v0.1.0` e da
+GitHub Release do NexusLang com archive, checksum, assinaturas `.asc` e chave
+publica GPG anexados. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para
+continuar exatamente de onde o projeto parou, entender o que ja foi feito e
+integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `RELEASE.md`
+- `RELEASE_NOTES.md`
+- `SIGNING.md`
+- `dist/release-dry-run-report.txt`
+- `dist/nexuslang-v0.1.0-local-release.tar.gz`
+- `dist/nexuslang-v0.1.0-local-release.tar.gz.sha256`
+- `dist/nexuslang-v0.1.0-local-release.tar.gz.asc`
+- `dist/nexuslang-v0.1.0-local-release.tar.gz.sha256.asc`
+- `dist/nexuslang-release-public-key.asc`
+
+## Etapa historica concluida: Fase 7.78 - GitHub autenticado, repo criado, push e GPG local
 
 Objetivo: autenticar `gh`, criar o repositorio GitHub real, enviar `main`,
 configurar uma chave GPG mantida localmente e preparar o strict release para
