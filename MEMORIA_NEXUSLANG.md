@@ -42,7 +42,112 @@ todo o repositorio.
   - rodar `cargo fmt` e `cargo test` ao final;
   - recompilar o WASM quando a mudanca afetar o playground.
 
-## Etapa anterior concluida: Fase 7.79 - Strict release 100/100
+## Etapa anterior concluida: Fase 7.80 - Publicacao da tag e GitHub Release v0.1.0
+
+Objetivo: publicar a tag `v0.1.0` e a GitHub Release com archive, checksum,
+assinaturas `.asc` e chave publica GPG anexados.
+
+Foi feito:
+
+- Atualizados `RELEASE.md`, `RELEASE_NOTES.md` e `GITHUB_RELEASE.md` para que
+  a tag carregue notas coerentes com uma release publica, nao com um passo
+  ainda pendente.
+- Observado GitHub Actions verde para o commit final de docs:
+  `3f988b34191ac362f69e010ca918c8de689dded3`.
+- Executado strict release completo nesse HEAD com:
+  `NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273`.
+- Criada tag GPG assinada:
+  - `v0.1.0`;
+  - commit alvo: `3f988b34191ac362f69e010ca918c8de689dded3`;
+  - chave: `3237F7CC5CE2514FC9671BB93CB6808B55385273`.
+- Enviada a tag para GitHub.
+- Criada GitHub Release publica:
+  - `https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.1.0`.
+- Anexados os assets:
+  - `nexuslang-v0.1.0-local-release.tar.gz`;
+  - `nexuslang-v0.1.0-local-release.tar.gz.sha256`;
+  - `nexuslang-v0.1.0-local-release.tar.gz.asc`;
+  - `nexuslang-v0.1.0-local-release.tar.gz.sha256.asc`;
+  - `nexuslang-release-public-key.asc`;
+  - `nexuslang-release-signing-key.fingerprint`.
+- Baixados os anexos da release publicada para `/tmp` e verificados:
+  - `sha256sum -c` passou;
+  - assinatura do archive passou com a chave publica baixada;
+  - assinatura do checksum passou com a chave publica baixada.
+
+Evolucao percentual registrada:
+
+- Antes da fase: 100/100 no gate de release.
+- Depois da fase: 100/100 publicado.
+- Ganho: publicacao final concluida.
+
+Arquivos principais:
+
+- `RELEASE.md`
+- `RELEASE_NOTES.md`
+- `GITHUB_RELEASE.md`
+- `MEMORIA_NEXUSLANG.md`
+- `dist/nexuslang-v0.1.0-local-release.tar.gz`
+- `dist/nexuslang-v0.1.0-local-release.tar.gz.sha256`
+- `dist/nexuslang-v0.1.0-local-release.tar.gz.asc`
+- `dist/nexuslang-v0.1.0-local-release.tar.gz.sha256.asc`
+- `dist/nexuslang-release-public-key.asc`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang
+NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 ./scripts/release-dry-run-strict.sh
+git tag -s v0.1.0 -u 3237F7CC5CE2514FC9671BB93CB6808B55385273 -m NexusLang-0.1.0
+git tag -v v0.1.0
+git push origin v0.1.0
+gh release create v0.1.0 -R vitaleevo/NEXUSLANG --title "NexusLang 0.1.0" --notes-file RELEASE_NOTES.md --latest <assets>
+gh release upload v0.1.0 -R vitaleevo/NEXUSLANG --clobber <assets>
+gh release view v0.1.0 -R vitaleevo/NEXUSLANG --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish,assets
+gh release download v0.1.0 -R vitaleevo/NEXUSLANG --dir <tmp> --pattern "*"
+sha256sum -c nexuslang-v0.1.0-local-release.tar.gz.sha256
+gpg --import nexuslang-release-public-key.asc
+gpg --verify nexuslang-v0.1.0-local-release.tar.gz.asc nexuslang-v0.1.0-local-release.tar.gz
+gpg --verify nexuslang-v0.1.0-local-release.tar.gz.sha256.asc nexuslang-v0.1.0-local-release.tar.gz.sha256
+```
+
+Resultado:
+
+- Tag assinada: OK.
+- GitHub Release: publicada.
+- Assets anexados: 6.
+- Checksum publicado: OK.
+- Assinaturas publicadas: OK.
+- Release v0.1.0 esta concluida.
+
+Estado atual:
+
+- NexusLang 0.1.0 esta publicado no GitHub.
+- O projeto permanece em 100/100 para o escopo 0.1.0.
+- A proxima etapa ja e pos-release: validar experiencia de instalacao publica
+  e planejar o proximo incremento.
+
+## Proximo passo recomendado
+
+Fase 7.81 - Validacao pos-release de instalacao publica e roadmap 0.1.1.
+
+AVISO: O proximo passo e criar/implementar validacao pos-release da instalacao
+publica do NexusLang a partir da GitHub Release `v0.1.0`, em ambiente limpo,
+e consolidar o roadmap `0.1.1`/`0.2.0` com os proximos riscos reais. Antes de
+iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o
+projeto parou, entender o que ja foi feito e integrar a solucao com o sistema
+atual sem reler todo o repositorio.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `README.md`
+- `RELEASE_NOTES.md`
+- `RELEASE.md`
+- `nexuslang-src/ROADMAP.md`
+- `https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.1.0`
+
+## Etapa historica concluida: Fase 7.79 - Strict release 100/100
 
 Objetivo: observar GitHub Actions verde para o commit final e executar o
 strict release completo com assinatura GPG mantida e CI remoto observado.
