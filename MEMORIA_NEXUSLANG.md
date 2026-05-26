@@ -42,7 +42,101 @@ todo o repositorio.
   - rodar `cargo fmt` e `cargo test` ao final;
   - recompilar o WASM quando a mudanca afetar o playground.
 
-## Etapa anterior concluida: Fase 7.75 - Gate estrito GitHub/GPG/CI
+## Etapa anterior concluida: Fase 7.76 - Bootstrap Git local para release estrito
+
+Objetivo: remover os bloqueios locais iniciais do release estrito, criando um
+repositorio Git local, configurando identidade Git derivada da conta GitHub
+disponivel no Codex e criando o commit inicial.
+
+Foi feito:
+
+- Confirmado que o plugin GitHub do Codex esta autenticado na conta
+  `vitaleevo`.
+- Listados repositorios acessiveis da conta `vitaleevo`; nao foi identificado
+  um repositorio obviamente dedicado ao NexusLang.
+- Inicializado Git local no workspace com branch `main`.
+- Configurada identidade Git local:
+  - `user.name=vitaleevo`;
+  - `user.email=201674524+vitaleevo@users.noreply.github.com`.
+- Criado commit inicial limpo:
+  - `8efe181 Initial NexusLang release candidate`.
+- Corrigido `scripts/release-dry-run-strict.sh` para reportar repositorios sem
+  commits como `strict_status=failed:no-commits`, em vez de deixar o erro bruto
+  de `git rev-parse HEAD` escapar.
+- Atualizado `GITHUB_RELEASE.md` e esta memoria com o requisito explicito de
+  pelo menos um commit local.
+
+Evolucao percentual registrada:
+
+- Antes da fase: 99/100.
+- Depois da fase: 99/100.
+- Ganho: +0 ponto publico.
+- Motivo: o projeto agora e um repo Git local com commit, mas ainda falta
+  `origin` GitHub real, `gh` autenticado, push, Actions verde e chave GPG
+  mantida. O ultimo 1% continua dependente de infraestrutura externa.
+
+Arquivos principais:
+
+- `.git/`
+- `scripts/release-dry-run-strict.sh`
+- `GITHUB_RELEASE.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang
+git init -b main
+git config user.name "vitaleevo"
+git config user.email "201674524+vitaleevo@users.noreply.github.com"
+git add -A
+git commit -m Initial\ NexusLang\ release\ candidate
+bash -n scripts/release-dry-run-strict.sh
+./scripts/release-dry-run-strict.sh --preflight-only
+git status --short --branch
+```
+
+Resultado:
+
+- Git local criado com branch `main`.
+- Commit inicial criado.
+- Worktree ficou limpo antes desta atualizacao de memoria.
+- Preflight estrito agora passa pelos bloqueios anteriores e falha corretamente
+  em `strict_status=failed:no-origin-remote`.
+- `gh` local continua nao autenticado.
+- Nenhuma chave GPG secreta mantida foi encontrada.
+
+Estado atual:
+
+- O projeto esta preparado como repo Git local.
+- O proximo bloqueio real e escolher/criar o repositorio GitHub e configurar
+  `origin`.
+- O conector GitHub do Codex tem acesso a `vitaleevo`, mas o `gh` local ainda
+  precisa de `gh auth login` para o script estrito.
+- O projeto permanece em 99/100.
+
+## Proximo passo recomendado
+
+Fase 7.77 - Escolher/criar repositorio GitHub NexusLang, configurar `origin`,
+autenticar `gh`, configurar chave GPG mantida e fazer push.
+
+AVISO: O proximo passo e criar/implementar escolha ou criacao do repositorio
+GitHub real para NexusLang, configurar `origin`, autenticar `gh`, configurar
+chave GPG mantida, enviar `main` e observar Actions ate
+`./scripts/release-dry-run-strict.sh` passar. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `GITHUB_RELEASE.md`
+- `scripts/release-dry-run-strict.sh`
+- `.github/workflows/ci.yml`
+- `dist/release-strict-preflight-report.txt`
+
+## Etapa historica concluida: Fase 7.75 - Gate estrito GitHub/GPG/CI
 
 Objetivo: implementar o caminho estrito que so permite declarar release
 publico quando houver repositorio GitHub real, `gh` autenticado, CI remoto
