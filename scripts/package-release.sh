@@ -85,6 +85,7 @@ copy_runtime_assets() {
     find "$CRATE_DIR/examples" -maxdepth 1 -type f -name "*.nx" -exec cp {} "$PACKAGE_DIR/examples/" \;
     cp "$ROOT_DIR/scripts/validate-release-second-env.sh" "$PACKAGE_DIR/scripts/validate-release-second-env.sh"
     cp "$ROOT_DIR/scripts/sign-release-artifacts.sh" "$PACKAGE_DIR/scripts/sign-release-artifacts.sh"
+    cp "$ROOT_DIR/scripts/connect-github-release.sh" "$PACKAGE_DIR/scripts/connect-github-release.sh"
     cp "$ROOT_DIR/scripts/release-dry-run-strict.sh" "$PACKAGE_DIR/scripts/release-dry-run-strict.sh"
 }
 
@@ -167,6 +168,7 @@ WASM bytes: $wasm_bytes
 - docs/SIGNING.md: artifact signing path
 - docs/GITHUB_RELEASE.md: GitHub, CI, and maintained-key release setup
 - docs/RELEASE.md: release gate and checklist
+- scripts/connect-github-release.sh: GitHub origin/create/push helper
 - scripts/validate-release-second-env.sh: Docker-based second-environment check
 - scripts/sign-release-artifacts.sh: GPG signing helper for publishers
 - scripts/release-dry-run-strict.sh: strict public-release preflight and dry-run

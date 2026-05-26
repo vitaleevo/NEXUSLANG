@@ -30,6 +30,20 @@ current commit was pushed:
 export NEXUS_GITHUB_REPOSITORY="owner/repo"
 ```
 
+## Connect Origin
+
+After `gh auth login`, connect the local repo to GitHub:
+
+```bash
+./scripts/connect-github-release.sh --repo vitaleevo/nexuslang --create --push
+```
+
+Use `--private` if the repository should start private:
+
+```bash
+./scripts/connect-github-release.sh --repo vitaleevo/nexuslang --create --private --push
+```
+
 ## Strict Dry-Run
 
 Run the fast external preflight first:

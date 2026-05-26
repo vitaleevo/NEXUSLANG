@@ -42,7 +42,105 @@ todo o repositorio.
   - rodar `cargo fmt` e `cargo test` ao final;
   - recompilar o WASM quando a mudanca afetar o playground.
 
-## Etapa anterior concluida: Fase 7.76 - Bootstrap Git local para release estrito
+## Etapa anterior concluida: Fase 7.77 - Helper de conexao GitHub release
+
+Objetivo: preparar o passo operacional que conecta o repo local ao GitHub real,
+criando/verificando o repositorio destino, configurando `origin` e fazendo
+push quando `gh` estiver autenticado.
+
+Foi feito:
+
+- Configurado `origin` local provisoriamente para
+  `https://github.com/vitaleevo/nexuslang.git`.
+- Confirmado pelo conector GitHub do Codex que `vitaleevo/nexuslang` ainda nao
+  existe.
+- Criado `scripts/connect-github-release.sh`, que:
+  - aceita `--repo owner/name`;
+  - aceita `--create` para criar o repositorio com `gh repo create`;
+  - aceita `--private` para criar repo privado;
+  - aceita `--push` para enviar `main`;
+  - exige Git local, commit, branch `main`, worktree limpo e `gh` autenticado;
+  - escreve `dist/github-release-connect-report.txt`.
+- Atualizado `GITHUB_RELEASE.md` com o fluxo:
+  `./scripts/connect-github-release.sh --repo vitaleevo/nexuslang --create --push`.
+- Atualizado `scripts/package-release.sh` para incluir o helper no pacote.
+- Atualizado `scripts/validate-release-package.sh` para exigir o helper no
+  artefato.
+- Atualizado `.github/workflows/ci.yml` para validar sintaxe do helper.
+
+Evolucao percentual registrada:
+
+- Antes da fase: 99/100.
+- Depois da fase: 99/100.
+- Ganho: +0 ponto publico.
+- Motivo: a automacao para conectar/criar/pushar o repo esta pronta, mas o
+  `gh` local ainda nao esta autenticado e nao ha chave GPG mantida. Sem isso,
+  o strict release nao pode passar.
+
+Arquivos principais:
+
+- `scripts/connect-github-release.sh`
+- `scripts/package-release.sh`
+- `scripts/validate-release-package.sh`
+- `.github/workflows/ci.yml`
+- `GITHUB_RELEASE.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang
+chmod +x scripts/connect-github-release.sh
+bash -n scripts/connect-github-release.sh
+bash -n scripts/package-release.sh
+bash -n scripts/validate-release-package.sh
+bash -n scripts/release-dry-run-strict.sh
+./scripts/connect-github-release.sh --repo vitaleevo/nexuslang --create --push
+./scripts/release-dry-run-strict.sh --preflight-only
+```
+
+Resultado:
+
+- Sintaxe dos scripts: passou.
+- Antes do commit desta fase, ambos os gates falharam corretamente em
+  `dirty-worktree`.
+- `vitaleevo/nexuslang` nao existe ainda pelo conector GitHub.
+- O proximo bloqueio esperado depois do commit e `gh-not-authenticated`.
+
+Estado atual:
+
+- Repo Git local existe e tem commits.
+- `origin` local aponta para `https://github.com/vitaleevo/nexuslang.git`.
+- Ainda falta criar o repo remoto real ou confirmar outro repo destino.
+- Ainda falta autenticar `gh` local.
+- Ainda falta configurar chave GPG mantida.
+- O projeto permanece em 99/100.
+
+## Proximo passo recomendado
+
+Fase 7.78 - Autenticar `gh`, criar `vitaleevo/nexuslang`, fazer push e
+observar Actions.
+
+AVISO: O proximo passo e criar/implementar autenticacao do `gh`, criacao do
+repositorio `vitaleevo/nexuslang` ou escolha de outro repo real, execucao de
+`./scripts/connect-github-release.sh --repo vitaleevo/nexuslang --create --push`,
+configuracao de chave GPG mantida e observacao do GitHub Actions ate
+`./scripts/release-dry-run-strict.sh` passar. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `GITHUB_RELEASE.md`
+- `scripts/connect-github-release.sh`
+- `scripts/release-dry-run-strict.sh`
+- `.github/workflows/ci.yml`
+- `dist/github-release-connect-report.txt`
+- `dist/release-strict-preflight-report.txt`
+
+## Etapa historica concluida: Fase 7.76 - Bootstrap Git local para release estrito
 
 Objetivo: remover os bloqueios locais iniciais do release estrito, criando um
 repositorio Git local, configurando identidade Git derivada da conta GitHub

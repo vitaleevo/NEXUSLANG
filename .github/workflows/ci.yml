@@ -43,6 +43,7 @@ jobs:
           bash -n scripts/validate-release-package.sh
           bash -n scripts/validate-release-second-env.sh
           bash -n scripts/sign-release-artifacts.sh
+          bash -n scripts/connect-github-release.sh
           bash -n scripts/release-dry-run.sh
           bash -n scripts/release-dry-run-strict.sh
 
