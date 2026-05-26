@@ -51,14 +51,12 @@ Recorded release artifact state:
 - Release package target:
   - `nexuslang-v0.1.1-local-release.tar.gz`
   - `nexuslang-v0.1.1-local-release.tar.gz.sha256`
-- Latest local package size: `1183340` bytes.
-- Latest local package SHA-256:
-  `db5e8227f70599f4b69d6dfd2ed77bc5adca4503bc949c76e6ae966f83fc164e`.
+- The published `.sha256` asset is the source of truth for archive integrity.
 - Quality gate with Clippy: passed.
 - Local release dry-run: passed with Docker second-environment validation and
   maintained-key signing.
-- Strict public-release dry-run: required after commit/push and GitHub Actions
-  observation.
+- Strict public-release dry-run is part of the publication gate and requires
+  commit/push, GitHub Actions observation, and maintained-key signing.
 - Public GitHub release tag: `v0.1.1`.
 - Post-release public install validation:
   `NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh`.
