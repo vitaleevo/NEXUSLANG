@@ -223,6 +223,7 @@ fn token_kind(token: &Token) -> &'static str {
         Token::Workflow => "workflow",
         Token::Step => "step",
         Token::Route => "route",
+        Token::Auth => "auth",
         Token::Invoice => "invoice",
         Token::Print => "print",
         Token::TypeString => "string",
@@ -332,6 +333,25 @@ fn decl_json(decl: &Decl) -> String {
                 ),
             ),
         ]),
+        Decl::Auth { config } => object_json(&[
+            ("kind", json_string("Auth")),
+            ("name", json_string(&config.name)),
+            (
+                "summary",
+                json_string(&format!("auth {} -> {}", config.name, config.model)),
+            ),
+            (
+                "children",
+                string_vec_json(vec![
+                    format!("identity: {}", config.identity),
+                    format!(
+                        "role: {}",
+                        config.role.clone().unwrap_or_else(|| "none".to_string())
+                    ),
+                    format!("password_min: {}", config.password_min),
+                ]),
+            ),
+        ]),
         Decl::Route {
             method,
             path,
@@ -433,6 +453,7 @@ fn erp_json(program: &Program) -> String {
                 path,
                 params,
                 query_params,
+                auth,
                 ..
             } => {
                 routes.push(object_json(&[
@@ -440,6 +461,12 @@ fn erp_json(program: &Program) -> String {
                     ("path", json_string(path)),
                     ("params", string_array_json(params)),
                     ("queryParams", query_params_json(query_params)),
+                    (
+                        "auth",
+                        auth.as_ref()
+                            .map(|guard| json_string(&guard.auth))
+                            .unwrap_or_else(|| "null".to_string()),
+                    ),
                 ]));
             }
             Decl::Invoice { fields, items, .. } => {
@@ -452,7 +479,7 @@ fn erp_json(program: &Program) -> String {
                     ("items", items.len().to_string()),
                 ]));
             }
-            Decl::Function { .. } | Decl::Statement(_) => {}
+            Decl::Function { .. } | Decl::Auth { .. } | Decl::Statement(_) => {}
         }
     }
 

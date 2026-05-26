@@ -63,6 +63,7 @@ copy_docs() {
     cp "$ROOT_DIR/RELEASE_NOTES.md" "$PACKAGE_DIR/docs/RELEASE_NOTES.md"
     cp "$ROOT_DIR/VERSIONING.md" "$PACKAGE_DIR/docs/VERSIONING.md"
     cp "$ROOT_DIR/COMPATIBILITY.md" "$PACKAGE_DIR/docs/COMPATIBILITY.md"
+    cp "$ROOT_DIR/PACKAGE_MANAGER.md" "$PACKAGE_DIR/docs/PACKAGE_MANAGER.md"
     cp "$ROOT_DIR/STORAGE_BACKUP_RESTORE.md" "$PACKAGE_DIR/docs/STORAGE_BACKUP_RESTORE.md"
     cp "$ROOT_DIR/SIGNING.md" "$PACKAGE_DIR/docs/SIGNING.md"
     cp "$ROOT_DIR/GITHUB_RELEASE.md" "$PACKAGE_DIR/docs/GITHUB_RELEASE.md"
@@ -112,8 +113,26 @@ if find "$ROOT_DIR" -name ".nexus-data" -print -quit | grep -q .; then
 fi
 
 run "$ROOT_DIR/bin/nexus" --help
+package_manager_tmp="$(mktemp -d)"
+trap 'rm -rf "$package_manager_tmp"' EXIT
+run "$ROOT_DIR/bin/nexus" new "$package_manager_tmp/crm_core"
+run "$ROOT_DIR/bin/nexus" new "$package_manager_tmp/package_manager_app"
+(
+    cd "$package_manager_tmp/package_manager_app"
+    mkdir -p .nexus/packages/stale_core
+    run "$ROOT_DIR/bin/nexus" add crm-core --path ../crm_core
+    run "$ROOT_DIR/bin/nexus" add audit_core --registry audit_core@0.1.0
+    run "$ROOT_DIR/bin/nexus" install
+    run "$ROOT_DIR/bin/nexus" update
+    test -f nexus.toml
+    test -f nexus.lock
+    test -f .nexus/packages/crm-core/PACKAGE.txt
+    test -f .nexus/packages/audit_core/PACKAGE.txt
+    test ! -e .nexus/packages/stale_core
+)
 run "$ROOT_DIR/bin/nexus" check "$ROOT_DIR/examples/erp_basico.nx"
 run "$ROOT_DIR/bin/nexus" run "$ROOT_DIR/examples/erp_basico.nx"
+run "$ROOT_DIR/bin/nexus" check "$ROOT_DIR/examples/auth_secure_crm.nx"
 run "$ROOT_DIR/bin/nexus" check "$ROOT_DIR/examples/storage_backup_restore_inventory.nx"
 run "$ROOT_DIR/scripts/smoke-storage-backup-restore.sh"
 run node --check "$ROOT_DIR/nexuslang-playground.js"
@@ -171,6 +190,7 @@ WASM bytes: $wasm_bytes
 - docs/RELEASE_NOTES.md: release notes and known limitations
 - docs/VERSIONING.md: version and tag policy
 - docs/COMPATIBILITY.md: language/runtime/storage compatibility contract
+- docs/PACKAGE_MANAGER.md: package manager manifest, lockfile, path, and registry contract
 - docs/STORAGE_BACKUP_RESTORE.md: operational storage backup and restore guide
 - docs/SIGNING.md: artifact signing path
 - docs/GITHUB_RELEASE.md: GitHub, CI, and maintained-key release setup

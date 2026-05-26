@@ -42,7 +42,588 @@ todo o repositorio.
   - rodar `cargo fmt` e `cargo test` ao final;
   - recompilar o WASM quando a mudanca afetar o playground.
 
-## Ultima etapa concluida: Fase 7.84 - Preparacao da release candidate 0.1.1
+## Ultima etapa concluida: Fase 8.0 - Native Auth & Secure Backend MVP
+
+Objetivo: adicionar autenticacao segura nativa ao backend HTTP do NexusLang,
+com declaracao `auth`, guards em `route`, hash Argon2id, sessoes opacas,
+tokens bearer revogaveis, OpenAPI de seguranca e testes HTTP reais.
+
+Foi feito:
+
+- Adicionada a primitiva top-level `auth`:
+  - `auth UserAuth { model: User identity: email role: role ... }`.
+  - defaults seguros: `password_min: 15`, `session_ttl_minutes: 480`,
+    `idle_ttl_minutes: 30`.
+- Adicionado guard em rotas:
+  - `route GET /me auth(UserAuth)`;
+  - `route GET /admin/users auth(UserAuth, role: "admin")`.
+- O checker agora valida:
+  - `auth` duplicado;
+  - `model` de auth existente;
+  - `identity` existente, `string` e `unique`;
+  - `role` existente e `string`, quando declarado;
+  - `password_min >= 15`;
+  - TTLs positivos e `idle_ttl_minutes <= session_ttl_minutes`;
+  - guards referenciando `auth` existente.
+- O runtime HTTP agora entende headers e respostas com headers.
+- Criado `nexuslang-src/src/server/auth.rs` com:
+  - Argon2id para hash de senha com salt por senha;
+  - tokens/sessoes opacos gerados com CSPRNG;
+  - armazenamento apenas de hashes de sessao/token;
+  - cookie `__Host-nexus_session` com `Path=/`, `Max-Age`, `HttpOnly`,
+    `Secure` e `SameSite=Lax`;
+  - bearer token revogavel via `Authorization: Bearer <token>`;
+  - logout que revoga sessao/token;
+  - limpeza de sessoes/tokens expirados.
+- Adicionados retornos nativos em route:
+  - `Auth::register(UserAuth)`;
+  - `Auth::login(UserAuth)`;
+  - `Auth::logout()`;
+  - `Auth::user()`.
+- O OpenAPI agora expõe, quando ha rotas protegidas:
+  - `components.securitySchemes.NexusSession`;
+  - `components.securitySchemes.NexusBearer`;
+  - `security` por operacao protegida;
+  - respostas `401` e `403`.
+- Criado exemplo `nexuslang-src/examples/auth_secure_crm.nx`.
+- O smoke do pacote agora valida `examples/auth_secure_crm.nx`.
+- O playground/WASM foi recompilado porque `auth` entrou no lexer/parser e
+  no JSON do playground.
+
+Arquivos principais alterados/criados nesta fase:
+
+- `nexuslang-src/Cargo.toml`
+- `nexuslang-src/Cargo.lock`
+- `nexuslang-src/src/ast/mod.rs`
+- `nexuslang-src/src/lexer/mod.rs`
+- `nexuslang-src/src/parser/mod.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/formatter/mod.rs`
+- `nexuslang-src/src/interpreter/mod.rs`
+- `nexuslang-src/src/linter/mod.rs`
+- `nexuslang-src/src/playground/mod.rs`
+- `nexuslang-src/src/server/auth.rs`
+- `nexuslang-src/src/server/http.rs`
+- `nexuslang-src/src/server/router.rs`
+- `nexuslang-src/src/server/openapi.rs`
+- `nexuslang-src/src/server/storage.rs`
+- `nexuslang-src/src/server/storage_backend.rs`
+- `nexuslang-src/src/server/json.rs`
+- `nexuslang-src/src/server/mod.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/examples/auth_secure_crm.nx`
+- `nexuslang-src/web/nexuslang_playground.wasm`
+- `README.md`
+- `nexuslang-src/ROADMAP.md`
+- `scripts/package-release.sh`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test
+cargo run --quiet -- check examples/auth_secure_crm.nx
+cargo clippy --all-targets -- -D warnings
+
+cd /home/alexandre/Nesusang
+node --check nexuslang-playground.js
+bash -n scripts/package-release.sh
+./scripts/build-playground-wasm.sh
+./scripts/validate-openapi.sh
+git diff --check
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+./scripts/package-release.sh
+./scripts/validate-release-package.sh dist/nexuslang-v0.1.1-local-release.tar.gz
+```
+
+Resultado:
+
+- `cargo test`: OK.
+  - 9 testes internos passaram.
+  - 7 testes CLI do Package Manager passaram.
+  - 152 testes core/integracao passaram.
+  - Novos testes de auth cobrem Argon2id, ausencia de senha/token em claro no
+    storage auth, cookie de sessao, bearer token, logout/revogacao, role `403`,
+    checks semanticos e OpenAPI de seguranca.
+- `cargo clippy --all-targets -- -D warnings`: OK.
+- `cargo run --quiet -- check examples/auth_secure_crm.nx`: OK.
+- `node --check nexuslang-playground.js`: OK.
+- `bash -n scripts/package-release.sh`: OK.
+- `./scripts/build-playground-wasm.sh`: OK.
+  - WASM atual: `363580` bytes.
+- `./scripts/validate-openapi.sh`: PASS.
+- `git diff --check`: OK.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+- Pacote local regenerado e validado:
+  - archive: `dist/nexuslang-v0.1.1-local-release.tar.gz`;
+  - tamanho: `1263070` bytes;
+  - SHA-256:
+    `1eec8e802c9a3917977b1b785a38ba536e7a08ede359f7be821d0e10bbb7eb78`;
+  - WASM: `363580` bytes.
+- `validate-release-package.sh`: PASS, incluindo smoke empacotado com
+  `examples/auth_secure_crm.nx`.
+
+Estado atual:
+
+- O NexusLang agora tem um MVP real de autenticacao nativa para o backend HTTP.
+- Senhas nao sao armazenadas em texto claro; o storage auth usa Argon2id PHC.
+- Sessao e bearer token sao opacos e revogaveis, com storage apenas dos hashes.
+- O runtime padrao `nexus serve` usa storage JSON em `.nexus-data` e grava auth
+  em `.nexus-data/.nexus-auth.json`.
+- O OpenAPI ja declara esquemas de seguranca para rotas protegidas.
+- Limites conhecidos:
+  - auth store ainda e JSON-backed; SQLite auth-store parity ainda falta;
+  - ainda nao ha rate limiting de login/cadastro;
+  - ainda nao ha CSRF token dedicado para sessoes por cookie em POST/PUT/DELETE;
+  - o servidor embutido ainda e HTTP simples; producao deve usar HTTPS via
+    proxy/terminador TLS;
+  - ainda nao ha refresh-token, rotacao de token, reset de senha, MFA ou
+    politicas/policies avancadas alem de role string.
+- O repositorio tambem continua com mudancas locais anteriores do Package
+  Manager MVP que ainda precisam de commit/push.
+
+## Proximo passo recomendado
+
+Fase 8.1 - Auth hardening de producao.
+
+AVISO: O proximo passo e criar/implementar hardening de producao para o Native
+Auth do NexusLang, adicionando rate limiting para login/cadastro, CSRF token
+para sessoes cookie em metodos inseguros, paridade de auth store com SQLite,
+documentacao de deploy HTTPS/reverse proxy, e smoke HTTP real para o fluxo
+auth completo. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar
+exatamente de onde o projeto parou, entender o que ja foi feito e integrar a
+solucao com o sistema atual sem reler todo o repositorio.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/server/auth.rs`
+- `nexuslang-src/src/server/router.rs`
+- `nexuslang-src/src/server/http.rs`
+- `nexuslang-src/src/server/storage_backend.rs`
+- `nexuslang-src/src/server/sqlite.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/examples/auth_secure_crm.nx`
+- `README.md`
+- `nexuslang-src/ROADMAP.md`
+
+## Etapa historica concluida: Fase 7.87 - Package Manager 50/100 local e gate preparado
+
+Objetivo: commitar/publicar o Package Manager MVP local, observar GitHub
+Actions, e evoluir o recurso para 50/100 com dependencias por caminho local,
+validacao mais forte de `nexus.toml`, limpeza segura de cache obsoleto e
+contrato inicial para registry remoto.
+
+Foi feito localmente:
+
+- `nexus add <pacote>` foi expandido para:
+  - `nexus add <pacote>`;
+  - `nexus add <pacote> --path <dir>`;
+  - `nexus add <pacote> --registry <pacote@versao>`.
+- `nexus.toml` agora aceita origens:
+  - `"local"`;
+  - `"path:<dir>"`;
+  - `"registry:<pacote>@<versao>"`.
+- `nexus.lock` passou a registrar metadados determinismos por dependencia:
+  - `kind`;
+  - `source`;
+  - `version`;
+  - `resolved_path` para dependencias por caminho;
+  - `registry_package` para declaracoes de registry.
+- `nexus install` e `nexus update` removem entradas obsoletas em
+  `.nexus/packages/` de forma escopada a diretorios-filho diretos com nome de
+  pacote valido.
+- A validacao de `nexus.toml` foi endurecida:
+  - secoes permitidas: `[package]` e `[dependencies]`;
+  - chaves duplicadas sao rejeitadas;
+  - chaves desconhecidas em `[package]` sao rejeitadas;
+  - `entry` precisa ser caminho relativo `.nx` dentro do projeto;
+  - nomes e versoes de pacotes sao validados;
+  - dependencias por caminho precisam existir, ter `nexus.toml`, e o
+    `[package].name` precisa corresponder ao nome da dependencia.
+- Criado `PACKAGE_MANAGER.md` com o contrato atual de manifesto, lockfile,
+  path deps, registry declaration, validacao e limites conhecidos.
+- O smoke do pacote em `scripts/package-release.sh` passou a validar:
+  - `nexus new` de uma dependencia local;
+  - `nexus add crm-core --path ../crm_core`;
+  - `nexus add audit_core --registry audit_core@0.1.0`;
+  - `nexus install`;
+  - `nexus update`;
+  - limpeza de cache obsoleto.
+- O README e o ROADMAP foram atualizados para refletir Package Manager 50/100.
+- O workspace tambem continha uma fundacao local de `auth` ainda nao
+  totalmente integrada ao gate. Para manter o CI verde sem apagar trabalho
+  existente, foram feitos ajustes mínimos de compilacao/formatacao e
+  adicionados checks semanticos basicos de auth.
+
+Evolucao percentual registrada:
+
+- Package Manager antes da fase: 30/100 MVP local.
+- Package Manager depois da fase: 50/100 local validado.
+- Ganho: +20 pontos.
+- Ainda falta para 100/100: registry real, downloads, publish, solver de
+  versao, dependencias transitivas, checksums/assinaturas por dependencia e
+  instalacao multiplataforma.
+
+Arquivos principais:
+
+- `.gitignore`
+- `PACKAGE_MANAGER.md`
+- `README.md`
+- `RELEASE.md`
+- `GITHUB_RELEASE.md`
+- `VERSIONING.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/src/package_manager.rs`
+- `nexuslang-src/tests/cli_package_manager.rs`
+- `nexuslang-src/tests/core.rs`
+- `scripts/package-release.sh`
+
+Verificacao local executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test --test cli_package_manager
+cargo test
+cargo clippy --all-targets -- -D warnings
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+./scripts/package-release.sh
+./scripts/validate-release-package.sh dist/nexuslang-v0.1.1-local-release.tar.gz
+```
+
+Resultado local:
+
+- Package Manager tests: 7 passed.
+- Rust tests: passaram localmente.
+- Quality gate com Clippy: PASS.
+- Package validation: PASS.
+- Pacote local reconstruido:
+  - archive: `dist/nexuslang-v0.1.1-local-release.tar.gz`;
+  - tamanho observado: `1263069` bytes;
+  - SHA-256 observado:
+    `c1361b65421263ff38c7e5a7ede9a532025f9de10275de466a09e161c4a36cb1`;
+  - WASM: `363580` bytes.
+
+Estado atual:
+
+- Package Manager esta em 50/100 local.
+- Falta commit/push e observacao de GitHub Actions para fechar a fase.
+- A proxima etapa deve ser remota/CI: commitar, enviar `main`, observar o
+  workflow `NexusLang Quality Gate` e registrar o resultado nesta memoria.
+
+## Proximo passo recomendado
+
+Fase 7.88 - Registry real e publish do Package Manager.
+
+AVISO: O proximo passo e criar/implementar commit/push do Package Manager
+50/100, observar GitHub Actions verde, e depois desenhar o registry real com
+`nexus publish`, downloads com checksum/assinatura por dependencia e resolucao
+basica de versoes. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para
+continuar exatamente de onde o projeto parou, entender o que ja foi feito e
+integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `PACKAGE_MANAGER.md`
+- `nexuslang-src/src/package_manager.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli_package_manager.rs`
+- `scripts/package-release.sh`
+
+## Marco concluido nesta sessao: Publicacao v0.1.1 e validacao publica pos-release
+
+Objetivo: fechar a publicacao publica `v0.1.1` do NexusLang antes de continuar
+o trabalho local de Package Manager.
+
+Foi feito:
+
+- Commit/push da release candidate `0.1.1`:
+  - `04833b0dffe35d48dc87e83b406da7c1f3368387`
+    (`Prepare NexusLang v0.1.1 release`);
+  - `c302f346e6ec2c17565daa3b1a69ff0e986533d5`
+    (`Tighten v0.1.1 release notes`).
+- GitHub Actions observado e aprovado:
+  - run `26435118738` para `04833b0`;
+  - run `26435240928` para `c302f34`.
+- Strict release dry-run executado em clone limpo:
+  `/tmp/nexuslang-release-v011-c302f34-260600`.
+- GitHub Release publicada:
+  `https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.1.1`.
+- Tag `v0.1.1` apontando para:
+  `c302f346e6ec2c17565daa3b1a69ff0e986533d5`.
+- Validacao publica pos-release executada com:
+  `NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh`.
+
+Resultado:
+
+- Strict release dry-run: PASS.
+- Public install validation: PASS.
+- Pacote publico:
+  - `nexuslang-v0.1.1-local-release.tar.gz`;
+  - tamanho: `1186941` bytes;
+  - SHA-256:
+    `965bf84a09b9c73191ec7edaafdbc295902979d1796f47b2281414f1fee005f0`;
+  - WASM: `347437` bytes.
+- Assets publicados:
+  - archive, checksum, assinaturas `.asc`, chave publica e fingerprint.
+- Fingerprint:
+  `3237F7CC5CE2514FC9671BB93CB6808B55385273`.
+- Observacao: o Actions passou, mas GitHub emitiu aviso de deprecacao futura
+  das actions Node.js 20. Isso nao bloqueou `v0.1.1`, mas deve entrar no radar
+  de manutencao.
+
+Estado de continuidade:
+
+- `v0.1.1` esta publicada e validada publicamente.
+- `v0.1.0` permanece como release publica anterior.
+- O checkout principal contem mudancas locais posteriores relacionadas ao
+  Package Manager MVP; elas nao entraram na tag `v0.1.1`.
+- Durante esta validacao foram removidos apenas artefatos gerados pelo teste
+  manual `nexus install` no checkout atual:
+  `nexuslang-src/nexus.toml`, `nexuslang-src/nexus.lock` e
+  `nexuslang-src/.nexus/`.
+
+## Ultima etapa concluida: Fase 7.86 - Package Manager MVP local
+
+Objetivo: criar o primeiro Package Manager local do NexusLang com
+`nexus.toml`, `nexus.lock`, `nexus install`, `nexus add <pacote>` e
+`nexus update`, cobrindo CLI, testes, README/ROADMAP, smoke de pacote e
+memoria.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/package_manager.rs` com:
+  - manifesto `nexus.toml`;
+  - lockfile deterministico `nexus.lock`;
+  - cache local `.nexus/packages/`;
+  - leitura/escrita de um TOML simples controlado pelo proprio NexusLang;
+  - validacao basica de nomes de pacotes;
+  - busca de `nexus.toml` no diretorio atual ou ancestrais.
+- O CLI em `nexuslang-src/src/main.rs` passou a expor:
+  - `nexus install`;
+  - `nexus add <pacote>`;
+  - `nexus update`.
+- `nexus new <project>` agora cria `nexus.toml` e `nexus.lock` no projeto
+  novo, alem de mostrar `nexus install` como proximo passo.
+- Adicionado teste de integracao em
+  `nexuslang-src/tests/cli_package_manager.rs` cobrindo:
+  - `nexus install` criando manifesto, lockfile e cache local;
+  - `nexus add crm_core` sem duplicar dependencia;
+  - `nexus update` atualizando o lockfile;
+  - `nexus new` gerando `nexus.toml` e `nexus.lock`.
+- Atualizado `README.md` com a secao "Package Manager MVP".
+- Atualizado `nexuslang-src/ROADMAP.md` para marcar o MVP local como DONE e
+  registrar riscos restantes.
+- Atualizado `.gitignore` para ignorar o cache local `.nexus/`.
+- Atualizado `scripts/package-release.sh` para que o smoke do pacote tambem
+  execute um ciclo real:
+  `nexus new -> nexus add crm_core -> nexus install -> nexus update`.
+- Reconstruido e validado o pacote local `v0.1.1`.
+
+Evolucao percentual registrada:
+
+- Package Manager antes da fase: 5/100 diagnosticado e priorizado.
+- Package Manager depois da fase: 30/100 MVP local validado.
+- Ganho: +25 pontos.
+- O recurso agora existe e e testado localmente, mas ainda nao e um package
+  manager completo de ecossistema.
+
+Arquivos principais:
+
+- `.gitignore`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/src/package_manager.rs`
+- `nexuslang-src/tests/cli_package_manager.rs`
+- `scripts/package-release.sh`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test
+cargo run --quiet -- --help
+cargo clippy --all-targets -- -D warnings
+
+cd /home/alexandre/Nesusang
+git diff --check
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+./scripts/package-release.sh
+./scripts/validate-release-package.sh dist/nexuslang-v0.1.1-local-release.tar.gz
+```
+
+Resultado:
+
+- `cargo fmt`: OK.
+- `cargo test`: OK.
+  - 9 testes internos passaram.
+  - 3 novos testes CLI do Package Manager passaram.
+  - 146 testes core/integracao passaram.
+- `cargo clippy --all-targets -- -D warnings`: OK.
+- `cargo run --quiet -- --help`: mostra `install`, `add` e `update`.
+- `git diff --check`: OK.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: OK.
+  - cargo fmt/check/clippy/test;
+  - storage compatibility policy;
+  - node syntax check;
+  - CLI/HTTP smoke;
+  - storage backup/restore smoke;
+  - OpenAPI validation.
+- Pacote local reconstruido e validado:
+  - archive: `dist/nexuslang-v0.1.1-local-release.tar.gz`;
+  - tamanho: `1194927` bytes;
+  - SHA-256:
+    `7bb542f94136854dcb75ee7a7efc8dd6b2471e5be998884a10ad97e4dbb5a251`;
+  - WASM: `347437` bytes.
+- O smoke do pacote validado executou o ciclo de Package Manager:
+  `new -> add -> install -> update`.
+
+Estado atual:
+
+- O NexusLang ja tem Package Manager MVP local.
+- O MVP e util para iniciar projetos, registrar dependencias locais e manter
+  um lockfile deterministico.
+- Limites conhecidos:
+  - ainda nao ha registry remoto;
+  - ainda nao ha solver de versao semantica;
+  - ainda nao ha dependencias transitivas;
+  - ainda nao ha `publish`;
+  - ainda nao ha download real de pacotes;
+  - ainda nao ha checksum/assinatura por dependencia.
+- As mudancas da fase estao locais e ainda precisam de commit/push antes de
+  CI remoto e strict release.
+
+## Proximo passo recomendado
+
+Fase 7.87 - Hardening do Package Manager e CI remoto.
+
+AVISO: O proximo passo e criar/implementar commit/push do Package Manager MVP
+local, observar GitHub Actions, e evoluir o Package Manager para 50/100 com
+dependencias por caminho local, validacao mais forte de `nexus.toml`,
+limpeza segura de cache obsoleto e contrato inicial para registry remoto.
+Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de
+onde o projeto parou, entender o que ja foi feito e integrar a solucao com o
+sistema atual sem reler todo o repositorio.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/package_manager.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli_package_manager.rs`
+- `README.md`
+- `nexuslang-src/ROADMAP.md`
+- `scripts/package-release.sh`
+
+## Etapa historica concluida: Fase 7.85 - Auditoria de Package Manager
+
+Objetivo: verificar se o NexusLang ja possui um package manager de linguagem
+com comandos como `nexus install`, `nexus add` e `nexus update`, e
+repriorizar o proximo trabalho caso o recurso ainda nao exista.
+
+Foi feito:
+
+- Lido o estado atual do projeto a partir desta memoria.
+- Inspecionado o CLI em `nexuslang-src/src/main.rs`.
+- Executado `cargo run --quiet -- --help` para confirmar os comandos expostos
+  pelo binario atual.
+- Executados testes manuais dos comandos desejados:
+  - `cargo run --quiet -- install`;
+  - `cargo run --quiet -- add foo`;
+  - `cargo run --quiet -- update`.
+- Conferido o roadmap e README para distinguir empacotamento de release de
+  package manager da linguagem.
+
+Resultado da auditoria:
+
+- O NexusLang ainda nao tem package manager.
+- `nexus install`, `nexus add` e `nexus update` retornam `Comando desconhecido`.
+- O CLI atual possui `run`, `check`, `fmt`, `lint`, `serve`, `repl`, `new`,
+  `tokens` e `ast`.
+- Existe empacotamento de release (`scripts/package-release.sh`,
+  `PACKAGE_MANIFEST.txt`, checksums e assinaturas), mas isso nao e um package
+  manager para projetos NexusLang.
+- `nexus new` cria `main.nx`, `README.md` e `examples/`, mas ainda nao cria
+  um manifesto de projeto como `nexus.toml` nem um lockfile como
+  `nexus.lock`.
+- O roadmap ja reconhece que ainda nao ha installers/package-manager
+  installers multiplataforma.
+
+Evolucao percentual registrada:
+
+- Release/publicacao: permanece em 100/100 para o escopo ja publicado.
+- Package Manager: 0/100 implementado; 5/100 diagnosticado e priorizado.
+- Proxima meta recomendada: levar Package Manager para cerca de 30/100 com um
+  MVP local testado antes de pensar em registry remoto.
+
+Arquivos principais investigados:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/ROADMAP.md`
+- `README.md`
+- `scripts/package-release.sh`
+- `scripts/validate-release-package.sh`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang
+git status --short --branch
+sed -n "1,180p" MEMORIA_NEXUSLANG.md
+sed -n "1,260p" nexuslang-src/src/main.rs
+sed -n "1,220p" nexuslang-src/ROADMAP.md
+
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo run --quiet -- --help
+cargo run --quiet -- install
+cargo run --quiet -- add foo
+cargo run --quiet -- update
+```
+
+Estado atual:
+
+- O Package Manager passa a ser prioridade absoluta de produto.
+- A implementacao deve ser feita antes de continuar a publicacao `0.1.1`,
+  salvo se o usuario mandar explicitamente fechar a release primeiro.
+- O primeiro corte deve ser pequeno e util:
+  - `nexus.toml` como manifesto;
+  - `nexus.lock` como lockfile local;
+  - `nexus install` para validar/criar estrutura local;
+  - `nexus add <pacote>` para registrar dependencia local;
+  - `nexus update` para reescrever/atualizar o lockfile;
+  - testes de CLI e docs.
+
+## Proximo passo recomendado
+
+Fase 7.86 - Package Manager MVP local.
+
+AVISO: O proximo passo e criar/implementar o Package Manager MVP local do
+NexusLang com `nexus.toml`, `nexus.lock`, `nexus install`, `nexus add <pacote>`
+e `nexus update`, cobrindo CLI, testes, README/ROADMAP e memoria. Antes de
+iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o
+projeto parou, entender o que ja foi feito e integrar a solucao com o sistema
+atual sem reler todo o repositorio.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/core.rs`
+- `README.md`
+- `nexuslang-src/ROADMAP.md`
+
+## Etapa historica concluida: Fase 7.84 - Preparacao da release candidate 0.1.1
 
 Objetivo: preparar a release candidate local `0.1.1` do NexusLang com bump de
 versao, notas/changelog, pacote `v0.1.1`, quality gate, dry-run de release e

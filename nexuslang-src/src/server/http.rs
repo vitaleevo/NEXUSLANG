@@ -5,7 +5,6 @@ use std::net::{TcpListener, TcpStream};
 use crate::ast::Program;
 use crate::parse_checked_source;
 
-use super::router::handle_request;
 use super::storage_backend::{default_data_dir, Storage};
 
 #[derive(Debug, Clone)]
@@ -13,6 +12,7 @@ pub struct HttpResponse {
     pub status: u16,
     pub content_type: &'static str,
     pub body: String,
+    pub headers: Vec<(String, String)>,
 }
 
 pub fn serve_file(file_path: &str, addr: &str) -> Result<(), String> {
@@ -60,9 +60,24 @@ pub(crate) fn handle_stream(
         return Ok(());
     }
 
+    let headers = request_headers(&request);
     let body = request_body(&request);
-    let response = handle_request(program, storage, parts[0], parts[1], body);
+    let response = super::router::handle_request_with_headers(
+        program, storage, parts[0], parts[1], &headers, body,
+    );
     write_response(stream, response)
+}
+
+fn request_headers(request: &str) -> Vec<(String, String)> {
+    request
+        .lines()
+        .skip(1)
+        .take_while(|line| !line.trim().is_empty())
+        .filter_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            Some((name.trim().to_string(), value.trim().to_string()))
+        })
+        .collect()
 }
 
 fn request_body(request: &str) -> &str {
@@ -74,7 +89,11 @@ fn request_body(request: &str) -> &str {
 }
 
 pub(crate) fn route_error_status(message: &str) -> u16 {
-    if message.starts_with("Requisicao invalida") {
+    if message.starts_with("Nao autorizado") {
+        401
+    } else if message.starts_with("Proibido") {
+        403
+    } else if message.starts_with("Requisicao invalida") {
         400
     } else if message.starts_with("Conflito") {
         409
@@ -90,16 +109,24 @@ fn write_response(stream: &mut TcpStream, response: HttpResponse) -> Result<(), 
         200 => "OK",
         201 => "Created",
         400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
         404 => "Not Found",
         409 => "Conflict",
         500 => "Internal Server Error",
         _ => "OK",
     };
+    let extra_headers = response
+        .headers
+        .iter()
+        .map(|(name, value)| format!("{}: {}\r\n", name, value))
+        .collect::<String>();
     let raw = format!(
-        "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        "HTTP/1.1 {} {}\r\nContent-Type: {}\r\n{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
         response.status,
         status_text,
         response.content_type,
+        extra_headers,
         response.body.len(),
         response.body
     );
@@ -111,6 +138,7 @@ pub(crate) fn json_response(status: u16, body: String) -> HttpResponse {
         status,
         content_type: "application/json",
         body,
+        headers: Vec::new(),
     }
 }
 

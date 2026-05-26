@@ -1,3 +1,5 @@
+mod package_manager;
+
 use std::env;
 use std::fs;
 use std::io::{self, Write};
@@ -119,6 +121,24 @@ fn main() {
                 process::exit(1);
             }
         }
+        "install" => {
+            run_package_command(package_manager::install_current_dir());
+        }
+        "add" => {
+            let package_name = required_arg(
+                &args,
+                2,
+                "add <pacote> [--path <dir>|--registry <pacote@versao>]",
+            );
+            let source = parse_add_source(&args);
+            run_package_command(package_manager::add_dependency_current_dir(
+                package_name,
+                source,
+            ));
+        }
+        "update" => {
+            run_package_command(package_manager::update_current_dir());
+        }
         cmd => {
             eprintln!("Comando desconhecido: '{}'", cmd);
             print_usage_and_exit(1);
@@ -175,6 +195,21 @@ fn print_usage(out: &mut dyn Write) {
     .ok();
     writeln!(
         out,
+        "  nexus install                    — Instalar dependências locais"
+    )
+    .ok();
+    writeln!(
+        out,
+        "  nexus add <pacote> [--path <dir>|--registry <pkg@ver>]"
+    )
+    .ok();
+    writeln!(
+        out,
+        "  nexus update                     — Atualizar lockfile local"
+    )
+    .ok();
+    writeln!(
+        out,
         "  nexus tokens <ficheiro.nx>       — Ver tokens (debug)"
     )
     .ok();
@@ -196,6 +231,47 @@ fn read_source(file_path: &str) -> String {
         Ok(s) => s,
         Err(e) => {
             eprintln!("Erro ao ler '{}': {}", file_path, e);
+            process::exit(1);
+        }
+    }
+}
+
+fn run_package_command(result: Result<package_manager::PackageReport, String>) {
+    match result {
+        Ok(report) => {
+            println!("Projeto: {}", report.root.display());
+            if report.manifest_created {
+                println!("Criado: {}", package_manager::MANIFEST_FILE);
+            }
+            if let Some(name) = report.dependency_name.as_deref() {
+                if report.dependency_added.unwrap_or(false) {
+                    println!("Dependência adicionada: {}", name);
+                } else {
+                    println!("Dependência já existia: {}", name);
+                }
+                if let Some(source) = report.dependency_source.as_deref() {
+                    println!("Origem: {}", source);
+                }
+            }
+            if report.lock_written {
+                println!("Gerado: {}", package_manager::LOCK_FILE);
+            }
+            println!("Dependências locais: {}", report.dependency_count);
+        }
+        Err(e) => {
+            eprintln!("Erro no package manager: {}", e);
+            process::exit(1);
+        }
+    }
+}
+
+fn parse_add_source(args: &[String]) -> package_manager::DependencyRequest<'_> {
+    match args.len() {
+        3 => package_manager::DependencyRequest::Local,
+        5 if args[3] == "--path" => package_manager::DependencyRequest::Path(&args[4]),
+        5 if args[3] == "--registry" => package_manager::DependencyRequest::Registry(&args[4]),
+        _ => {
+            eprintln!("Uso: nexus add <pacote> [--path <dir>|--registry <pacote@versao>]");
             process::exit(1);
         }
     }
@@ -280,10 +356,16 @@ run_workflow("Onboarding")
     fs::write(root.join("main.nx"), main_nx).map_err(|e| e.to_string())?;
     fs::write(root.join("README.md"), readme).map_err(|e| e.to_string())?;
     fs::write(root.join("examples").join("invoice.nx"), main_nx).map_err(|e| e.to_string())?;
+    let package_name = root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(project_name);
+    package_manager::write_new_project_package_files(root, package_name)?;
 
     println!("Projeto criado: {}", root.display());
     println!("Próximo passo:");
     println!("  cd {}", root.display());
+    println!("  nexus install");
     println!("  nexus check main.nx");
     Ok(())
 }

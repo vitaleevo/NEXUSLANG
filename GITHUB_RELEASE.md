@@ -97,9 +97,14 @@ Release tag: v0.1.0
 Signing key: 3237F7CC5CE2514FC9671BB93CB6808B55385273
 ```
 
-The current source checkout targets `v0.1.1`. Before publishing, the `0.1.1`
-changes must be committed, pushed, observed in GitHub Actions, and validated
-with:
+The `v0.1.1` release was published from:
+
+```text
+c302f346e6ec2c17565daa3b1a69ff0e986533d5
+```
+
+The `0.1.1` release changes were committed, pushed, observed in GitHub Actions,
+and validated with:
 
 ```bash
 NEXUS_RELEASE_SIGNING_KEY="3237F7CC5CE2514FC9671BB93CB6808B55385273" ./scripts/release-dry-run-strict.sh

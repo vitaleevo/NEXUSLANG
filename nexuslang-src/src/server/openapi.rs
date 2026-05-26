@@ -47,6 +47,9 @@ pub fn generate_openapi(program: &Program) -> String {
             operation.push_str(r#","requestBody":"#);
             operation.push_str(&request_body_ref);
         }
+        if route.auth.is_some() {
+            operation.push_str(r#","security":[{"NexusSession":[]},{"NexusBearer":[]}]"#);
+        }
         if route_has_pagination(&route) {
             operation.push_str(r#","x-nexus-pagination":true"#);
         }
@@ -98,6 +101,12 @@ pub fn generate_openapi(program: &Program) -> String {
         if route_has_conflict_response(program, &route) {
             operation.push_str(&openapi_error_response("409", "Conflict"));
         }
+        if route.auth.is_some() {
+            operation.push_str(&openapi_error_response("401", "Unauthorized"));
+        }
+        if route.auth.and_then(|guard| guard.role.as_ref()).is_some() {
+            operation.push_str(&openapi_error_response("403", "Forbidden"));
+        }
         operation.push_str(r#"}}"#);
         push_openapi_path_operation(&mut path_items, &mut path_indices, openapi_path, operation);
     }
@@ -107,11 +116,19 @@ pub fn generate_openapi(program: &Program) -> String {
     let parameters = parameter_components.to_openapi();
     let request_bodies = openapi_request_bodies(&request_body_components);
     let responses = openapi_responses(&response_components);
+    let security_schemes = openapi_security_schemes(program);
     let tags = openapi_tags(&route_tags);
     format!(
-        r#"{{"openapi":"3.0.0","info":{{"title":"NexusLang API","version":"0.1.0"}},"tags":[{}],"paths":{{{}}},"components":{{"schemas":{{{}}},"parameters":{{{}}},"requestBodies":{{{}}},"responses":{{{}}}}}}}"#,
-        tags, paths, schemas, parameters, request_bodies, responses
+        r#"{{"openapi":"3.0.0","info":{{"title":"NexusLang API","version":"0.1.0"}},"tags":[{}],"paths":{{{}}},"components":{{"schemas":{{{}}},"parameters":{{{}}},"requestBodies":{{{}}},"responses":{{{}}}{} }}}}"#,
+        tags, paths, schemas, parameters, request_bodies, responses, security_schemes
     )
+}
+
+fn openapi_security_schemes(program: &Program) -> String {
+    if !has_auth(program) {
+        return String::new();
+    }
+    r#","securitySchemes":{"NexusSession":{"type":"apiKey","in":"cookie","name":"__Host-nexus_session"},"NexusBearer":{"type":"http","scheme":"bearer"}}"#.to_string()
 }
 
 fn push_openapi_path_operation(
@@ -434,15 +451,51 @@ pub(crate) fn route_response_schema(program: &Program, route: &RouteView<'_>) ->
         .body
         .iter()
         .find_map(|stmt| match stmt {
-            Stmt::Return { value, .. } => Some(openapi_expr_schema(
-                program,
-                value,
-                route.params,
-                route.query_params,
-            )),
+            Stmt::Return { value, .. } => Some(
+                openapi_auth_expr_schema(program, route, value).unwrap_or_else(|| {
+                    openapi_expr_schema(program, value, route.params, route.query_params)
+                }),
+            ),
             _ => None,
         })
         .unwrap_or_else(|| "{}".to_string())
+}
+
+fn openapi_auth_expr_schema(
+    program: &Program,
+    route: &RouteView<'_>,
+    expr: &Expr,
+) -> Option<String> {
+    let Expr::StaticCall {
+        ty, method, args, ..
+    } = expr
+    else {
+        return None;
+    };
+    if ty != "Auth" {
+        return None;
+    }
+    match method.as_str() {
+        "register" | "login" => auth_config_from_args(program, args).map(|config| {
+            format!(
+                r#"{{"type":"object","properties":{{"user":{},"token":{{"type":"string"}},"expires_in":{{"type":"integer"}}}}}}"#,
+                openapi_response_schema_for_type(&Type::Model(config.model.clone()))
+            )
+        }),
+        "user" => route
+            .auth
+            .and_then(|guard| auth_config(program, &guard.auth))
+            .map(|config| openapi_response_schema_for_type(&Type::Model(config.model.clone()))),
+        "logout" => Some(r#"{"type":"boolean"}"#.to_string()),
+        _ => None,
+    }
+}
+
+fn auth_config_from_args<'a>(program: &'a Program, args: &[Expr]) -> Option<&'a AuthConfig> {
+    let [Expr::Ident { name, .. }] = args else {
+        return None;
+    };
+    auth_config(program, name)
 }
 
 fn route_parameters(route: &RouteView<'_>, components: &OpenApiParameterComponents) -> String {
@@ -504,7 +557,24 @@ pub(crate) fn route_request_body_model(route: &RouteView<'_>) -> Option<String> 
 }
 
 pub(crate) fn route_response_status(route: &RouteView<'_>) -> &'static str {
-    if matches!(route.method, HttpMethod::Post) && route_create_model(route).is_some() {
+    let auth_register = route.body.iter().any(|stmt| {
+        matches!(
+            stmt,
+            Stmt::Return {
+                value:
+                    Expr::StaticCall {
+                        ty,
+                        method,
+                        ..
+                    },
+                ..
+            } if ty == "Auth" && method == "register"
+        )
+    });
+    let model_create =
+        matches!(route.method, HttpMethod::Post) && route_create_model(route).is_some();
+
+    if auth_register || model_create {
         "201"
     } else {
         "200"

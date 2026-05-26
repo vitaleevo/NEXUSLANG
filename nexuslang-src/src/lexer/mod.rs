@@ -26,6 +26,7 @@ pub enum Token {
     Workflow,
     Step,
     Route,
+    Auth,
     Invoice,
     Print,
 
@@ -272,6 +273,7 @@ impl Lexer {
             "workflow" => Token::Workflow,
             "step" => Token::Step,
             "route" => Token::Route,
+            "auth" => Token::Auth,
             "invoice" => Token::Invoice,
             "print" => Token::Print,
             "true" => Token::Bool(true),

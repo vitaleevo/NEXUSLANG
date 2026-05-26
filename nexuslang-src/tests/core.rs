@@ -1031,6 +1031,50 @@ route GET /customers ?(status: string, limit: int, offset: int) {
 }
 
 #[test]
+fn auth_config_and_route_guard_check() {
+    let source = r#"
+model User {
+    email: string unique
+    role: string
+}
+
+auth Session {
+    model: User
+    identity: email
+    role: role
+    password_min: 15
+    session_ttl_minutes: 60
+    idle_ttl_minutes: 15
+}
+
+route GET /me auth(Session, role: "admin") {
+    return "ok"
+}
+"#;
+
+    if let Err(err) = check_source(source) {
+        panic!("{}", err);
+    }
+}
+
+#[test]
+fn auth_identity_must_be_unique_string() {
+    let source = r#"
+model User {
+    email: string
+}
+
+auth Session {
+    model: User
+    identity: email
+}
+"#;
+
+    let err = check_source(source).unwrap_err();
+    assert!(err.contains("deve ser string unique"));
+}
+
+#[test]
 fn route_query_params_allow_optional_types_and_defaults() {
     let source = r#"
 model Customer {
@@ -4939,6 +4983,284 @@ route GET /employees {
         nexuslang::server::handle_request_for_test(source, "GET", "/missing", &storage).unwrap();
 
     assert_eq!(response.status, 404);
+}
+
+const AUTH_SOURCE: &str = r#"
+model User {
+    email: string unique
+    name: string
+    role: string = "user" index
+}
+
+auth UserAuth {
+    model: User
+    identity: email
+    role: role
+    password_min: 15
+    session_ttl_minutes: 60
+    idle_ttl_minutes: 10
+}
+
+route POST /auth/register {
+    return Auth::register(UserAuth)
+}
+
+route POST /auth/login {
+    return Auth::login(UserAuth)
+}
+
+route POST /auth/logout auth(UserAuth) {
+    return Auth::logout()
+}
+
+route GET /me auth(UserAuth) {
+    return Auth::user()
+}
+
+route GET /admin/users auth(UserAuth, role: "admin") {
+    return User::all()
+}
+"#;
+
+#[test]
+fn native_auth_registers_with_argon2id_and_session_cookie() {
+    assert!(check_source(AUTH_SOURCE).is_ok());
+    let data_dir = temp_data_dir("native_auth_register");
+    fs::create_dir_all(&data_dir).unwrap();
+    let storage = nexuslang::server::Storage::new_json(&data_dir);
+
+    let password = "strong-password-123";
+    let register = nexuslang::server::handle_request_with_body_for_test(
+        AUTH_SOURCE,
+        "POST",
+        "/auth/register",
+        &format!(
+            r#"{{"email":"ana@example.com","name":"Ana","role":"admin","password":"{}"}}"#,
+            password
+        ),
+        &storage,
+    )
+    .unwrap();
+
+    assert_eq!(register.status, 201);
+    assert!(register.body.contains(r#""email":"ana@example.com""#));
+    let token = json_string_field(&register.body, "token");
+    let cookie = set_cookie_header(&register);
+    assert!(cookie.contains("__Host-nexus_session="));
+    assert!(cookie.contains("HttpOnly"));
+    assert!(cookie.contains("Secure"));
+    assert!(cookie.contains("SameSite=Lax"));
+
+    let auth_store = fs::read_to_string(data_dir.join(".nexus-auth.json")).unwrap();
+    assert!(auth_store.contains("$argon2id$"));
+    assert!(!auth_store.contains(password));
+    assert!(!auth_store.contains(&token));
+
+    let cookie_headers = vec![("Cookie".to_string(), cookie_pair(&cookie))];
+    let me = nexuslang::server::handle_request_with_headers_and_body_for_test(
+        AUTH_SOURCE,
+        "GET",
+        "/me",
+        &cookie_headers,
+        "",
+        &storage,
+    )
+    .unwrap();
+    assert_eq!(me.status, 200);
+    assert_eq!(
+        me.body,
+        r#"{"email":"ana@example.com","name":"Ana","role":"admin"}"#
+    );
+
+    let admin = nexuslang::server::handle_request_with_headers_and_body_for_test(
+        AUTH_SOURCE,
+        "GET",
+        "/admin/users",
+        &cookie_headers,
+        "",
+        &storage,
+    )
+    .unwrap();
+    assert_eq!(admin.status, 200);
+    assert!(admin.body.contains(r#""role":"admin""#));
+
+    let logout = nexuslang::server::handle_request_with_headers_and_body_for_test(
+        AUTH_SOURCE,
+        "POST",
+        "/auth/logout",
+        &cookie_headers,
+        "",
+        &storage,
+    )
+    .unwrap();
+    assert_eq!(logout.status, 200);
+    assert_eq!(logout.body, "true");
+
+    let after_logout = nexuslang::server::handle_request_with_headers_and_body_for_test(
+        AUTH_SOURCE,
+        "GET",
+        "/me",
+        &cookie_headers,
+        "",
+        &storage,
+    )
+    .unwrap();
+    assert_eq!(after_logout.status, 401);
+}
+
+#[test]
+fn native_auth_supports_revocable_bearer_tokens_and_roles() {
+    let data_dir = temp_data_dir("native_auth_bearer");
+    fs::create_dir_all(&data_dir).unwrap();
+    let storage = nexuslang::server::Storage::new_json(&data_dir);
+
+    let register = nexuslang::server::handle_request_with_body_for_test(
+        AUTH_SOURCE,
+        "POST",
+        "/auth/register",
+        r#"{"email":"bia@example.com","name":"Bia","password":"strong-password-123"}"#,
+        &storage,
+    )
+    .unwrap();
+    assert_eq!(register.status, 201);
+
+    let login = nexuslang::server::handle_request_with_body_for_test(
+        AUTH_SOURCE,
+        "POST",
+        "/auth/login",
+        r#"{"email":"bia@example.com","password":"strong-password-123"}"#,
+        &storage,
+    )
+    .unwrap();
+    assert_eq!(login.status, 200);
+    let token = json_string_field(&login.body, "token");
+    let bearer_headers = vec![("Authorization".to_string(), format!("Bearer {}", token))];
+
+    let me = nexuslang::server::handle_request_with_headers_and_body_for_test(
+        AUTH_SOURCE,
+        "GET",
+        "/me",
+        &bearer_headers,
+        "",
+        &storage,
+    )
+    .unwrap();
+    assert_eq!(me.status, 200);
+    assert_eq!(
+        me.body,
+        r#"{"email":"bia@example.com","name":"Bia","role":"user"}"#
+    );
+
+    let admin = nexuslang::server::handle_request_with_headers_and_body_for_test(
+        AUTH_SOURCE,
+        "GET",
+        "/admin/users",
+        &bearer_headers,
+        "",
+        &storage,
+    )
+    .unwrap();
+    assert_eq!(admin.status, 403);
+
+    let logout = nexuslang::server::handle_request_with_headers_and_body_for_test(
+        AUTH_SOURCE,
+        "POST",
+        "/auth/logout",
+        &bearer_headers,
+        "",
+        &storage,
+    )
+    .unwrap();
+    assert_eq!(logout.status, 200);
+
+    let after_logout = nexuslang::server::handle_request_with_headers_and_body_for_test(
+        AUTH_SOURCE,
+        "GET",
+        "/me",
+        &bearer_headers,
+        "",
+        &storage,
+    )
+    .unwrap();
+    assert_eq!(after_logout.status, 401);
+}
+
+#[test]
+fn native_auth_semantic_guards_are_checked() {
+    let err = check_source(
+        r#"
+model User {
+    email: string
+}
+
+auth UserAuth {
+    model: User
+    identity: email
+}
+"#,
+    )
+    .unwrap_err();
+    assert!(err.contains("deve ser string unique"));
+
+    let err = check_source(
+        r#"
+model User {
+    email: string unique
+}
+
+route GET /me auth(MissingAuth) {
+    return "ok"
+}
+"#,
+    )
+    .unwrap_err();
+    assert!(err.contains("usa auth 'MissingAuth' inexistente"));
+}
+
+#[test]
+fn native_auth_openapi_exposes_security_contract() {
+    let data_dir = temp_data_dir("native_auth_openapi");
+    fs::create_dir_all(&data_dir).unwrap();
+    let storage = nexuslang::server::Storage::new_json(&data_dir);
+
+    let response =
+        nexuslang::server::handle_request_for_test(AUTH_SOURCE, "GET", "/openapi.json", &storage)
+            .unwrap();
+
+    assert_eq!(response.status, 200);
+    assert!(response.body.contains(r#""securitySchemes""#));
+    assert!(response.body.contains(r#""NexusSession""#));
+    assert!(response.body.contains(r#""NexusBearer""#));
+    assert!(response
+        .body
+        .contains(r#""security":[{"NexusSession":[]},{"NexusBearer":[]}"#));
+    assert!(response
+        .body
+        .contains(r#""401":{"description":"Unauthorized""#));
+    assert!(response
+        .body
+        .contains(r#""403":{"description":"Forbidden""#));
+}
+
+fn set_cookie_header(response: &nexuslang::server::HttpResponse) -> String {
+    response
+        .headers
+        .iter()
+        .find(|(name, _)| name == "Set-Cookie")
+        .map(|(_, value)| value.clone())
+        .expect("Set-Cookie header")
+}
+
+fn cookie_pair(cookie: &str) -> String {
+    cookie.split(';').next().expect("cookie pair").to_string()
+}
+
+fn json_string_field(body: &str, field: &str) -> String {
+    let needle = format!(r#""{}":""#, field);
+    let start = body.find(&needle).expect("json field") + needle.len();
+    let rest = &body[start..];
+    let end = rest.find('"').expect("json field end");
+    rest[..end].to_string()
 }
 
 fn temp_data_dir(name: &str) -> std::path::PathBuf {

@@ -8,11 +8,16 @@ is `0.1.1` for evaluation, demos, and QA.
 
 - Rust CLI: `nexus`
 - Rust-powered browser playground through WebAssembly
-- ERP primitives: `model`, `workflow`, `route`, `invoice`, `money`
+- ERP primitives: `model`, `workflow`, `route`, `auth`, `invoice`, `money`
 - Typed semantic checker with line/column diagnostics
 - HTTP runtime for declared routes
 - JSON and SQLite storage backends
 - OpenAPI generation and validation for the supported HTTP subset
+- Native auth MVP with Argon2id password hashing, opaque sessions, bearer
+  tokens, and route guards
+- Local package manager MVP with `nexus.toml`, `nexus.lock`, `nexus install`,
+  `nexus add`, `nexus update`, path dependencies, and an initial registry
+  declaration contract
 - Examples for ERP, runtime services, models, and OpenAPI QA
 
 ## Install From The GitHub Release
@@ -135,6 +140,56 @@ Then run it:
 ./bin/nexus run path/to/file.nx
 ```
 
+## Package Manager MVP
+
+Create a project with a package manifest and lockfile:
+
+```bash
+nexus new acme_erp
+cd acme_erp
+```
+
+The generated project includes:
+
+```text
+nexus.toml
+nexus.lock
+main.nx
+examples/
+```
+
+Install or refresh local dependencies:
+
+```bash
+nexus install
+```
+
+Add a local dependency and update the lockfile:
+
+```bash
+nexus add crm_core
+nexus update
+```
+
+Add a dependency from a local package directory:
+
+```bash
+nexus add billing-core --path ../billing_core
+```
+
+Declare a future registry dependency without downloading it yet:
+
+```bash
+nexus add audit_core --registry audit_core@0.1.0
+```
+
+The MVP stores dependencies in `nexus.toml`, writes deterministic package
+entries to `nexus.lock`, creates a local `.nexus/packages/` cache, validates
+manifest structure, and removes stale cache entries during install/update.
+Remote registries, downloads, publishing, transitive dependencies, and version
+solving are not implemented yet. See `PACKAGE_MANAGER.md` for the current
+contract.
+
 ## Playground
 
 Serve the extracted package from its root:
@@ -169,6 +224,30 @@ curl http://127.0.0.1:5050/openapi.json
 Runtime storage may create `.nexus-data` next to the served example. That
 directory is local generated data and is intentionally excluded from release
 packages.
+
+## Native Auth MVP
+
+The post-`v0.1.1` source line includes the first secure backend auth slice:
+
+- `auth Name { ... }` declarations bound to a `model`
+- `route ... auth(Name)` and `auth(Name, role: "admin")` guards
+- `Auth::register(Name)`, `Auth::login(Name)`, `Auth::logout()`, and
+  `Auth::user()`
+- Argon2id password hashing with per-password salt
+- opaque server-side session cookies and revocable bearer tokens
+- OpenAPI `securitySchemes`, `401`, and `403` for protected routes
+
+Example:
+
+```bash
+./bin/nexus check examples/auth_secure_crm.nx
+./bin/nexus serve examples/auth_secure_crm.nx 127.0.0.1:5050
+```
+
+The default runtime stores auth metadata in `.nexus-data/.nexus-auth.json`.
+Passwords and issued session/token secrets are never stored in clear text. For
+production use, run `nexus serve` behind an HTTPS terminator or reverse proxy;
+the built-in server is still the simple development/runtime server.
 
 ## Storage Backup And Restore
 
@@ -228,6 +307,9 @@ NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh
 
 - The packaged binary is a local Linux/WSL-style artifact, not a cross-platform
   installer.
+- The package manager is still an MVP; registry dependencies can be declared,
+  but remote downloads, semantic version resolution, package publishing, and
+  transitive dependencies are not implemented yet.
 - The current source version is `0.1.1`; version/tag policy is documented in
   `VERSIONING.md`.
 - Release artifacts have SHA-256 checksums and detached GPG signatures.
@@ -237,10 +319,14 @@ NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh
 - JSON storage is the simplest supported backend; SQLite exists but storage
   compatibility and migration limits for `0.1.x` are documented in
   `COMPATIBILITY.md`.
+- Native auth is a first JSON-backed runtime slice. Rate limiting, CSRF tokens
+  for cookie-backed unsafe methods, SQLite auth-store parity, and production TLS
+  deployment docs are still planned hardening work.
 - `index` model metadata is declarative and does not create physical indexes.
 - The OpenAPI contract covers the supported NexusLang HTTP subset, not every
   possible OpenAPI feature.
 - The playground is a learning/debugging surface, not a hosted production app.
 
 See `RELEASE_NOTES.md`, `RELEASE.md`, `VERSIONING.md`, `COMPATIBILITY.md`,
-`SIGNING.md`, and `GITHUB_RELEASE.md` for release status and known risks.
+`PACKAGE_MANAGER.md`, `SIGNING.md`, and `GITHUB_RELEASE.md` for release status
+and known risks.

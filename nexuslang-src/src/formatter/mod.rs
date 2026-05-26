@@ -77,10 +77,34 @@ fn format_decl(decl: &Decl, indent: usize, out: &mut String) {
             write_indent(indent, out);
             out.push('}');
         }
+        Decl::Auth { config } => {
+            write_indent(indent, out);
+            out.push_str(&format!("auth {} {{\n", config.name));
+            write_indent(indent + 1, out);
+            out.push_str(&format!("model: {}\n", config.model));
+            write_indent(indent + 1, out);
+            out.push_str(&format!("identity: {}\n", config.identity));
+            if let Some(role) = &config.role {
+                write_indent(indent + 1, out);
+                out.push_str(&format!("role: {}\n", role));
+            }
+            write_indent(indent + 1, out);
+            out.push_str(&format!("password_min: {}\n", config.password_min));
+            write_indent(indent + 1, out);
+            out.push_str(&format!(
+                "session_ttl_minutes: {}\n",
+                config.session_ttl_minutes
+            ));
+            write_indent(indent + 1, out);
+            out.push_str(&format!("idle_ttl_minutes: {}\n", config.idle_ttl_minutes));
+            write_indent(indent, out);
+            out.push('}');
+        }
         Decl::Route {
             method,
             path,
             query_params,
+            auth,
             body,
             ..
         } => {
@@ -93,6 +117,13 @@ fn format_decl(decl: &Decl, indent: usize, out: &mut String) {
                     .collect::<Vec<_>>()
                     .join(", ");
                 out.push_str(&format!(" ?({})", params));
+            }
+            if let Some(guard) = auth {
+                out.push_str(&format!(" auth({}", guard.auth));
+                if let Some(role) = &guard.role {
+                    out.push_str(&format!(r#", role: "{}""#, role));
+                }
+                out.push(')');
             }
             format_block(body, indent, out);
         }

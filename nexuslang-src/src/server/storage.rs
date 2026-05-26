@@ -63,6 +63,7 @@ pub struct RouteView<'a> {
     pub path: &'a str,
     pub params: &'a [String],
     pub query_params: &'a [QueryParam],
+    pub auth: Option<&'a RouteAuthGuard>,
     pub body: &'a [Stmt],
 }
 
@@ -139,6 +140,7 @@ pub(crate) fn routes(program: &Program) -> Vec<RouteView<'_>> {
                 path,
                 params,
                 query_params,
+                auth,
                 body,
                 ..
             } => Some(RouteView {
@@ -146,11 +148,28 @@ pub(crate) fn routes(program: &Program) -> Vec<RouteView<'_>> {
                 path,
                 params,
                 query_params,
+                auth: auth.as_ref(),
                 body,
             }),
             _ => None,
         })
         .collect()
+}
+
+#[allow(dead_code)]
+pub(crate) fn auth_config<'a>(program: &'a Program, name: &str) -> Option<&'a AuthConfig> {
+    program.decls.iter().find_map(|decl| match decl {
+        Decl::Auth { config } if config.name == name => Some(config),
+        _ => None,
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn has_auth(program: &Program) -> bool {
+    program
+        .decls
+        .iter()
+        .any(|decl| matches!(decl, Decl::Auth { .. }))
 }
 
 pub(crate) fn model_fields<'a>(program: &'a Program, model: &str) -> Option<&'a [Field]> {

@@ -6,6 +6,9 @@
 /nexuslang-src/examples/.nexus-data/
 /.nexus-data/
 
+# NexusLang package manager local cache
+.nexus/
+
 # Local virtual environments and dependency folders
 /.venv/
 /venv/

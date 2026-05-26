@@ -64,6 +64,25 @@ pub struct QueryParam {
 }
 
 #[derive(Debug, Clone)]
+pub struct AuthConfig {
+    pub name: String,
+    pub model: String,
+    pub identity: String,
+    pub role: Option<String>,
+    pub password_min: usize,
+    pub session_ttl_minutes: u64,
+    pub idle_ttl_minutes: u64,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct RouteAuthGuard {
+    pub auth: String,
+    pub role: Option<String>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
 pub enum Expr {
     // Literais
     Integer {
@@ -326,12 +345,18 @@ pub enum Decl {
         span: Span,
     },
 
-    // route METHOD /path { body }
+    // auth Name { model: User identity: email ... }
+    Auth {
+        config: AuthConfig,
+    },
+
+    // route METHOD /path auth(Name) { body }
     Route {
         method: HttpMethod,
         path: String,
         params: Vec<String>,
         query_params: Vec<QueryParam>,
+        auth: Option<RouteAuthGuard>,
         body: Vec<Stmt>,
         span: Span,
     },
@@ -355,6 +380,7 @@ impl Decl {
             | Decl::Workflow { span, .. }
             | Decl::Route { span, .. }
             | Decl::Invoice { span, .. } => *span,
+            Decl::Auth { config } => config.span,
             Decl::Statement(stmt) => stmt.span(),
         }
     }

@@ -9,10 +9,10 @@ It is intentionally small: the source of truth is still the automated gate.
 - Playground: 84/100
 - OpenAPI/runtime: 66/100
 - Engineering/release quality: 100/100
-- Real production readiness for the 0.1.1 release scope: gated by strict
-  public-release validation and post-release public install validation
-- Overall project score after the latest completed phase: 100/100 local RC
-- Public GitHub Release target: v0.1.1
+- Real production readiness for the 0.1.1 release scope: public release
+  published and post-release install validated
+- Overall project score after the latest completed release phase: 100/100
+- Public GitHub Release v0.1.1: published and post-release install validated
 - Previous public GitHub Release v0.1.0: published and post-release install
   validated
 
@@ -164,6 +164,10 @@ NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh
 
 ### Published release
 
+- [x] `v0.1.1` source tag is the latest published release target.
+- [x] GitHub Release `v0.1.1` is published with signed archive, checksum,
+  signatures, public key, and fingerprint.
+- [x] Public GitHub Release install validation passes for `v0.1.1`.
 - [x] `v0.1.0` source tag is the published release target.
 - [x] GitHub Release `v0.1.0` is the publication target for the signed archive,
   checksum, signatures, and public key.
@@ -181,8 +185,8 @@ NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh
   maintained-key signing.
 - [x] Strict public-release preflight attempted and documented as blocked by
   dirty local changes.
-- [ ] Current RC changes are committed and pushed.
-- [ ] GitHub Actions is observed for the pushed `0.1.1` commit.
-- [ ] Strict public-release dry-run passes for the pushed `0.1.1` commit.
-- [ ] `v0.1.1` tag and GitHub Release are published.
-- [ ] Public install validation passes with `NEXUS_PUBLIC_RELEASE_TAG=v0.1.1`.
+- [x] Current RC changes are committed and pushed.
+- [x] GitHub Actions is observed for the pushed `0.1.1` commit.
+- [x] Strict public-release dry-run passes for the pushed `0.1.1` commit.
+- [x] `v0.1.1` tag and GitHub Release are published.
+- [x] Public install validation passes with `NEXUS_PUBLIC_RELEASE_TAG=v0.1.1`.

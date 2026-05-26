@@ -321,6 +321,16 @@ impl Storage {
             Storage::Sqlite(s) => s.paginated_array_response(value, pagination),
         }
     }
+
+    #[allow(dead_code)]
+    pub(crate) fn auth_file(&self) -> Result<std::path::PathBuf, String> {
+        match self {
+            Storage::Json(s) => Ok(s.auth_file()),
+            Storage::Sqlite(_) => {
+                Err("Auth nativo nesta fase usa o storage JSON padrao de nexus serve".to_string())
+            }
+        }
+    }
 }
 
 pub fn default_data_dir(file_path: &str) -> std::path::PathBuf {

@@ -46,6 +46,7 @@ impl Scope {
 pub struct Checker {
     functions: HashMap<String, FunctionSig>,
     models: HashMap<String, Vec<Field>>,
+    auths: HashMap<String, AuthConfig>,
     workflows: HashSet<String>,
 }
 
@@ -60,6 +61,7 @@ impl Checker {
         Checker {
             functions: HashMap::new(),
             models: HashMap::new(),
+            auths: HashMap::new(),
             workflows: HashSet::new(),
         }
     }
@@ -114,6 +116,15 @@ impl Checker {
                         format!("Workflow '{}' declarado mais de uma vez", name),
                     ));
                 }
+            }
+            if let Decl::Auth { config } = decl {
+                if self.auths.contains_key(&config.name) {
+                    return Err(self.error(
+                        config.span,
+                        format!("Auth '{}' declarado mais de uma vez", config.name),
+                    ));
+                }
+                self.auths.insert(config.name.clone(), config.clone());
             }
         }
 
@@ -231,6 +242,7 @@ impl Checker {
                     path,
                     params,
                     query_params,
+                    auth,
                     ..
                 } => {
                     let signature = (route_method_name(method), path.as_str());
@@ -298,11 +310,112 @@ impl Checker {
                             ));
                         }
                     }
+                    if let Some(guard) = auth {
+                        self.check_route_auth_guard(path, guard)?;
+                    }
+                }
+                Decl::Auth { config } => {
+                    self.check_auth_config(config)?;
                 }
                 _ => {}
             }
         }
 
+        Ok(())
+    }
+
+    fn check_auth_config(&self, config: &AuthConfig) -> CheckResult<()> {
+        let fields = self.models.get(&config.model).ok_or_else(|| {
+            self.error(
+                config.span,
+                format!(
+                    "Auth '{}' referencia model '{}' inexistente",
+                    config.name, config.model
+                ),
+            )
+        })?;
+
+        let Some(identity) = fields.iter().find(|field| field.name == config.identity) else {
+            return Err(self.error(
+                config.span,
+                format!(
+                    "Auth '{}' identity '{}.{}' nao existe",
+                    config.name, config.model, config.identity
+                ),
+            ));
+        };
+        if !matches!(identity.ty, Type::String) || !identity.unique {
+            return Err(self.error(
+                identity.span,
+                format!(
+                    "Auth '{}' identity '{}.{}' deve ser string unique",
+                    config.name, config.model, config.identity
+                ),
+            ));
+        }
+
+        if let Some(role) = &config.role {
+            let Some(role_field) = fields.iter().find(|field| field.name == *role) else {
+                return Err(self.error(
+                    config.span,
+                    format!(
+                        "Auth '{}' role '{}.{}' nao existe",
+                        config.name, config.model, role
+                    ),
+                ));
+            };
+            if !matches!(role_field.ty, Type::String) {
+                return Err(self.error(
+                    role_field.span,
+                    format!(
+                        "Auth '{}' role '{}.{}' deve ser string",
+                        config.name, config.model, role
+                    ),
+                ));
+            }
+        }
+
+        if config.password_min < 15 {
+            return Err(self.error(
+                config.span,
+                format!("Auth '{}' password_min deve ser pelo menos 15", config.name),
+            ));
+        }
+        if config.session_ttl_minutes == 0 || config.idle_ttl_minutes == 0 {
+            return Err(self.error(
+                config.span,
+                format!("Auth '{}' TTLs devem ser maiores que zero", config.name),
+            ));
+        }
+        if config.idle_ttl_minutes > config.session_ttl_minutes {
+            return Err(self.error(
+                config.span,
+                format!(
+                    "Auth '{}' idle_ttl_minutes nao pode exceder session_ttl_minutes",
+                    config.name
+                ),
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn check_route_auth_guard(&self, path: &str, guard: &RouteAuthGuard) -> CheckResult<()> {
+        let Some(config) = self.auths.get(&guard.auth) else {
+            return Err(self.error(
+                guard.span,
+                format!("Route '{}' usa auth '{}' inexistente", path, guard.auth),
+            ));
+        };
+        if guard.role.is_some() && config.role.is_none() {
+            return Err(self.error(
+                guard.span,
+                format!(
+                    "Route '{}' exige role, mas Auth '{}' nao declarou role",
+                    path, guard.auth
+                ),
+            ));
+        }
         Ok(())
     }
 
@@ -466,9 +579,10 @@ impl Checker {
                     path,
                     params,
                     query_params,
+                    auth,
                     body,
                     span,
-                } => self.check_route(method, path, params, query_params, body, *span)?,
+                } => self.check_route(method, path, params, query_params, auth, body, *span)?,
                 Decl::Invoice {
                     fields,
                     items,
@@ -504,6 +618,7 @@ impl Checker {
                     }
                 }
                 Decl::Statement(_) => {}
+                Decl::Auth { .. } => {}
                 Decl::Workflow { steps, .. } => {
                     for step in steps {
                         let mut scope = top_scope.clone();
@@ -962,9 +1077,13 @@ impl Checker {
         path: &str,
         params: &[String],
         query_params: &[QueryParam],
+        auth: &Option<RouteAuthGuard>,
         body: &[Stmt],
         span: Span,
     ) -> CheckResult<()> {
+        if let Some(guard) = auth {
+            self.check_route_auth_guard(path, guard)?;
+        }
         if body.len() != 1 {
             return Err(self.error(
                 span,
@@ -1040,6 +1159,9 @@ impl Checker {
             span,
         } = expr
         {
+            if ty == "Auth" {
+                return self.infer_auth_return_expr(method, args, *span);
+            }
             if method == "all" {
                 self.check_model_all_call(ty, args, scope, *span)?;
                 return Ok(Type::Array(Box::new(Type::Model(ty.clone()))));
@@ -1170,6 +1292,51 @@ impl Checker {
         }
 
         self.infer_expr(expr, scope)
+    }
+
+    fn infer_auth_return_expr(&self, method: &str, args: &[Expr], span: Span) -> CheckResult<Type> {
+        match method {
+            "register" | "login" => {
+                let config = self.check_auth_config_arg(method, args, span)?;
+                Ok(Type::Model(config.model.clone()))
+            }
+            "user" => {
+                if !args.is_empty() {
+                    return Err(self.error(span, "Auth::user() nao recebe argumentos"));
+                }
+                Ok(Type::String)
+            }
+            "logout" => {
+                if !args.is_empty() {
+                    return Err(self.error(span, "Auth::logout() nao recebe argumentos"));
+                }
+                Ok(Type::Bool)
+            }
+            _ => Err(self.error(
+                span,
+                format!("Metodo estatico 'Auth::{}' nao existe", method),
+            )),
+        }
+    }
+
+    fn check_auth_config_arg<'a>(
+        &'a self,
+        method: &str,
+        args: &[Expr],
+        span: Span,
+    ) -> CheckResult<&'a AuthConfig> {
+        if args.len() != 1 {
+            return Err(self.error(span, format!("Auth::{}() recebe exatamente 1 auth", method)));
+        }
+        let Expr::Ident { name, .. } = &args[0] else {
+            return Err(self.error(
+                args[0].span(),
+                format!("Auth::{}() espera nome de auth", method),
+            ));
+        };
+        self.auths
+            .get(name)
+            .ok_or_else(|| self.error(args[0].span(), format!("Auth '{}' nao declarado", name)))
     }
 
     fn check_model_all_call(
@@ -2615,6 +2782,57 @@ impl Checker {
                 *span,
                 format!("Route HTTP nesta fase nao suporta chamada '{}()'", name),
             )),
+            Expr::StaticCall {
+                ty,
+                method,
+                args,
+                span,
+            } if ty == "Auth" => {
+                match method.as_str() {
+                    "register" => {
+                        if !matches!(route_method, HttpMethod::Post) {
+                            return Err(self
+                                .error(*span, "Auth::register() so pode ser usado em route POST"));
+                        }
+                        self.check_auth_config_arg(method, args, *span)?;
+                    }
+                    "login" => {
+                        if !matches!(route_method, HttpMethod::Post) {
+                            return Err(
+                                self.error(*span, "Auth::login() so pode ser usado em route POST")
+                            );
+                        }
+                        self.check_auth_config_arg(method, args, *span)?;
+                    }
+                    "logout" => {
+                        if !matches!(route_method, HttpMethod::Post) {
+                            return Err(
+                                self.error(*span, "Auth::logout() so pode ser usado em route POST")
+                            );
+                        }
+                        if !args.is_empty() {
+                            return Err(self.error(*span, "Auth::logout() nao recebe argumentos"));
+                        }
+                    }
+                    "user" => {
+                        if !matches!(route_method, HttpMethod::Get) {
+                            return Err(
+                                self.error(*span, "Auth::user() so pode ser usado em route GET")
+                            );
+                        }
+                        if !args.is_empty() {
+                            return Err(self.error(*span, "Auth::user() nao recebe argumentos"));
+                        }
+                    }
+                    _ => {
+                        return Err(self.error(
+                            *span,
+                            format!("Metodo estatico 'Auth::{}' nao existe", method),
+                        ))
+                    }
+                }
+                Ok(())
+            }
             Expr::StaticCall {
                 ty,
                 method,

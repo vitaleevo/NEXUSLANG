@@ -106,6 +106,52 @@ impl Parser {
         }
     }
 
+    fn expect_usize(&mut self, label: &str) -> ParseResult<usize> {
+        let line = self.current_line();
+        let column = self.current_column();
+        match self.advance() {
+            Token::Integer(value) if value >= 0 => Ok(value as usize),
+            tok => Err(self.error_at(
+                line,
+                column,
+                format!(
+                    "auth {} espera inteiro positivo, encontrado {:?}",
+                    label, tok
+                ),
+            )),
+        }
+    }
+
+    fn expect_u64(&mut self, label: &str) -> ParseResult<u64> {
+        let line = self.current_line();
+        let column = self.current_column();
+        match self.advance() {
+            Token::Integer(value) if value >= 0 => Ok(value as u64),
+            tok => Err(self.error_at(
+                line,
+                column,
+                format!(
+                    "auth {} espera inteiro positivo, encontrado {:?}",
+                    label, tok
+                ),
+            )),
+        }
+    }
+
+    fn expect_auth_field_key(&mut self) -> ParseResult<String> {
+        let line = self.current_line();
+        let column = self.current_column();
+        match self.advance() {
+            Token::Ident(name) => Ok(name),
+            Token::Model => Ok("model".to_string()),
+            tok => Err(self.error_at(
+                line,
+                column,
+                format!("esperado campo de auth, encontrado {:?}", tok),
+            )),
+        }
+    }
+
     fn at(&self, expected: &Token) -> bool {
         std::mem::discriminant(self.peek()) == std::mem::discriminant(expected)
     }
@@ -249,6 +295,7 @@ impl Parser {
             Token::Fn => self.parse_function(),
             Token::Model => self.parse_model(),
             Token::Workflow => self.parse_workflow(),
+            Token::Auth => self.parse_auth(),
             Token::Route => self.parse_route(),
             Token::Invoice => self.parse_invoice(),
             _ => {
@@ -462,6 +509,86 @@ impl Parser {
         Ok(Decl::Workflow { name, steps, span })
     }
 
+    fn parse_auth(&mut self) -> ParseResult<Decl> {
+        let span = self.current_span();
+        self.advance(); // consume 'auth'
+        let name = self.expect_ident()?;
+        self.expect(&Token::LBrace)?;
+
+        let mut model = None;
+        let mut identity = None;
+        let mut role = None;
+        let mut password_min = None;
+        let mut session_ttl_minutes = None;
+        let mut idle_ttl_minutes = None;
+
+        while !self.at(&Token::RBrace) && !self.at(&Token::Eof) {
+            let key_span = self.current_span();
+            let key = self.expect_auth_field_key()?;
+            self.expect(&Token::Colon)?;
+            match key.as_str() {
+                "model" => {
+                    reject_duplicate_auth_field(model.is_some(), &key, key_span, self)?;
+                    model = Some(self.expect_ident()?);
+                }
+                "identity" => {
+                    reject_duplicate_auth_field(identity.is_some(), &key, key_span, self)?;
+                    identity = Some(self.expect_ident()?);
+                }
+                "role" => {
+                    reject_duplicate_auth_field(role.is_some(), &key, key_span, self)?;
+                    role = Some(self.expect_ident()?);
+                }
+                "password_min" => {
+                    reject_duplicate_auth_field(password_min.is_some(), &key, key_span, self)?;
+                    password_min = Some(self.expect_usize("password_min")?);
+                }
+                "session_ttl_minutes" => {
+                    reject_duplicate_auth_field(
+                        session_ttl_minutes.is_some(),
+                        &key,
+                        key_span,
+                        self,
+                    )?;
+                    session_ttl_minutes = Some(self.expect_u64("session_ttl_minutes")?);
+                }
+                "idle_ttl_minutes" => {
+                    reject_duplicate_auth_field(idle_ttl_minutes.is_some(), &key, key_span, self)?;
+                    idle_ttl_minutes = Some(self.expect_u64("idle_ttl_minutes")?);
+                }
+                _ => {
+                    return Err(self.error_at(
+                        key_span.line,
+                        key_span.column,
+                        format!("campo de auth desconhecido: '{}'", key),
+                    ));
+                }
+            }
+            if self.at(&Token::Comma) {
+                self.advance();
+            }
+        }
+
+        self.expect(&Token::RBrace)?;
+        let model =
+            model.ok_or_else(|| self.error_at(span.line, span.column, "auth requer model"))?;
+        let identity = identity
+            .ok_or_else(|| self.error_at(span.line, span.column, "auth requer identity"))?;
+
+        Ok(Decl::Auth {
+            config: AuthConfig {
+                name,
+                model,
+                identity,
+                role,
+                password_min: password_min.unwrap_or(15),
+                session_ttl_minutes: session_ttl_minutes.unwrap_or(480),
+                idle_ttl_minutes: idle_ttl_minutes.unwrap_or(30),
+                span,
+            },
+        })
+    }
+
     fn parse_route(&mut self) -> ParseResult<Decl> {
         let span = self.current_span();
         self.advance(); // consume 'route'
@@ -493,12 +620,14 @@ impl Parser {
             || *self.peek() == Token::Colon
             || *self.peek() == Token::Minus
             || *self.peek() == Token::In
+            || (*self.peek() == Token::Auth && path.ends_with('/'))
             || matches!(self.peek(), Token::Ident(_))
         {
             match self.advance() {
                 Token::Slash => path.push('/'),
                 Token::Minus => path.push('-'),
                 Token::In => path.push_str("in"),
+                Token::Auth => path.push_str("auth"),
                 Token::Ident(s) => path.push_str(&s),
                 Token::Colon => {
                     path.push(':');
@@ -516,15 +645,60 @@ impl Parser {
             Vec::new()
         };
 
+        let auth = if self.at(&Token::Auth) {
+            Some(self.parse_route_auth_guard()?)
+        } else {
+            None
+        };
+
         let body = self.parse_block()?;
         Ok(Decl::Route {
             method,
             path,
             params,
             query_params,
+            auth,
             body,
             span,
         })
+    }
+
+    fn parse_route_auth_guard(&mut self) -> ParseResult<RouteAuthGuard> {
+        let span = self.current_span();
+        self.expect(&Token::Auth)?;
+        self.expect(&Token::LParen)?;
+        let auth = self.expect_ident()?;
+        let mut role = None;
+
+        if self.at(&Token::Comma) {
+            self.advance();
+            let key_span = self.current_span();
+            let key = self.expect_ident()?;
+            if key != "role" {
+                return Err(self.error_at(
+                    key_span.line,
+                    key_span.column,
+                    format!("guard auth espera 'role', encontrado '{}'", key),
+                ));
+            }
+            self.expect(&Token::Colon)?;
+            match self.advance() {
+                Token::StringLit(value) => role = Some(value),
+                tok => {
+                    return Err(self.error_at(
+                        key_span.line,
+                        key_span.column,
+                        format!(
+                            "guard auth role espera string literal, encontrado {:?}",
+                            tok
+                        ),
+                    ))
+                }
+            }
+        }
+
+        self.expect(&Token::RParen)?;
+        Ok(RouteAuthGuard { auth, role, span })
     }
 
     fn parse_route_query_params(&mut self) -> ParseResult<Vec<QueryParam>> {
@@ -1042,5 +1216,22 @@ impl Parser {
                 Err(self.error_at(line, column, format!("expressão inválida: {:?}", tok)))
             }
         }
+    }
+}
+
+fn reject_duplicate_auth_field(
+    duplicate: bool,
+    key: &str,
+    span: Span,
+    parser: &Parser,
+) -> ParseResult<()> {
+    if duplicate {
+        Err(parser.error_at(
+            span.line,
+            span.column,
+            format!("campo de auth duplicado: '{}'", key),
+        ))
+    } else {
+        Ok(())
     }
 }

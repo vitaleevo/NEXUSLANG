@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::ast::*;
 
+use super::auth::{self, AuthenticatedUser};
 use super::http::{json_response, method_name, route_error_status, HttpResponse};
 use super::storage::*;
 use super::storage_backend::Storage;
@@ -11,6 +12,17 @@ pub(crate) fn handle_request(
     storage: &Storage,
     method: &str,
     path: &str,
+    request_body: &str,
+) -> HttpResponse {
+    handle_request_with_headers(program, storage, method, path, &[], request_body)
+}
+
+pub(crate) fn handle_request_with_headers(
+    program: &Program,
+    storage: &Storage,
+    method: &str,
+    path: &str,
+    headers: &[(String, String)],
     request_body: &str,
 ) -> HttpResponse {
     let (clean_path, query_string) = path.split_once('?').unwrap_or((path, ""));
@@ -57,8 +69,25 @@ pub(crate) fn handle_request(
                 format!(r#"{{"error":"{}"}}"#, escape_json(&e)),
             );
         }
-        return match eval_route(&route, &params, storage, program, request_body) {
-            Ok((status, body)) => json_response(status, body),
+        let auth_context = match authenticate_route(program, storage, &route, headers) {
+            Ok(user) => user,
+            Err(e) => {
+                return json_response(
+                    route_error_status(&e),
+                    format!(r#"{{"error":"{}"}}"#, escape_json(&e)),
+                )
+            }
+        };
+        return match eval_route(
+            &route,
+            &params,
+            storage,
+            program,
+            headers,
+            request_body,
+            auth_context.as_ref(),
+        ) {
+            Ok(response) => response,
             Err(e) => json_response(
                 route_error_status(&e),
                 format!(r#"{{"error":"{}"}}"#, escape_json(&e)),
@@ -67,6 +96,18 @@ pub(crate) fn handle_request(
     }
 
     json_response(404, r#"{"error":"route not found"}"#.to_string())
+}
+
+fn authenticate_route(
+    program: &Program,
+    storage: &Storage,
+    route: &RouteView<'_>,
+    headers: &[(String, String)],
+) -> Result<Option<AuthenticatedUser>, String> {
+    match route.auth {
+        Some(guard) => auth::authenticate_request(program, storage, guard, headers).map(Some),
+        None => Ok(None),
+    }
 }
 
 fn route_path_specificity(path: &str) -> usize {
@@ -222,11 +263,29 @@ fn eval_route(
     params: &HashMap<String, ServerValue>,
     storage: &Storage,
     program: &Program,
+    headers: &[(String, String)],
     request_body: &str,
-) -> Result<(u16, String), String> {
+    auth_context: Option<&AuthenticatedUser>,
+) -> Result<HttpResponse, String> {
     for stmt in route.body {
         match stmt {
             Stmt::Return { value, .. } => {
+                if let Some(auth_response) = auth::eval_auth_return(
+                    value,
+                    program,
+                    storage,
+                    headers,
+                    request_body,
+                    auth_context,
+                ) {
+                    let auth_response = auth_response?;
+                    return Ok(HttpResponse {
+                        status: auth_response.status,
+                        content_type: "application/json",
+                        body: auth_response.body,
+                        headers: auth_response.headers,
+                    });
+                }
                 let body =
                     eval_expr_json(value, params, storage, program, request_body, route.method)?;
                 let status =
@@ -235,14 +294,14 @@ fn eval_route(
                     } else {
                         200
                     };
-                return Ok((status, body));
+                return Ok(json_response(status, body));
             }
             Stmt::Print { .. } | Stmt::ExprStmt { .. } | Stmt::Let { .. } | Stmt::Const { .. } => {}
             Stmt::Assign { .. } | Stmt::If { .. } | Stmt::While { .. } | Stmt::For { .. } => {}
         }
     }
 
-    Ok((200, "null".to_string()))
+    Ok(json_response(200, "null".to_string()))
 }
 
 fn eval_expr_json(

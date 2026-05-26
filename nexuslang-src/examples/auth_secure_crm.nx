@@ -1,0 +1,34 @@
+model User {
+    email: string unique
+    name: string
+    role: string = "user" index
+}
+
+auth UserAuth {
+    model: User
+    identity: email
+    role: role
+    password_min: 15
+    session_ttl_minutes: 480
+    idle_ttl_minutes: 30
+}
+
+route POST /auth/register {
+    return Auth::register(UserAuth)
+}
+
+route POST /auth/login {
+    return Auth::login(UserAuth)
+}
+
+route POST /auth/logout auth(UserAuth) {
+    return Auth::logout()
+}
+
+route GET /me auth(UserAuth) {
+    return Auth::user()
+}
+
+route GET /admin/users auth(UserAuth, role: "admin") {
+    return User::all("email", "asc")
+}

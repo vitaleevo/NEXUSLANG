@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod http;
 pub mod json;
 pub mod openapi;
@@ -30,6 +31,20 @@ pub fn handle_request_with_body_for_test(
     let program = crate::parse_checked_source(source)?;
     Ok(router::handle_request(
         &program, storage, method, path, body,
+    ))
+}
+
+pub fn handle_request_with_headers_and_body_for_test(
+    source: &str,
+    method: &str,
+    path: &str,
+    headers: &[(String, String)],
+    body: &str,
+    storage: &Storage,
+) -> Result<HttpResponse, String> {
+    let program = crate::parse_checked_source(source)?;
+    Ok(router::handle_request_with_headers(
+        &program, storage, method, path, headers, body,
     ))
 }
 

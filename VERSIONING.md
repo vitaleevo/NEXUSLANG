@@ -81,7 +81,7 @@ For any release candidate:
 
 Current source version: `0.1.1`
 
-Current public release target: `v0.1.1`.
+Latest published GitHub Release: `v0.1.1`.
 
 Previous published GitHub Release: `v0.1.0`.
 

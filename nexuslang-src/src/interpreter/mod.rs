@@ -468,6 +468,7 @@ impl Interpreter {
             Decl::Workflow { name, steps, .. } => {
                 self.workflows.insert(name.clone(), steps.clone());
             }
+            Decl::Auth { .. } => {}
             Decl::Route {
                 method,
                 path,

@@ -10,19 +10,24 @@ playground.
 - `nexus check <file.nx>` validates a program without executing it.
 - `nexus tokens <file.nx>` prints lexer output.
 - `nexus ast <file.nx>` prints parser output.
-- Supported ERP primitives: `model`, `workflow`, `route`, `invoice`, `money`.
+- `nexus install`, `nexus add <package>`, `nexus add <package> --path <dir>`,
+  `nexus add <package> --registry <package@version>`, and `nexus update`
+  provide the first package-manager MVP using `nexus.toml`, `nexus.lock`, and
+  `.nexus/packages/`.
+- Supported ERP primitives: `model`, `workflow`, `route`, `auth`, `invoice`,
+  `money`.
 - Supported language primitives: functions, `let`, `const`, `if`, `while`,
   `for`, arrays, strings, numbers, booleans, and static model calls.
 
 ## Post-0.1 release line
 
-Current judgement: `v0.1.0` is published and usable for evaluation, demos, and
-QA, with public artifact checksum/signature verification in place. The next
-work should reduce real user friction and narrow compatibility risk before
-adding broad new language surface.
+Current judgement: `v0.1.1` is published and publicly install-validated for
+evaluation, demos, and QA, with public artifact checksum/signature verification
+in place. The next work should reduce real user friction and narrow
+compatibility risk before adding broad new language surface.
 
-Current source line: `0.1.1` release candidate, focused on patch-level release
-hardening after `v0.1.0`.
+Current source line: post-`v0.1.1` local development, with Package Manager MVP
+changes present locally but not included in the published `v0.1.1` tag.
 
 ### 0.1.1 maintenance focus
 
@@ -45,11 +50,21 @@ hardening after `v0.1.0`.
   workflows without depending on unstable storage guarantees. STARTED with
   `storage_backup_restore_inventory.nx`, `STORAGE_BACKUP_RESTORE.md`, and
   `scripts/smoke-storage-backup-restore.sh`.
+- Add a local package-manager MVP for project manifests and lockfiles. DONE
+  with `nexus.toml`, `nexus.lock`, `nexus install`, `nexus add <package>`,
+  `nexus update`, generated local `.nexus/packages/` cache, and CLI tests.
+- Harden the package-manager MVP with local path dependencies, stronger
+  `nexus.toml` validation, safe stale-cache cleanup, and an initial registry
+  declaration contract. DONE locally; needs commit/push and CI observation.
 
 Real risks to retire in `0.1.1`:
 
-- The first package is still local-platform oriented; there are no Windows,
-  macOS, or package-manager installers yet.
+- The first package is still local-platform oriented; there are no Windows or
+  macOS installers yet.
+- The language package manager is still MVP-level: path dependencies and
+  registry declarations are supported, but no remote downloads, semantic
+  version solver, package publishing, transitive dependency resolution, or
+  dependency signature/checksum verification exists yet.
 - JSON/SQLite persistence works for the supported QA flows, but migrations and
   long-term schema compatibility are limited to the documented `0.1.x` policy:
   additive optional/defaulted fields are supported, while renames, removals,
@@ -63,9 +78,8 @@ Real risks to retire in `0.1.1`:
 - Backup/restore is now documented and smoked for JSON storage, but SQLite
   remains a behavioral parity backend without a stable public `nexus serve`
   selection flag.
-- `0.1.1` still needs commit/push, GitHub Actions observation, strict dry-run,
-  tag/release publication, and post-release public install validation before
-  it can replace `v0.1.0` as latest public release.
+- `v0.1.1` has completed commit/push, GitHub Actions observation, strict
+  dry-run, tag/release publication, and post-release public install validation.
 
 ### 0.2.0 product focus
 
@@ -79,6 +93,9 @@ Real risks to retire in `0.1.1`:
   server/runtime errors can match lexer/parser/checker diagnostic quality.
 - Decide whether to ship a hosted playground or keep the web surface as a
   package-local learning/debugging tool for another release.
+- Harden the first native auth slice with rate limiting, CSRF protection for
+  cookie-backed unsafe methods, hosted TLS guidance, refresh-token policy, and
+  SQLite auth-store parity.
 
 ## Phase 1: Core stability
 
@@ -191,6 +208,23 @@ tools. It should not replace the Rust core.
 
 Go is a good option if NexusLang later needs a separate high-performance API
 gateway or deployment helper, but Rust can handle the first server runtime.
+
+## Phase 5.5: Native Auth And Secure Backend
+
+- Add `auth` declarations bound to a model identity field. DONE for the first
+  JSON-backed runtime slice.
+- Require auth identity fields to be `string unique`. DONE.
+- Add route guards with `auth(Name)` and `auth(Name, role: "admin")`. DONE.
+- Add `Auth::register()`, `Auth::login()`, `Auth::logout()`, and
+  `Auth::user()` route returns. DONE.
+- Store passwords with Argon2id and per-password salts. DONE.
+- Issue opaque server-side session cookies and revocable bearer tokens. DONE.
+- Generate OpenAPI security schemes plus `401` and `403` responses for guarded
+  routes. DONE.
+- Add an executable auth example in `examples/auth_secure_crm.nx`. DONE.
+- Add production hardening: rate limits, CSRF tokens for cookie sessions,
+  SQLite auth-store parity, secret rotation, and reverse-proxy/TLS deployment
+  docs.
 
 ## Phase 6: Web product
 

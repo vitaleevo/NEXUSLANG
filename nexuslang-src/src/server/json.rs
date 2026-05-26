@@ -21,6 +21,11 @@ impl JsonStorage {
         self.data_dir.join(format!("{}.json", model.to_lowercase()))
     }
 
+    #[allow(dead_code)]
+    pub(crate) fn auth_file(&self) -> PathBuf {
+        self.data_dir.join(".nexus-auth.json")
+    }
+
     fn read_model_json(&self, model: &str) -> Result<String, String> {
         let path = self.model_file(model);
         if !path.exists() {

@@ -107,6 +107,7 @@ fn lint_decl(decl: &Decl, warnings: &mut Vec<LintWarning>) {
             }
             lint_stmts(body, warnings);
         }
+        Decl::Auth { .. } => {}
         Decl::Invoice { fields, items, .. } => {
             if !fields.iter().any(|f| f.key == "customer") {
                 warn(
