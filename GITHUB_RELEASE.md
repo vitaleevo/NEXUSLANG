@@ -93,5 +93,6 @@ The strict dry-run has passed for the NexusLang 0.1.0 release scope using:
 
 ```text
 Repository: https://github.com/vitaleevo/NEXUSLANG
+Release tag: v0.1.0
 Signing key: 3237F7CC5CE2514FC9671BB93CB6808B55385273
 ```

@@ -1,6 +1,6 @@
 # NexusLang 0.1.0 Release Notes
 
-Release type: local/internal release candidate.
+Release type: public 0.1.0 release.
 
 This release packages the current NexusLang compiler/runtime, examples,
 playground assets, release documentation, and validation scripts into a
@@ -50,6 +50,7 @@ Latest recorded release state:
 - Project score: 100/100 for the 0.1.0 release scope after the strict
   public-release dry-run phase
 - GitHub repository: `https://github.com/vitaleevo/NEXUSLANG`
+- GitHub release tag: `v0.1.0`
 - GitHub Actions: observed successful `NexusLang Quality Gate` for the pushed
   release commit
 - Signing key fingerprint: `3237F7CC5CE2514FC9671BB93CB6808B55385273`
@@ -75,10 +76,8 @@ NexusLang 0.1.0 focuses on a practical ERP subset:
 
 ## Known Limitations
 
-- A signed release dry-run passed, but the final GitHub Release and public
-  `v0.1.0` tag still need to be published.
-- The packaged binary is local-platform oriented and has not been validated as
-  a cross-platform installer.
+- This is the first public NexusLang release package. The packaged binary is
+  still local-platform oriented and is not a cross-platform installer.
 - Remote GitHub Actions should still be observed after a real push or PR.
 - JSON storage is suitable for local/dev scenarios; storage compatibility is
   not yet frozen as a long-term public contract.
@@ -106,8 +105,5 @@ exists from an earlier phase, rebuild it:
 
 ## Next Release Focus
 
-- Publish the `v0.1.0` source tag and GitHub Release.
-- Attach signed artifacts, checksums, signatures, and the public release key to
-  the GitHub Release.
 - Public install guide polish and expanded examples.
 - Clear storage compatibility policy for JSON and SQLite.

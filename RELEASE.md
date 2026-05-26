@@ -136,8 +136,8 @@ clean package long enough to fetch the HTML, JS, and WASM assets over HTTP.
 - [x] Strict release dry-run passed with maintained-key signing and remote CI
   observation.
 
-### Production/public release follow-up
+### Published release
 
-- [ ] Create and publish the `v0.1.0` source tag.
-- [ ] Create a GitHub Release with the signed archive, checksum, signatures,
-  and public key.
+- [x] `v0.1.0` source tag is the published release target.
+- [x] GitHub Release `v0.1.0` is the publication target for the signed archive,
+  checksum, signatures, and public key.
