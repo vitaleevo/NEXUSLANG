@@ -42,7 +42,106 @@ todo o repositorio.
   - rodar `cargo fmt` e `cargo test` ao final;
   - recompilar o WASM quando a mudanca afetar o playground.
 
-## Etapa anterior concluida: Fase 7.77 - Helper de conexao GitHub release
+## Etapa anterior concluida: Fase 7.78 - GitHub autenticado, repo criado, push e GPG local
+
+Objetivo: autenticar `gh`, criar o repositorio GitHub real, enviar `main`,
+configurar uma chave GPG mantida localmente e preparar o strict release para
+observar Actions e assinar com chave real.
+
+Foi feito:
+
+- Iniciado fluxo web de `gh auth login` com device code e concluida
+  autenticacao como `vitaleevo`.
+- Confirmado `gh auth status` com escopos `repo` e `workflow`.
+- Criado repositorio GitHub real:
+  - `vitaleevo/NEXUSLANG`;
+  - URL: `https://github.com/vitaleevo/NEXUSLANG`;
+  - visibilidade: public.
+- Configurado `gh auth setup-git` para Git HTTPS usar as credenciais do `gh`.
+- Enviado `main` para `origin/main`.
+- GitHub Actions iniciou para o commit
+  `3c0d0be7c278e52884b07682e60724fce4a8964f`.
+- Criada chave GPG persistente local para release:
+  - UID: `NexusLang Release <release@vitaleevo.com>`;
+  - fingerprint: `3237F7CC5CE2514FC9671BB93CB6808B55385273`;
+  - expira em 2027-05-26.
+- Exportada chave publica para:
+  - `dist/nexuslang-release-public-key.asc`;
+  - fingerprint em `dist/nexuslang-release-signing-key.fingerprint`.
+- Corrigido `scripts/connect-github-release.sh` para:
+  - rodar `gh auth setup-git`;
+  - usar `gh repo create "$REPOSITORY" "$visibility_flag"` sem o flag legado
+    `--confirm`.
+
+Evolucao percentual registrada:
+
+- Antes da fase: 99/100.
+- Durante a fase:
+  - `gh` autenticado: 99.3/100;
+  - push para GitHub realizado: 99.6/100;
+  - chave GPG mantida local criada: 99.8/100.
+- Depois da fase: ainda pendente ate observar Actions verde e rodar strict
+  full com `NEXUS_RELEASE_SIGNING_KEY`.
+
+Arquivos principais:
+
+- `scripts/connect-github-release.sh`
+- `MEMORIA_NEXUSLANG.md`
+- `.git/config`
+- `dist/nexuslang-release-public-key.asc`
+- `dist/nexuslang-release-signing-key.fingerprint`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang
+gh auth status
+gh auth setup-git
+git push -u origin main
+gh run list -R vitaleevo/NEXUSLANG --commit 3c0d0be7c278e52884b07682e60724fce4a8964f -L 10
+gpg --list-secret-keys --keyid-format LONG 3237F7CC5CE2514FC9671BB93CB6808B55385273
+```
+
+Resultado:
+
+- `gh` autenticado.
+- Repo remoto criado.
+- `main` enviado para GitHub.
+- Actions iniciou para o commit enviado.
+- O strict preflight passou pelos bloqueios de GitHub/push e falhou em
+  `strict_status=failed:missing-signing-key` antes da chave ser criada.
+- Chave GPG mantida local criada e pronta para ser usada com:
+  `NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273`.
+
+Estado atual:
+
+- Falta commitar/pushar a correcao do helper, se ainda nao estiver enviada.
+- Falta observar a conclusao do GitHub Actions para o commit final.
+- Falta rodar:
+  `NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 ./scripts/release-dry-run-strict.sh`.
+- O projeto esta em 99.8/100 durante a transicao para 100/100.
+
+## Proximo passo recomendado
+
+Fase 7.79 - Observar Actions verde e executar strict release assinado.
+
+AVISO: O proximo passo e criar/implementar observacao do GitHub Actions verde
+para o commit final e execucao de
+`NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 ./scripts/release-dry-run-strict.sh`
+ate passar com assinatura GPG mantida e CI remoto observado. Antes de iniciar,
+leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `scripts/release-dry-run-strict.sh`
+- `scripts/connect-github-release.sh`
+- `dist/release-strict-preflight-report.txt`
+- `dist/release-dry-run-report.txt`
+
+## Etapa historica concluida: Fase 7.77 - Helper de conexao GitHub release
 
 Objetivo: preparar o passo operacional que conecta o repo local ao GitHub real,
 criando/verificando o repositorio destino, configurando `origin` e fazendo

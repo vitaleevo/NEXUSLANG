@@ -128,6 +128,8 @@ gh auth status -h github.com >/dev/null 2>&1 || {
     fail "gh-not-authenticated" "Run gh auth login before connecting GitHub."
 }
 
+run gh auth setup-git
+
 if gh repo view "$REPOSITORY" --json nameWithOwner,url,visibility \
     > "$DIST_DIR/github-release-repo-view.json" 2>"$DIST_DIR/github-release-repo-view.err"; then
     repo_status="exists"
@@ -138,7 +140,7 @@ else
 
     visibility_flag="--public"
     [ "$VISIBILITY" = "private" ] && visibility_flag="--private"
-    run gh repo create "$REPOSITORY" "$visibility_flag" --confirm
+    run gh repo create "$REPOSITORY" "$visibility_flag"
     repo_status="created"
 fi
 
