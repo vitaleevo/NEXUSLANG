@@ -38,8 +38,10 @@ if [ "${NEXUS_RUN_CLIPPY:-0}" = "1" ]; then
 fi
 
 run_in_crate cargo test
+run "$ROOT_DIR/scripts/validate-storage-compatibility-policy.sh"
 run node --check "$ROOT_DIR/nexuslang-playground.js"
 run "$ROOT_DIR/scripts/smoke-test.sh"
+run "$ROOT_DIR/scripts/smoke-storage-backup-restore.sh"
 run "$ROOT_DIR/scripts/validate-openapi.sh"
 
 echo ""

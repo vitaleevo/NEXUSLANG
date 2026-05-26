@@ -31,7 +31,7 @@ v<version>
 Example:
 
 ```text
-v0.1.0
+v0.1.1
 ```
 
 Tags should point to the commit that produced the release artifacts and passed
@@ -79,6 +79,14 @@ For any release candidate:
 
 ## Current Release
 
-Current version: `0.1.0`
+Current source version: `0.1.1`
 
-Current status: local/internal release candidate.
+Current public release target: `v0.1.1`.
+
+Previous published GitHub Release: `v0.1.0`.
+
+Run the public install validation against the release tag:
+
+```bash
+NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh
+```

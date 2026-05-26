@@ -123,15 +123,20 @@ assert_file "$PACKAGE_DIR/docs/README.md"
 assert_file "$PACKAGE_DIR/docs/RELEASE_NOTES.md"
 assert_file "$PACKAGE_DIR/docs/VERSIONING.md"
 assert_file "$PACKAGE_DIR/docs/COMPATIBILITY.md"
+assert_file "$PACKAGE_DIR/docs/STORAGE_BACKUP_RESTORE.md"
 assert_file "$PACKAGE_DIR/docs/SIGNING.md"
 assert_file "$PACKAGE_DIR/docs/GITHUB_RELEASE.md"
 assert_file "$PACKAGE_DIR/docs/RELEASE.md"
 assert_file "$PACKAGE_DIR/examples/erp_basico.nx"
+assert_file "$PACKAGE_DIR/examples/storage_backup_restore_inventory.nx"
 assert_executable "$PACKAGE_DIR/scripts/smoke-package.sh"
+assert_executable "$PACKAGE_DIR/scripts/smoke-storage-backup-restore.sh"
 assert_executable "$PACKAGE_DIR/scripts/connect-github-release.sh"
 assert_executable "$PACKAGE_DIR/scripts/validate-release-second-env.sh"
 assert_executable "$PACKAGE_DIR/scripts/sign-release-artifacts.sh"
 assert_executable "$PACKAGE_DIR/scripts/release-dry-run-strict.sh"
+assert_executable "$PACKAGE_DIR/scripts/validate-public-release-install.sh"
+assert_executable "$PACKAGE_DIR/scripts/validate-storage-compatibility-policy.sh"
 assert_no_generated_storage "$PACKAGE_DIR"
 
 manifest_package="$(manifest_value package)"
@@ -151,6 +156,7 @@ manifest_version="$(manifest_value package_version)"
 [ -n "$manifest_version" ] || fail "manifest missing package_version"
 
 run "$PACKAGE_DIR/scripts/smoke-package.sh"
+run "$PACKAGE_DIR/scripts/smoke-storage-backup-restore.sh"
 
 manifest_wasm_bytes="$(
     sed -n 's/^wasm_bytes=//p' "$PACKAGE_DIR/PACKAGE_MANIFEST.txt" | head -n 1

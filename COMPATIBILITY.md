@@ -1,7 +1,7 @@
 # NexusLang Compatibility Contract
 
 This document records what NexusLang treats as stable, release-candidate, or
-experimental for the current `0.1.0` local release candidate.
+experimental for the current public `0.1.x` line.
 
 ## Compatibility Levels
 
@@ -78,18 +78,117 @@ external tools.
 
 ### JSON Storage
 
-Level: experimental.
+Level: release candidate for the `0.1.x` record contract; experimental for
+long-term operations.
 
-JSON storage is appropriate for local development, examples, and smoke tests.
-Generated `.nexus-data` directories are local runtime data and are excluded
-from release packages. Long-term JSON storage compatibility is not frozen.
+JSON storage is appropriate for local development, examples, demos, and smoke
+tests. The default `nexus serve <file.nx>` runtime stores one JSON array per
+model under `.nexus-data` next to the served source file:
+
+```text
+.nexus-data/<model-name-lowercase>.json
+```
+
+For `0.1.x`, NexusLang keeps this minimal record contract:
+
+- each model file is a JSON array;
+- each array item is a JSON object representing one model record;
+- money fields are stored as objects with `amount` and `currency`;
+- optional fields may be absent in older data and are read as `null`;
+- fields with static defaults may be absent in older data and are read with
+  their declared default value;
+- generated `.nexus-data` directories are local runtime data and are excluded
+  from release packages.
+
+NexusLang does not promise automatic rewrites of existing JSON files in
+`0.1.x`. Compatibility for additive fields is applied when records are read.
 
 ### SQLite Storage
 
-Level: experimental.
+Level: release candidate for JSON/SQLite behavior parity; experimental for the
+physical database schema.
 
-SQLite has parity coverage for critical CRUD and filter flows. The schema and
-migration story are not yet a public compatibility contract.
+SQLite has parity coverage for critical CRUD and filter flows. The current
+SQLite backend stores each model in a lower-case table with an internal
+autoincrement `id` and a `data TEXT NOT NULL` JSON payload. This physical
+layout is an implementation detail for `0.1.x`; users should not depend on
+table names, index names, or raw SQL structure yet.
+
+The public `0.1.x` SQLite promise is behavioral:
+
+- CRUD, filters, ordering, pagination, unique checks, defaults, optionals, and
+  min/max validation should match JSON storage for the supported route subset;
+- additive optional/defaulted fields should read older records the same way as
+  JSON storage;
+- SQLite database files remain user data and should be backed up before
+  upgrading NexusLang.
+
+SQLite may create internal indexes for constraints such as `unique`, but
+declared `index` fields are still metadata today and do not guarantee physical
+indexes.
+
+### Migration Policy For 0.1.x
+
+NexusLang `0.1.x` supports only conservative, user-auditable storage evolution.
+
+Supported additive model changes:
+
+- add an optional field, for example `email: string?`;
+- add a field with a static default, for example `status: string = "active"`;
+- add or tighten runtime validation for new writes, when old records can still
+  be read through optional/defaulted fields.
+
+Breaking storage changes:
+
+- rename a model or field;
+- remove a field that existing code still reads;
+- add a required field without a default;
+- change a field type in existing data;
+- change money/date representation;
+- depend on physical `index` behavior before physical indexes are documented.
+
+For breaking changes, users must export or back up data first, transform the
+data explicitly, then run smoke tests against the new model declarations before
+serving production-like data.
+
+### Backup And Restore Expectations
+
+Before upgrading between `0.1.x` releases:
+
+- stop the NexusLang server process;
+- copy the full `.nexus-data` directory for JSON storage;
+- copy the SQLite database file together with any companion `-wal` and `-shm`
+  files if present;
+- validate the upgraded program with `nexus check`;
+- run at least one create, find/list, update, delete, and filter route against
+  a copied dataset before reusing original data.
+
+The release package must not contain generated `.nexus-data` directories. That
+is enforced by release-package validation.
+
+The operational backup/restore guide is `STORAGE_BACKUP_RESTORE.md`. It is
+included in release packages as `docs/STORAGE_BACKUP_RESTORE.md`.
+
+### Storage Release Gate
+
+Every `0.1.x` release candidate should run:
+
+```bash
+./scripts/validate-storage-compatibility-policy.sh
+./scripts/smoke-storage-backup-restore.sh
+cd nexuslang-src
+cargo test storage_schema_evolution_allows_additive_optional_and_defaulted_fields
+cargo test sqlite_storage_matches_json_storage_for_crud_and_critical_filters
+```
+
+After publishing a GitHub Release, maintainers should also run:
+
+```bash
+./scripts/validate-public-release-install.sh
+```
+
+That post-release check downloads the public assets, verifies checksum and GPG
+signatures, extracts the package in `/tmp`, and runs the packaged smoke test.
 
 ## Playground And WASM
 
@@ -117,9 +216,12 @@ The release package should contain:
 - `docs/RELEASE_NOTES.md`
 - `docs/VERSIONING.md`
 - `docs/COMPATIBILITY.md`
+- `docs/STORAGE_BACKUP_RESTORE.md`
 - `docs/SIGNING.md`
+- `examples/storage_backup_restore_inventory.nx`
 - `PACKAGE_MANIFEST.txt`
 - `scripts/smoke-package.sh`
+- `scripts/smoke-storage-backup-restore.sh`
 
 ## Breaking Change Rules
 

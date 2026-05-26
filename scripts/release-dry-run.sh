@@ -152,7 +152,10 @@ run bash -n "$ROOT_DIR/scripts/package-release.sh"
 run bash -n "$ROOT_DIR/scripts/validate-release-package.sh"
 run bash -n "$ROOT_DIR/scripts/validate-release-second-env.sh"
 run bash -n "$ROOT_DIR/scripts/sign-release-artifacts.sh"
+run bash -n "$ROOT_DIR/scripts/validate-storage-compatibility-policy.sh"
+run bash -n "$ROOT_DIR/scripts/smoke-storage-backup-restore.sh"
 
+run "$ROOT_DIR/scripts/validate-storage-compatibility-policy.sh"
 run env NEXUS_RUN_CLIPPY=1 "$ROOT_DIR/scripts/quality-gate.sh"
 run "$ROOT_DIR/scripts/package-release.sh"
 

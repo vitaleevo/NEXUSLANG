@@ -96,3 +96,17 @@ Repository: https://github.com/vitaleevo/NEXUSLANG
 Release tag: v0.1.0
 Signing key: 3237F7CC5CE2514FC9671BB93CB6808B55385273
 ```
+
+The current source checkout targets `v0.1.1`. Before publishing, the `0.1.1`
+changes must be committed, pushed, observed in GitHub Actions, and validated
+with:
+
+```bash
+NEXUS_RELEASE_SIGNING_KEY="3237F7CC5CE2514FC9671BB93CB6808B55385273" ./scripts/release-dry-run-strict.sh
+```
+
+After the GitHub Release is published, validate the public install path:
+
+```bash
+NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh
+```

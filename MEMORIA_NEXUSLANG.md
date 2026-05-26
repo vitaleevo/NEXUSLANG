@@ -42,7 +42,669 @@ todo o repositorio.
   - rodar `cargo fmt` e `cargo test` ao final;
   - recompilar o WASM quando a mudanca afetar o playground.
 
-## Etapa anterior concluida: Fase 7.80 - Publicacao da tag e GitHub Release v0.1.0
+## Ultima etapa concluida: Fase 7.84 - Preparacao da release candidate 0.1.1
+
+Objetivo: preparar a release candidate local `0.1.1` do NexusLang com bump de
+versao, notas/changelog, pacote `v0.1.1`, quality gate, dry-run de release e
+validacao publica pos-release planejada, sem publicar ainda a GitHub Release.
+
+Foi feito:
+
+- `nexuslang-src/Cargo.toml` foi atualizado para `version = "0.1.1"`.
+- `nexuslang-src/Cargo.lock` foi atualizado para o pacote `nexuslang`
+  `0.1.1`.
+- A ajuda do CLI em `nexuslang-src/src/main.rs` passou a ler a versao via
+  `env!("CARGO_PKG_VERSION")`, evitando divergencia manual entre Cargo e CLI.
+- `RELEASE_NOTES.md` foi reescrito como notas de release candidate `0.1.1`,
+  mantendo claro que a release publica mais recente ainda e `v0.1.0`.
+- `README.md`, `RELEASE.md`, `VERSIONING.md`, `GITHUB_RELEASE.md`,
+  `SIGNING.md` e `nexuslang-src/ROADMAP.md` foram atualizados para:
+  - diferenciar fonte local `0.1.1` de release publica `v0.1.0`;
+  - documentar o pacote `nexuslang-v0.1.1-local-release.tar.gz`;
+  - planejar a validacao publica pos-release com
+    `NEXUS_PUBLIC_RELEASE_TAG=v0.1.1`;
+  - deixar explicito que `0.1.1` ainda precisa commit/push, Actions, strict
+    dry-run, tag/release e validacao publica antes de substituir `v0.1.0`.
+- `scripts/validate-public-release-install.sh` manteve o default em `v0.1.0`
+  porque `v0.1.1` ainda nao foi publicada, mas passou a mostrar o comando
+  explicito para validar `v0.1.1` depois da publicacao.
+- Corrigido aviso de Clippy em `nexuslang-src/tests/core.rs` removendo
+  emprestimos desnecessarios no helper de storage dos testes.
+- `nexuslang-src/web/nexuslang_playground.wasm` foi reconstruido durante o
+  fluxo de pacote/dry-run.
+- Pacote local `v0.1.1` foi gerado, validado e assinado no dry-run local com a
+  chave mantida.
+- O strict public-release preflight foi executado e bloqueou corretamente por
+  worktree sujo. Isso e um bloqueio real de processo, nao uma falha do pacote:
+  o strict so deve passar depois que as mudancas `0.1.1` forem commitadas,
+  enviadas ao GitHub e observadas no Actions.
+
+Arquivos principais:
+
+- `nexuslang-src/Cargo.toml`
+- `nexuslang-src/Cargo.lock`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/web/nexuslang_playground.wasm`
+- `RELEASE_NOTES.md`
+- `RELEASE.md`
+- `README.md`
+- `VERSIONING.md`
+- `GITHUB_RELEASE.md`
+- `SIGNING.md`
+- `nexuslang-src/ROADMAP.md`
+- `scripts/validate-public-release-install.sh`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+source "$HOME/.cargo/env" 2>/dev/null || true
+cargo fmt
+cargo run --quiet -- --help
+
+cd /home/alexandre/Nesusang
+./scripts/validate-storage-compatibility-policy.sh
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+./scripts/package-release.sh
+./scripts/validate-release-package.sh dist/nexuslang-v0.1.1-local-release.tar.gz
+NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 \
+  ./scripts/release-dry-run-strict.sh --preflight-only
+NEXUS_RELEASE_SIGNATURE_MODE=existing \
+NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 \
+  ./scripts/release-dry-run.sh
+git diff --check
+```
+
+Resultado:
+
+- Ajuda do CLI mostra a versao `0.1.1` via metadados do Cargo.
+- Gate de politica de storage: OK.
+- Quality gate com Clippy: OK.
+  - `cargo fmt --check`: OK.
+  - `cargo check --all-targets` com warnings negados: OK.
+  - `cargo clippy --all-targets -- -D warnings`: OK.
+  - `cargo test`: 9 testes internos + 146 testes core/integracao passaram.
+  - `node --check`: OK.
+  - CLI smoke: 18 passed, 0 failed.
+  - Smoke backup/restore: PASS.
+  - OpenAPI validation: PASS.
+- Pacote local `0.1.1`:
+  - archive: `dist/nexuslang-v0.1.1-local-release.tar.gz`;
+  - tamanho: `1183340` bytes;
+  - SHA-256:
+    `db5e8227f70599f4b69d6dfd2ed77bc5adca4503bc949c76e6ae966f83fc164e`;
+  - checksum: `dist/nexuslang-v0.1.1-local-release.tar.gz.sha256`;
+  - assinatura: `dist/nexuslang-v0.1.1-local-release.tar.gz.asc`;
+  - `validate-release-package.sh`: PASS.
+- Local release dry-run: PASS.
+  - signing status: `signed-existing-key`;
+  - second environment: `docker:ruby:3.3-bookworm`;
+  - report: `dist/release-dry-run-report.txt`.
+- Strict public-release preflight:
+  - status: `failed:dirty-worktree`;
+  - report: `dist/release-strict-preflight-report.txt`.
+  - acao necessaria: commit/push das mudancas `0.1.1`, observar GitHub
+    Actions e reexecutar strict dry-run em arvore limpa.
+- `git diff --check`: sem problemas.
+- Validacao publica pos-release de `v0.1.1` nao foi executada porque a tag e
+  os assets ainda nao foram publicados. O script continua pronto para:
+
+```bash
+NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh
+```
+
+Estado atual:
+
+- O NexusLang esta em release candidate local `0.1.1`.
+- O pacote local `v0.1.1` esta gerado, validado e assinado em dry-run local.
+- A release publica vigente ainda e `v0.1.0`.
+- O projeto ainda nao esta pronto para publicar `v0.1.1` ate concluir:
+  commit/push, GitHub Actions, strict public-release dry-run em arvore limpa,
+  publicacao da tag/release e validacao publica pos-release.
+- O repositorio permanece com mudancas locais acumuladas das fases 7.81, 7.82,
+  7.83 e 7.84.
+
+## Proximo passo recomendado
+
+Fase 7.85 - Commit/push, strict dry-run limpo e publicacao `v0.1.1`.
+
+AVISO: O proximo passo e criar/implementar commit/push da release candidate
+`0.1.1`, observar GitHub Actions, executar strict release dry-run em worktree
+limpo, publicar `v0.1.1` e rodar validacao publica pos-release com
+`NEXUS_PUBLIC_RELEASE_TAG=v0.1.1`. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Revisar o diff acumulado das fases 7.81-7.84.
+- Criar commit de release candidate `0.1.1` sem incluir artefatos indevidos.
+- Fazer push para `main`.
+- Observar GitHub Actions para o commit publicado.
+- Reexecutar `./scripts/release-dry-run-strict.sh` com a chave mantida em
+  worktree limpa.
+- Publicar tag/GitHub Release `v0.1.1` com pacote, checksum, assinatura e
+  chave publica.
+- Rodar a validacao publica pos-release:
+
+```bash
+NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh
+```
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `git status --short --branch`
+- `RELEASE.md`
+- `RELEASE_NOTES.md`
+- `dist/release-dry-run-report.txt`
+- `dist/release-strict-preflight-report.txt`
+- `scripts/release-dry-run-strict.sh`
+- `scripts/validate-public-release-install.sh`
+
+## Etapa historica concluida: Fase 7.83 - Exemplo e guia operacional de backup/restore storage 0.1.1
+
+Objetivo: transformar a politica de storage `0.1.x` em material operacional:
+um exemplo pequeno de inventory, um guia de backup/restore JSON/SQLite e um
+smoke test que prove backup e restore JSON pelo runtime HTTP real.
+
+Foi feito:
+
+- Criado `nexuslang-src/examples/storage_backup_restore_inventory.nx`.
+  O exemplo define `InventoryItem` com:
+  - `sku: string unique`;
+  - `status: string = "active" index`;
+  - `quantity: int min 0`;
+  - `unit_price: money min 1 kz`;
+  - `warehouse: string?`.
+- O exemplo expoe rotas:
+  - `POST /items`;
+  - `GET /items`;
+  - `GET /items/page`;
+  - `GET /items/by-status`;
+  - `GET /items/low-stock`;
+  - `GET /items/:sku`;
+  - `PUT /items/:sku`;
+  - `DELETE /items/:sku`.
+- Criado `STORAGE_BACKUP_RESTORE.md`, guia operacional com:
+  - escopo do storage JSON publico via `nexus serve`;
+  - observacao de que SQLite ainda nao tem flag publica estavel no CLI;
+  - backup/restore de `.nexus-data`;
+  - backup/restore de SQLite com arquivos `-wal`/`-shm`;
+  - limites de schema evolution `0.1.x`;
+  - comando verificavel `./scripts/smoke-storage-backup-restore.sh`.
+- Criado `scripts/smoke-storage-backup-restore.sh`, que funciona tanto no
+  checkout fonte quanto no pacote extraido:
+  - localiza `bin/nexus` ou `target/release/nexus`;
+  - copia o exemplo para `/tmp`;
+  - roda `nexus check`;
+  - inicia `nexus serve`;
+  - cria dois itens;
+  - copia `.nexus-data` para backup;
+  - deleta um item e confirma `404`;
+  - restaura `.nexus-data`;
+  - reinicia o servidor;
+  - confirma que o item restaurado voltou;
+  - valida filtro low-stock e pagina total.
+- `scripts/quality-gate.sh` agora roda o smoke de backup/restore.
+- `scripts/package-release.sh` inclui:
+  - `docs/STORAGE_BACKUP_RESTORE.md`;
+  - `examples/storage_backup_restore_inventory.nx`;
+  - `scripts/smoke-storage-backup-restore.sh`;
+  - e o `smoke-package.sh` gerado tambem roda o novo exemplo/smoke.
+- `scripts/validate-release-package.sh` exige o guia, exemplo e script no
+  pacote e roda o smoke no pacote extraido.
+- `scripts/validate-release-second-env.sh` exige o guia/script/exemplo e roda
+  o smoke no segundo ambiente com porta propria.
+- `scripts/release-dry-run.sh` valida a sintaxe do novo smoke.
+- `scripts/validate-storage-compatibility-policy.sh` agora tambem protege a
+  presenca do guia, exemplo, smoke e referencias no roadmap.
+- `COMPATIBILITY.md`, `README.md`, `RELEASE.md`, `RELEASE_NOTES.md` e
+  `nexuslang-src/ROADMAP.md` foram atualizados com o guia, o exemplo e o novo
+  gate operacional.
+
+Arquivos principais:
+
+- `STORAGE_BACKUP_RESTORE.md`
+- `nexuslang-src/examples/storage_backup_restore_inventory.nx`
+- `scripts/smoke-storage-backup-restore.sh`
+- `scripts/package-release.sh`
+- `scripts/quality-gate.sh`
+- `scripts/release-dry-run.sh`
+- `scripts/validate-release-package.sh`
+- `scripts/validate-release-second-env.sh`
+- `scripts/validate-storage-compatibility-policy.sh`
+- `COMPATIBILITY.md`
+- `README.md`
+- `RELEASE.md`
+- `RELEASE_NOTES.md`
+- `nexuslang-src/ROADMAP.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang
+bash -n scripts/smoke-storage-backup-restore.sh
+bash -n scripts/validate-storage-compatibility-policy.sh
+bash -n scripts/quality-gate.sh
+bash -n scripts/package-release.sh
+bash -n scripts/validate-release-package.sh
+bash -n scripts/release-dry-run.sh
+bash -n scripts/validate-release-second-env.sh
+bash -n scripts/validate-public-release-install.sh
+
+cd /home/alexandre/Nesusang/nexuslang-src
+source "$HOME/.cargo/env" 2>/dev/null || true
+cargo run --quiet -- check examples/storage_backup_restore_inventory.nx
+
+cd /home/alexandre/Nesusang
+./scripts/validate-storage-compatibility-policy.sh
+source "$HOME/.cargo/env" 2>/dev/null || true
+./scripts/smoke-storage-backup-restore.sh
+./scripts/quality-gate.sh
+./scripts/package-release.sh
+./scripts/validate-release-package.sh
+./scripts/validate-public-release-install.sh
+git diff --check
+tar -tzf dist/nexuslang-v0.1.0-local-release.tar.gz \
+  nexuslang-v0.1.0-local-release/docs/STORAGE_BACKUP_RESTORE.md \
+  nexuslang-v0.1.0-local-release/examples/storage_backup_restore_inventory.nx \
+  nexuslang-v0.1.0-local-release/scripts/smoke-storage-backup-restore.sh
+```
+
+Resultado:
+
+- Sintaxe dos scripts alterados: OK.
+- Novo exemplo `storage_backup_restore_inventory.nx`: `nexus check` OK.
+- Gate de politica de storage: OK.
+- Smoke backup/restore: passou no checkout fonte.
+- Quality gate completo: passou.
+  - `cargo fmt --check`: OK.
+  - `cargo check --all-targets` com warnings negados: OK.
+  - `cargo test`: 9 testes internos + 146 testes core/integracao passaram.
+  - `node --check`: OK.
+  - CLI smoke: 18 passed, 0 failed.
+  - Smoke backup/restore: PASS.
+  - OpenAPI validation: PASS.
+- Pacote local regenerado e validado:
+  - archive local atual: `1181312` bytes;
+  - SHA-256 local atual:
+    `6591543b4b93199aa4e13f93a2bd81a22d5f88b67a06fe8b79c86ab7c3878fc9`.
+  - guia, exemplo e smoke estao dentro do pacote.
+  - `validate-release-package.sh`: passou.
+- Validacao publica pos-release `v0.1.0`: PASS.
+  - archive publico continua `1169138` bytes;
+  - SHA-256 publico:
+    `b386ccd555a4650a63a8be68aeed38d49b06d3acb31be3b15765b98259c8e3a8`;
+  - fingerprint:
+    `3237F7CC5CE2514FC9671BB93CB6808B55385273`.
+- `git diff --check`: sem problemas.
+
+Estado atual:
+
+- O NexusLang tem uma historia operacional verificavel para backup/restore
+  JSON no fluxo publico do CLI.
+- A politica SQLite ficou honesta: paridade comportamental e backup de arquivo
+  documentados, mas sem prometer flag publica de CLI que ainda nao existe.
+- O pacote futuro inclui guia, exemplo e smoke.
+- O quality gate agora protege o fluxo de backup/restore.
+- A validacao publica da release ja publicada continua verde.
+- O repositorio ainda esta com mudancas locais acumuladas das fases 7.81,
+  7.82 e 7.83; o proximo passo deve consolidar isso como candidato `0.1.1`.
+
+## Proximo passo recomendado
+
+Fase 7.84 - Preparar release candidate 0.1.1.
+
+AVISO: O proximo passo e criar/implementar preparacao da release candidate
+`0.1.1` do NexusLang, com bump de versao, release notes/changelog, pacote
+`v0.1.1`, quality gate, strict release dry-run e validacao publica pos-release
+planejada. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar
+exatamente de onde o projeto parou, entender o que ja foi feito e integrar a
+solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`, `nexuslang-src/Cargo.toml`, `VERSIONING.md`,
+  `RELEASE_NOTES.md`, `RELEASE.md`, `GITHUB_RELEASE.md`,
+  `scripts/package-release.sh` e `scripts/release-dry-run-strict.sh`.
+- Decidir se o alvo imediato e apenas preparar RC local `0.1.1` ou publicar
+  GitHub Release `v0.1.1`.
+- Atualizar versionamento e notas sem perder o historico `v0.1.0`.
+- Rodar `./scripts/quality-gate.sh`, `./scripts/package-release.sh`,
+  `./scripts/validate-release-package.sh`, segundo ambiente se disponivel e
+  strict release dry-run com a chave GPG mantida.
+- Se publicar, criar tag/release `v0.1.1` e rodar
+  `./scripts/validate-public-release-install.sh` apontando para `v0.1.1`.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/Cargo.toml`
+- `VERSIONING.md`
+- `RELEASE_NOTES.md`
+- `RELEASE.md`
+- `GITHUB_RELEASE.md`
+- `scripts/package-release.sh`
+- `scripts/release-dry-run-strict.sh`
+- `scripts/validate-public-release-install.sh`
+
+## Etapa historica concluida: Fase 7.82 - Politica de compatibilidade de storage e hardening 0.1.1
+
+Objetivo: criar uma politica concreta de compatibilidade/migracao para storage
+JSON/SQLite no alvo `0.1.1`, tornando o contrato verificavel por docs, teste
+Rust e gate de release, sem mudar o comportamento publico existente.
+
+Foi feito:
+
+- `COMPATIBILITY.md` agora documenta a linha publica `0.1.x` em vez de tratar
+  o projeto apenas como release candidate local.
+- A secao Storage foi expandida com:
+  - contrato JSON de `0.1.x`:
+    `.nexus-data/<model-name-lowercase>.json` como array de objetos;
+  - leitura compativel para campos opcionais ausentes em dados antigos;
+  - leitura compativel para campos com defaults estaticos ausentes em dados
+    antigos;
+  - limites do SQLite: paridade comportamental publica, schema fisico ainda
+    experimental;
+  - politica de migracao `0.1.x`;
+  - mudancas aditivas suportadas;
+  - mudancas de storage consideradas breaking;
+  - expectativas de backup/restore para JSON e SQLite;
+  - storage release gate e validacao pos-release publica.
+- Adicionado teste Rust:
+  `storage_schema_evolution_allows_additive_optional_and_defaulted_fields`.
+  Ele cria dado antigo em JSON e SQLite, depois le o mesmo registro com um
+  schema novo contendo campo defaulted e campo opcional, verificando que ambos
+  os backends materializam `status: "active"` e `email: null`.
+- Mantido e usado como prova de paridade o teste existente:
+  `sqlite_storage_matches_json_storage_for_crud_and_critical_filters`.
+- Criado `scripts/validate-storage-compatibility-policy.sh`, que valida que
+  `COMPATIBILITY.md`, `ROADMAP.md` e `tests/core.rs` preservam as secoes e
+  provas minimas da politica.
+- `scripts/quality-gate.sh` agora roda o gate de politica de storage apos
+  `cargo test`.
+- `scripts/release-dry-run.sh` valida sintaxe e executa o gate de politica
+  antes do quality gate completo.
+- `scripts/package-release.sh` inclui o novo script de politica nos pacotes
+  futuros.
+- `scripts/validate-release-package.sh` e
+  `scripts/validate-release-second-env.sh` passam a exigir o novo script em
+  pacotes gerados pela versao atual.
+- `scripts/validate-public-release-install.sh` passa a confirmar tambem
+  `docs/COMPATIBILITY.md` na release publica baixada, sem exigir arquivos que
+  so existirao em pacotes futuros.
+- `README.md`, `RELEASE.md`, `RELEASE_NOTES.md` e
+  `nexuslang-src/ROADMAP.md` foram atualizados para refletir a politica
+  JSON/SQLite `0.1.x` e o gate.
+
+Arquivos principais:
+
+- `COMPATIBILITY.md`
+- `nexuslang-src/tests/core.rs`
+- `scripts/validate-storage-compatibility-policy.sh`
+- `scripts/quality-gate.sh`
+- `scripts/release-dry-run.sh`
+- `scripts/package-release.sh`
+- `scripts/validate-release-package.sh`
+- `scripts/validate-release-second-env.sh`
+- `scripts/validate-public-release-install.sh`
+- `README.md`
+- `RELEASE.md`
+- `RELEASE_NOTES.md`
+- `nexuslang-src/ROADMAP.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang
+bash -n scripts/validate-storage-compatibility-policy.sh
+bash -n scripts/quality-gate.sh
+bash -n scripts/release-dry-run.sh
+bash -n scripts/package-release.sh
+bash -n scripts/validate-release-package.sh
+bash -n scripts/validate-release-second-env.sh
+bash -n scripts/validate-public-release-install.sh
+./scripts/validate-storage-compatibility-policy.sh
+
+cd /home/alexandre/Nesusang/nexuslang-src
+source "$HOME/.cargo/env" 2>/dev/null || true
+cargo fmt
+cargo test storage_schema_evolution_allows_additive_optional_and_defaulted_fields
+cargo test sqlite_storage_matches_json_storage_for_crud_and_critical_filters
+
+cd /home/alexandre/Nesusang
+source "$HOME/.cargo/env" 2>/dev/null || true
+./scripts/quality-gate.sh
+./scripts/package-release.sh
+./scripts/validate-release-package.sh
+./scripts/validate-public-release-install.sh
+git diff --check
+tar -tzf dist/nexuslang-v0.1.0-local-release.tar.gz nexuslang-v0.1.0-local-release/scripts/validate-storage-compatibility-policy.sh
+```
+
+Resultado:
+
+- Sintaxe dos scripts alterados: OK.
+- Gate de politica de storage: OK.
+- Teste de evolucao aditiva JSON/SQLite: passou.
+- Teste de paridade SQLite/JSON para CRUD/filtros criticos: passou.
+- Quality gate completo: passou.
+  - `cargo fmt --check`: OK.
+  - `cargo check --all-targets` com warnings negados: OK.
+  - `cargo test`: 9 testes internos + 146 testes core/integracao passaram.
+  - `node --check`: OK.
+  - CLI smoke: 18 passed, 0 failed.
+  - OpenAPI validation: PASS.
+- Pacote local regenerado e validado:
+  - archive local atual: `1176433` bytes;
+  - SHA-256 local atual:
+    `47ffff533a2239149489f48029158d1901437c0b0a220f7f48820d5e458553d4`.
+  - `validate-storage-compatibility-policy.sh` esta dentro do pacote.
+- Validacao publica pos-release `v0.1.0`: PASS.
+  - archive publico: `1169138` bytes;
+  - SHA-256 publico:
+    `b386ccd555a4650a63a8be68aeed38d49b06d3acb31be3b15765b98259c8e3a8`;
+  - fingerprint:
+    `3237F7CC5CE2514FC9671BB93CB6808B55385273`.
+- `git diff --check`: sem problemas.
+
+Observacao de ambiente:
+
+- No WSL desta sessao, `cargo` precisou ser carregado com
+  `source "$HOME/.cargo/env"` antes de rodar `cargo fmt`, `cargo test` e o
+  quality gate.
+
+Estado atual:
+
+- O NexusLang tem uma politica `0.1.x` concreta para storage JSON/SQLite.
+- Mudancas aditivas com campos opcionais/defaulted estao cobertas por teste
+  nos dois backends.
+- Mudancas breaking de storage estao nomeadas e documentadas.
+- O release flow local valida a politica antes de empacotar/release dry-run.
+- A validacao publica da instalacao continua sendo um gate pos-release para
+  releases publicadas.
+- Risco residual: ainda falta transformar a politica em material de usuario
+  mais operacional, com exemplo de backup/restore e talvez um pequeno exemplo
+  publico inventory/CRM que nao dependa de migrations automaticas.
+
+## Proximo passo recomendado
+
+Fase 7.83 - Exemplo e guia operacional de backup/restore storage 0.1.1.
+
+AVISO: O proximo passo e criar/implementar exemplo e guia operacional de
+backup/restore para storage JSON/SQLite no NexusLang `0.1.1`, usando um fluxo
+pequeno de inventory/CRM e mantendo a validacao publica de instalacao como gate
+pos-release. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar
+exatamente de onde o projeto parou, entender o que ja foi feito e integrar a
+solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`, `COMPATIBILITY.md`,
+  `nexuslang-src/ROADMAP.md`, `nexuslang-src/examples` e
+  `scripts/smoke-test.sh`.
+- Criar ou ajustar um exemplo pequeno inventory/CRM que exercite create,
+  find/list, update, delete e filtro sem depender de migracoes automaticas.
+- Documentar um fluxo operacional de backup/restore usando `.nexus-data` e
+  SQLite `-wal`/`-shm`.
+- Se fizer sentido, adicionar um smoke script pequeno para validar o exemplo
+  contra um diretorio temporario.
+- Rodar `./scripts/quality-gate.sh`, `./scripts/validate-release-package.sh`
+  se o pacote for afetado, e `./scripts/validate-public-release-install.sh`.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `COMPATIBILITY.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/examples`
+- `scripts/smoke-test.sh`
+- `scripts/validate-storage-compatibility-policy.sh`
+- `scripts/validate-public-release-install.sh`
+
+## Etapa historica concluida: Fase 7.81 - Validacao pos-release de instalacao publica e roadmap 0.1.1/0.2.0
+
+Objetivo: validar a instalacao publica real do NexusLang a partir da GitHub
+Release `v0.1.0`, em ambiente temporario limpo, e consolidar no roadmap os
+proximos riscos reais para `0.1.1` e `0.2.0`.
+
+Foi feito:
+
+- Confirmada a GitHub Release publica `v0.1.0` em
+  `https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.1.0`, publicada em
+  2026-05-26 e marcada como release mais recente.
+- Criado `scripts/validate-public-release-install.sh`, que:
+  - baixa os assets publicados da GitHub Release;
+  - valida fingerprint publicada:
+    `3237F7CC5CE2514FC9671BB93CB6808B55385273`;
+  - importa a chave publica em `GNUPGHOME` isolado;
+  - verifica assinaturas detached do archive e do checksum;
+  - roda `sha256sum -c`;
+  - valida paths seguros do tar;
+  - extrai em `/tmp`;
+  - confere manifest, versao, WASM, arquivos principais e ausencia de
+    `.nexus-data`;
+  - roda `scripts/smoke-package.sh` do pacote;
+  - serve o pacote via HTTP local e baixa HTML/JS/WASM do playground.
+- O novo script escreve relatorio em
+  `dist/public-release-install-validation-report.txt`.
+- `scripts/package-release.sh` passou a incluir o validador publico em pacotes
+  futuros.
+- `scripts/validate-release-package.sh` passou a exigir o validador publico em
+  pacotes gerados pela versao atual do script de empacotamento.
+- `README.md` foi atualizado para partir da GitHub Release publica, com
+  download, verificacao de fingerprint, assinaturas, checksum, extracao e smoke
+  test.
+- `RELEASE.md` e `RELEASE_NOTES.md` registram a validacao publica pos-release.
+- `nexuslang-src/ROADMAP.md` ganhou a linha pos-0.1:
+  - foco `0.1.1`: instalacao publica, docs, expectativas Linux/WSL,
+    compatibilidade JSON/SQLite, exemplos pequenos;
+  - riscos reais: ausencia de instaladores cross-platform, migracoes/storage
+    ainda nao formalizados, `index` sem indice fisico, playground nao hospedado,
+    necessidade de manter validacao pos-upload em todo release;
+  - foco `0.2.0`: escolher um vertical ERP duravel, decidir storage/migrations/
+    indices, docs CLI, diagnosticos runtime e hosted playground.
+
+Arquivos principais:
+
+- `scripts/validate-public-release-install.sh`
+- `scripts/package-release.sh`
+- `scripts/validate-release-package.sh`
+- `README.md`
+- `RELEASE.md`
+- `RELEASE_NOTES.md`
+- `nexuslang-src/ROADMAP.md`
+- `MEMORIA_NEXUSLANG.md`
+- `dist/public-release-install-validation-report.txt`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang
+gh release view v0.1.0 -R vitaleevo/NEXUSLANG --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish,assets
+bash -n scripts/validate-public-release-install.sh
+bash -n scripts/package-release.sh
+bash -n scripts/validate-release-package.sh
+./scripts/validate-public-release-install.sh
+git diff --check
+```
+
+Resultado:
+
+- `gh release view`: release `v0.1.0` publica, nao draft, nao prerelease,
+  publicada em `2026-05-26T05:08:41Z`, com 6 assets anexados pelo projeto.
+- Validacao publica: PASS.
+- Archive publico validado:
+  - `nexuslang-v0.1.0-local-release.tar.gz`;
+  - bytes: `1169138`;
+  - SHA-256:
+    `b386ccd555a4650a63a8be68aeed38d49b06d3acb31be3b15765b98259c8e3a8`.
+- Package validado:
+  - `nexuslang-v0.1.0-local-release`;
+  - `package_version=0.1.0`;
+  - `wasm_bytes=347437`.
+- Smoke do pacote passou:
+  - `bin/nexus --help`;
+  - `bin/nexus check examples/erp_basico.nx`;
+  - `bin/nexus run examples/erp_basico.nx`;
+  - `node --check nexuslang-playground.js`.
+- Smoke HTTP do playground passou para HTML, JS e WASM.
+- `git diff --check`: sem problemas.
+- `cargo test` nao foi executado porque a fase nao alterou codigo Rust.
+- WASM nao foi recompilado porque a fase nao alterou o core/playground.
+
+Estado atual:
+
+- O NexusLang `v0.1.0` esta publicado e agora tambem validado pelo caminho de
+  instalacao publica pos-upload.
+- A instalacao publica Linux/WSL via archive assinado esta funcional para
+  avaliacao, demos e QA.
+- A pontuacao do escopo `0.1.0` permanece 100/100.
+- O roadmap agora separa manutencao realista `0.1.1` de expansao de produto
+  `0.2.0`.
+- Risco residual principal: ainda nao ha instaladores cross-platform nem
+  contrato formal de migracoes/storage de longo prazo.
+
+## Proximo passo recomendado
+
+Fase 7.82 - Politica de compatibilidade de storage e hardening 0.1.1.
+
+AVISO: O proximo passo e criar/implementar politica de compatibilidade e
+migracao para storage JSON/SQLite no NexusLang `0.1.1`, mantendo a validacao
+publica de instalacao como gate pos-release. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `COMPATIBILITY.md`, `nexuslang-src/ROADMAP.md`, exemplos de storage e
+  testes de JSON/SQLite.
+- Identificar quais comportamentos de storage ja sao contrato publico e quais
+  ainda precisam ficar marcados como experimentais.
+- Definir politica minima para backup, migracao, mudancas de schema, indices
+  declarativos e compatibilidade entre releases `0.1.x`.
+- Implementar apenas docs/testes/scripts necessarios para tornar a politica
+  verificavel no release gate.
+- Validar com `cargo test` se testes Rust forem adicionados, scripts de release
+  relevantes e `./scripts/validate-public-release-install.sh`.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `COMPATIBILITY.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/storage`
+- `nexuslang-src/tests/core.rs`
+- `scripts/validate-public-release-install.sh`
+
+## Etapa historica concluida: Fase 7.80 - Publicacao da tag e GitHub Release v0.1.0
 
 Objetivo: publicar a tag `v0.1.0` e a GitHub Release com archive, checksum,
 assinaturas `.asc` e chave publica GPG anexados.

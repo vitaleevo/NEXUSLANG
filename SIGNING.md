@@ -59,9 +59,9 @@ have successful GitHub Actions before signing.
 With the public release key imported:
 
 ```bash
-gpg --verify nexuslang-v0.1.0-local-release.tar.gz.asc nexuslang-v0.1.0-local-release.tar.gz
-gpg --verify nexuslang-v0.1.0-local-release.tar.gz.sha256.asc nexuslang-v0.1.0-local-release.tar.gz.sha256
-sha256sum -c nexuslang-v0.1.0-local-release.tar.gz.sha256
+gpg --verify nexuslang-v<version>-local-release.tar.gz.asc nexuslang-v<version>-local-release.tar.gz
+gpg --verify nexuslang-v<version>-local-release.tar.gz.sha256.asc nexuslang-v<version>-local-release.tar.gz.sha256
+sha256sum -c nexuslang-v<version>-local-release.tar.gz.sha256
 ```
 
 ## Key Policy
@@ -91,3 +91,7 @@ dist/nexuslang-release-public-key.asc
 The final local dry-run script can still create ephemeral dry-run signatures
 when no maintained key is present; those signatures are only for mechanical
 testing and are not public release signatures.
+
+The current source checkout is preparing `0.1.1`; public `0.1.1` signatures
+should use the same maintained release key unless the release notes explicitly
+document a rotation.

@@ -63,6 +63,7 @@ copy_docs() {
     cp "$ROOT_DIR/RELEASE_NOTES.md" "$PACKAGE_DIR/docs/RELEASE_NOTES.md"
     cp "$ROOT_DIR/VERSIONING.md" "$PACKAGE_DIR/docs/VERSIONING.md"
     cp "$ROOT_DIR/COMPATIBILITY.md" "$PACKAGE_DIR/docs/COMPATIBILITY.md"
+    cp "$ROOT_DIR/STORAGE_BACKUP_RESTORE.md" "$PACKAGE_DIR/docs/STORAGE_BACKUP_RESTORE.md"
     cp "$ROOT_DIR/SIGNING.md" "$PACKAGE_DIR/docs/SIGNING.md"
     cp "$ROOT_DIR/GITHUB_RELEASE.md" "$PACKAGE_DIR/docs/GITHUB_RELEASE.md"
     cp "$ROOT_DIR/RELEASE.md" "$PACKAGE_DIR/docs/RELEASE.md"
@@ -87,6 +88,9 @@ copy_runtime_assets() {
     cp "$ROOT_DIR/scripts/sign-release-artifacts.sh" "$PACKAGE_DIR/scripts/sign-release-artifacts.sh"
     cp "$ROOT_DIR/scripts/connect-github-release.sh" "$PACKAGE_DIR/scripts/connect-github-release.sh"
     cp "$ROOT_DIR/scripts/release-dry-run-strict.sh" "$PACKAGE_DIR/scripts/release-dry-run-strict.sh"
+    cp "$ROOT_DIR/scripts/validate-public-release-install.sh" "$PACKAGE_DIR/scripts/validate-public-release-install.sh"
+    cp "$ROOT_DIR/scripts/validate-storage-compatibility-policy.sh" "$PACKAGE_DIR/scripts/validate-storage-compatibility-policy.sh"
+    cp "$ROOT_DIR/scripts/smoke-storage-backup-restore.sh" "$PACKAGE_DIR/scripts/smoke-storage-backup-restore.sh"
 }
 
 write_package_smoke() {
@@ -110,6 +114,8 @@ fi
 run "$ROOT_DIR/bin/nexus" --help
 run "$ROOT_DIR/bin/nexus" check "$ROOT_DIR/examples/erp_basico.nx"
 run "$ROOT_DIR/bin/nexus" run "$ROOT_DIR/examples/erp_basico.nx"
+run "$ROOT_DIR/bin/nexus" check "$ROOT_DIR/examples/storage_backup_restore_inventory.nx"
+run "$ROOT_DIR/scripts/smoke-storage-backup-restore.sh"
 run node --check "$ROOT_DIR/nexuslang-playground.js"
 test -s "$ROOT_DIR/nexuslang-src/web/nexuslang_playground.wasm"
 
@@ -165,6 +171,7 @@ WASM bytes: $wasm_bytes
 - docs/RELEASE_NOTES.md: release notes and known limitations
 - docs/VERSIONING.md: version and tag policy
 - docs/COMPATIBILITY.md: language/runtime/storage compatibility contract
+- docs/STORAGE_BACKUP_RESTORE.md: operational storage backup and restore guide
 - docs/SIGNING.md: artifact signing path
 - docs/GITHUB_RELEASE.md: GitHub, CI, and maintained-key release setup
 - docs/RELEASE.md: release gate and checklist
@@ -172,6 +179,9 @@ WASM bytes: $wasm_bytes
 - scripts/validate-release-second-env.sh: Docker-based second-environment check
 - scripts/sign-release-artifacts.sh: GPG signing helper for publishers
 - scripts/release-dry-run-strict.sh: strict public-release preflight and dry-run
+- scripts/validate-public-release-install.sh: public GitHub Release install validation
+- scripts/validate-storage-compatibility-policy.sh: storage compatibility policy gate
+- scripts/smoke-storage-backup-restore.sh: storage backup/restore smoke test
 EOF
 
     cat > "$PACKAGE_DIR/PACKAGE_MANIFEST.txt" <<EOF

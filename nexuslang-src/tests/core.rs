@@ -3329,6 +3329,86 @@ route DELETE /customers/:name {
 }
 
 #[test]
+fn storage_schema_evolution_allows_additive_optional_and_defaulted_fields() {
+    let v1_source = r#"
+model Customer {
+    name: string unique
+    balance: money
+}
+
+route POST /customers {
+    return Customer::create()
+}
+
+route GET /customers/:name {
+    return Customer::find("name", name)
+}
+"#;
+
+    let v2_source = r#"
+model Customer {
+    name: string unique
+    balance: money
+    status: string = "active"
+    email: string?
+}
+
+route GET /customers/:name {
+    return Customer::find("name", name)
+}
+"#;
+
+    let requests_v1 = [ParityRequest {
+        label: "create old customer",
+        method: "POST",
+        path: "/customers",
+        body: Some(r#"{"name":"AnaSilva","balance":{"amount":100,"currency":"kz"}}"#),
+    }];
+
+    for backend in [ParityBackend::Json, ParityBackend::Sqlite] {
+        let storage = parity_storage("storage_schema_evolution_additive", backend);
+        let create_response = run_requests_with_storage(v1_source, &storage, &requests_v1)
+            .into_iter()
+            .next()
+            .expect("create response should be recorded");
+
+        assert_eq!(
+            create_response.status,
+            201,
+            "{} create should succeed before schema evolution",
+            backend.label()
+        );
+
+        let read_response = nexuslang::server::handle_request_for_test(
+            v2_source,
+            "GET",
+            "/customers/AnaSilva",
+            &storage,
+        )
+        .unwrap_or_else(|err| {
+            panic!(
+                "{} read after schema evolution failed: {}",
+                backend.label(),
+                err
+            )
+        });
+
+        assert_eq!(
+            read_response.status,
+            200,
+            "{} read should succeed after additive schema evolution",
+            backend.label()
+        );
+        assert_eq!(
+            read_response.body,
+            r#"{"name":"AnaSilva","balance":{"amount":100,"currency":"kz"},"status":"active","email":null}"#,
+            "{} should materialize defaults and optional nulls for older records",
+            backend.label()
+        );
+    }
+}
+
+#[test]
 fn openapi_endpoint_lists_route_params() {
     let source = r#"
 route GET /employees/:id {
@@ -4904,6 +4984,14 @@ fn run_parity_requests(
     requests: &[ParityRequest],
 ) -> Vec<RecordedResponse> {
     let storage = parity_storage(test_name, backend);
+    run_requests_with_storage(source, &storage, requests)
+}
+
+fn run_requests_with_storage(
+    source: &str,
+    storage: &nexuslang::server::Storage,
+    requests: &[ParityRequest],
+) -> Vec<RecordedResponse> {
     requests
         .iter()
         .map(|request| {
@@ -4913,23 +5001,16 @@ fn run_parity_requests(
                     request.method,
                     request.path,
                     body,
-                    &storage,
+                    storage,
                 ),
                 None => nexuslang::server::handle_request_for_test(
                     source,
                     request.method,
                     request.path,
-                    &storage,
+                    storage,
                 ),
             }
-            .unwrap_or_else(|err| {
-                panic!(
-                    "{} backend failed on '{}': {}",
-                    backend.label(),
-                    request.label,
-                    err
-                )
-            });
+            .unwrap_or_else(|err| panic!("request '{}' failed: {}", request.label, err));
 
             RecordedResponse {
                 label: request.label,

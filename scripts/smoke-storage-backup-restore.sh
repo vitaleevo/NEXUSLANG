@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PORT="${NEXUS_STORAGE_SMOKE_PORT:-5051}"
+BASE="http://127.0.0.1:$PORT"
+WORK_DIR=""
+BACKUP_DIR=""
+SERVER_PID=""
+SERVER_LOG=""
+
+fail() {
+    echo "ERROR: $*" >&2
+    if [ -n "$SERVER_LOG" ] && [ -f "$SERVER_LOG" ]; then
+        echo ""
+        echo "Server log:" >&2
+        cat "$SERVER_LOG" >&2
+    fi
+    exit 1
+}
+
+cleanup() {
+    stop_server
+    if [ -n "$WORK_DIR" ] && [ -d "$WORK_DIR" ]; then
+        case "$WORK_DIR" in
+            /tmp/nexus-storage-backup-restore.*) rm -rf "$WORK_DIR" ;;
+        esac
+    fi
+}
+trap cleanup EXIT INT TERM
+
+run() {
+    echo ""
+    echo "==> $*"
+    "$@"
+}
+
+stop_server() {
+    if [ -n "$SERVER_PID" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
+        kill "$SERVER_PID" 2>/dev/null || true
+        wait "$SERVER_PID" 2>/dev/null || true
+    fi
+    SERVER_PID=""
+}
+
+find_nexus_bin() {
+    if [ -x "$ROOT_DIR/bin/nexus" ]; then
+        printf '%s\n' "$ROOT_DIR/bin/nexus"
+        return
+    fi
+
+    if [ -x "$ROOT_DIR/nexuslang-src/target/release/nexus" ]; then
+        printf '%s\n' "$ROOT_DIR/nexuslang-src/target/release/nexus"
+        return
+    fi
+
+    if command -v cargo >/dev/null 2>&1; then
+        run cargo build --manifest-path "$ROOT_DIR/nexuslang-src/Cargo.toml" --release >&2
+        printf '%s\n' "$ROOT_DIR/nexuslang-src/target/release/nexus"
+        return
+    fi
+
+    fail "could not find bin/nexus or build it with cargo"
+}
+
+find_example() {
+    if [ -f "$ROOT_DIR/examples/storage_backup_restore_inventory.nx" ]; then
+        printf '%s\n' "$ROOT_DIR/examples/storage_backup_restore_inventory.nx"
+        return
+    fi
+
+    if [ -f "$ROOT_DIR/nexuslang-src/examples/storage_backup_restore_inventory.nx" ]; then
+        printf '%s\n' "$ROOT_DIR/nexuslang-src/examples/storage_backup_restore_inventory.nx"
+        return
+    fi
+
+    fail "storage_backup_restore_inventory.nx not found"
+}
+
+start_server() {
+    local nexus_bin="$1"
+    local app_file="$2"
+
+    SERVER_LOG="$WORK_DIR/server.log"
+    "$nexus_bin" serve "$app_file" "127.0.0.1:$PORT" >"$SERVER_LOG" 2>&1 &
+    SERVER_PID="$!"
+
+    for _ in $(seq 1 30); do
+        if curl -fsS "$BASE/health" >/dev/null 2>&1; then
+            return
+        fi
+        if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+            fail "server exited before becoming ready"
+        fi
+        sleep 0.2
+    done
+
+    fail "server did not become ready on $BASE"
+}
+
+http_body() {
+    local method="$1"
+    local path="$2"
+    local body="${3:-}"
+
+    if [ -n "$body" ]; then
+        curl -fsS -X "$method" -H "Content-Type: application/json" -d "$body" "$BASE$path"
+    else
+        curl -fsS -X "$method" "$BASE$path"
+    fi
+}
+
+http_status() {
+    local method="$1"
+    local path="$2"
+    local body="${3:-}"
+
+    if [ -n "$body" ]; then
+        curl -s -o /dev/null -w "%{http_code}" -X "$method" \
+            -H "Content-Type: application/json" -d "$body" "$BASE$path"
+    else
+        curl -s -o /dev/null -w "%{http_code}" -X "$method" "$BASE$path"
+    fi
+}
+
+assert_contains() {
+    local value="$1"
+    local expected="$2"
+    local context="$3"
+
+    case "$value" in
+        *"$expected"*) ;;
+        *) fail "$context did not contain '$expected': $value" ;;
+    esac
+}
+
+assert_status() {
+    local method="$1"
+    local path="$2"
+    local body="$3"
+    local expected="$4"
+    local actual
+
+    actual="$(http_status "$method" "$path" "$body")"
+    [ "$actual" = "$expected" ] || {
+        fail "$method $path returned $actual, expected $expected"
+    }
+}
+
+echo "=== NexusLang Storage Backup/Restore Smoke ==="
+
+command -v curl >/dev/null 2>&1 || fail "curl is required"
+command -v cp >/dev/null 2>&1 || fail "cp is required"
+command -v rm >/dev/null 2>&1 || fail "rm is required"
+
+WORK_DIR="$(mktemp -d /tmp/nexus-storage-backup-restore.XXXXXX)"
+BACKUP_DIR="$WORK_DIR/backup"
+mkdir -p "$BACKUP_DIR"
+
+NEXUS_BIN="$(find_nexus_bin)"
+SOURCE_EXAMPLE="$(find_example)"
+APP_FILE="$WORK_DIR/storage_backup_restore_inventory.nx"
+cp "$SOURCE_EXAMPLE" "$APP_FILE"
+
+run "$NEXUS_BIN" check "$APP_FILE"
+
+echo ""
+echo "==> start server on $BASE"
+start_server "$NEXUS_BIN" "$APP_FILE"
+
+http_body "POST" "/items" \
+    '{"sku":"SKU-001","name":"Notebook Pro","quantity":4,"unit_price":{"amount":750000,"currency":"kz"},"warehouse":"Luanda"}' >/dev/null
+http_body "POST" "/items" \
+    '{"sku":"SKU-002","name":"Mouse USB","status":"reserved","quantity":18,"unit_price":{"amount":9000,"currency":"kz"}}' >/dev/null
+
+items_before="$(http_body "GET" "/items")"
+assert_contains "$items_before" "SKU-001" "initial list"
+assert_contains "$items_before" "SKU-002" "initial list"
+
+test -f "$WORK_DIR/.nexus-data/inventoryitem.json" || {
+    fail "JSON storage file was not created"
+}
+
+run cp -a "$WORK_DIR/.nexus-data" "$BACKUP_DIR/.nexus-data"
+
+assert_status "DELETE" "/items/SKU-001" "" "200"
+assert_status "GET" "/items/SKU-001" "" "404"
+
+stop_server
+rm -rf "$WORK_DIR/.nexus-data"
+run cp -a "$BACKUP_DIR/.nexus-data" "$WORK_DIR/.nexus-data"
+
+echo ""
+echo "==> restart server after restore"
+start_server "$NEXUS_BIN" "$APP_FILE"
+
+restored="$(http_body "GET" "/items/SKU-001")"
+assert_contains "$restored" "Notebook Pro" "restored item"
+assert_contains "$restored" '"warehouse":"Luanda"' "restored item"
+
+low_stock="$(http_body "GET" "/items/low-stock?max_qty=5")"
+assert_contains "$low_stock" "SKU-001" "low-stock filter after restore"
+
+page="$(http_body "GET" "/items/page?limit=1&offset=0")"
+assert_contains "$page" '"total":2' "paged list after restore"
+
+echo ""
+echo "Storage backup/restore smoke passed."

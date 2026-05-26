@@ -64,14 +64,19 @@ docker run --rm \
         test -f docs/RELEASE_NOTES.md
         test -f docs/VERSIONING.md
         test -f docs/COMPATIBILITY.md
+        test -f docs/STORAGE_BACKUP_RESTORE.md
         test -f docs/SIGNING.md
+        test -x scripts/validate-storage-compatibility-policy.sh
+        test -x scripts/smoke-storage-backup-restore.sh
         test -f nexuslang-playground.html
         test -f nexuslang-playground.js
         test -s nexuslang-src/web/nexuslang_playground.wasm
 
         bin/nexus --help >/tmp/nexus-help.out
         bin/nexus check examples/erp_basico.nx >/tmp/nexus-check.out
+        bin/nexus check examples/storage_backup_restore_inventory.nx >/tmp/nexus-storage-check.out
         bin/nexus run examples/erp_basico.nx >/tmp/nexus-run.out
+        NEXUS_STORAGE_SMOKE_PORT=8094 scripts/smoke-storage-backup-restore.sh
 
         python3 -m http.server 8093 --bind 127.0.0.1 >/tmp/nexus-http.out 2>&1 &
         server_pid="$!"

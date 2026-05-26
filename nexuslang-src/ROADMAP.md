@@ -14,6 +14,72 @@ playground.
 - Supported language primitives: functions, `let`, `const`, `if`, `while`,
   `for`, arrays, strings, numbers, booleans, and static model calls.
 
+## Post-0.1 release line
+
+Current judgement: `v0.1.0` is published and usable for evaluation, demos, and
+QA, with public artifact checksum/signature verification in place. The next
+work should reduce real user friction and narrow compatibility risk before
+adding broad new language surface.
+
+Current source line: `0.1.1` release candidate, focused on patch-level release
+hardening after `v0.1.0`.
+
+### 0.1.1 maintenance focus
+
+- Validate the published GitHub Release install path from a clean temporary
+  directory. DONE
+- Keep `scripts/validate-public-release-install.sh` as the repeatable
+  post-release check for archive download, fingerprint, GPG signatures,
+  checksum, extraction, packaged smoke, and playground asset smoke.
+- Polish public install docs so they start from GitHub Release assets, not only
+  locally built `dist/` artifacts.
+- Make Linux/WSL package expectations explicit until cross-platform installers
+  exist.
+- Define the JSON/SQLite storage compatibility policy more concretely,
+  especially backup, migration, and schema-change expectations. DONE in
+  `COMPATIBILITY.md`, validated by
+  `scripts/validate-storage-compatibility-policy.sh`,
+  `storage_schema_evolution_allows_additive_optional_and_defaulted_fields`,
+  and `sqlite_storage_matches_json_storage_for_crud_and_critical_filters`.
+- Add one or two small public examples that show realistic inventory/CRM
+  workflows without depending on unstable storage guarantees. STARTED with
+  `storage_backup_restore_inventory.nx`, `STORAGE_BACKUP_RESTORE.md`, and
+  `scripts/smoke-storage-backup-restore.sh`.
+
+Real risks to retire in `0.1.1`:
+
+- The first package is still local-platform oriented; there are no Windows,
+  macOS, or package-manager installers yet.
+- JSON/SQLite persistence works for the supported QA flows, but migrations and
+  long-term schema compatibility are limited to the documented `0.1.x` policy:
+  additive optional/defaulted fields are supported, while renames, removals,
+  required fields without defaults, type changes, and physical SQLite schema
+  assumptions remain breaking/experimental.
+- `index` remains declarative metadata and does not create physical indexes.
+- The playground is distributed as static package assets, not hosted as a
+  public web product.
+- Public release validation now exists, but it should stay part of every
+  release handoff so regressions are caught after upload, not only before tag.
+- Backup/restore is now documented and smoked for JSON storage, but SQLite
+  remains a behavioral parity backend without a stable public `nexus serve`
+  selection flag.
+- `0.1.1` still needs commit/push, GitHub Actions observation, strict dry-run,
+  tag/release publication, and post-release public install validation before
+  it can replace `v0.1.0` as latest public release.
+
+### 0.2.0 product focus
+
+- Choose one durable ERP vertical slice, such as inventory plus billing or CRM
+  plus orders, and make it excellent end to end.
+- Decide whether storage migrations, physical indexes, and a stable SQLite
+  contract are required before larger runtime features.
+- Decide whether docs generation belongs in the CLI as a first-class command
+  before expanding documentation UI in the playground.
+- Improve runtime diagnostics with structured locations where feasible, so
+  server/runtime errors can match lexer/parser/checker diagnostic quality.
+- Decide whether to ship a hosted playground or keep the web surface as a
+  package-local learning/debugging tool for another release.
+
 ## Phase 1: Core stability
 
 - Keep semantic checks in Rust as the source of truth.

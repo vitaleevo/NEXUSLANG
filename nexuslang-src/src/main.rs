@@ -139,7 +139,7 @@ fn print_usage_and_exit(code: i32) -> ! {
 }
 
 fn print_usage(out: &mut dyn Write) {
-    writeln!(out, "NexusLang 🔷 v0.1.0").ok();
+    writeln!(out, "NexusLang 🔷 v{}", env!("CARGO_PKG_VERSION")).ok();
     writeln!(out).ok();
     writeln!(out, "Uso:").ok();
     writeln!(

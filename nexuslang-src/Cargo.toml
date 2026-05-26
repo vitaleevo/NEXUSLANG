@@ -1,6 +1,6 @@
 [package]
 name = "nexuslang"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "NexusLang — ERP-first programming language"
 authors = ["NexusLang Team"]

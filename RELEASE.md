@@ -9,8 +9,12 @@ It is intentionally small: the source of truth is still the automated gate.
 - Playground: 84/100
 - OpenAPI/runtime: 66/100
 - Engineering/release quality: 100/100
-- Real production readiness for the 0.1.0 release scope: 100/100
-- Overall project score after the latest completed phase: 100/100
+- Real production readiness for the 0.1.1 release scope: gated by strict
+  public-release validation and post-release public install validation
+- Overall project score after the latest completed phase: 100/100 local RC
+- Public GitHub Release target: v0.1.1
+- Previous public GitHub Release v0.1.0: published and post-release install
+  validated
 
 ## Required gate
 
@@ -21,8 +25,8 @@ NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
 ```
 
 The gate checks formatting, `cargo check` with warnings denied, optional
-Clippy, Rust tests, playground JavaScript syntax, CLI smoke tests, and OpenAPI
-validation.
+Clippy, Rust tests, the storage compatibility policy, playground JavaScript
+syntax, CLI smoke tests, storage backup/restore smoke, and OpenAPI validation.
 
 ## Playground/WASM
 
@@ -99,6 +103,26 @@ generated `.nexus-data` storage, runs the packaged CLI smoke, validates
 playground JavaScript syntax, compares the manifest WASM size, and serves the
 clean package long enough to fetch the HTML, JS, and WASM assets over HTTP.
 
+## Public release install validation
+
+Validate the already published GitHub Release from a clean temporary directory:
+
+```bash
+./scripts/validate-public-release-install.sh
+```
+
+This downloads the `v0.1.1` release assets from GitHub, verifies the published
+fingerprint, imports the public key into an isolated `GNUPGHOME`, verifies the
+detached signatures, checks the SHA-256 checksum, extracts the package under
+`/tmp`, runs the packaged smoke test, and fetches playground HTML/JS/WASM over
+local HTTP.
+
+Validate `v0.1.1` explicitly when checking the published release:
+
+```bash
+NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh
+```
+
 ## Release 1.0 checklist
 
 ### Local release candidate
@@ -121,6 +145,8 @@ clean package long enough to fetch the HTML, JS, and WASM assets over HTTP.
 - [x] Release notes document known limitations.
 - [x] Version/tag policy is documented.
 - [x] Language/runtime/storage compatibility contract is documented.
+- [x] JSON/SQLite `0.1.x` storage migration policy is documented and gated.
+- [x] Storage backup/restore guide and inventory smoke example exist.
 - [x] Artifact signing path is documented and scripted.
 - [x] Docker-based second-environment validation exists.
 - [x] Final release dry-run script exists.
@@ -141,3 +167,22 @@ clean package long enough to fetch the HTML, JS, and WASM assets over HTTP.
 - [x] `v0.1.0` source tag is the published release target.
 - [x] GitHub Release `v0.1.0` is the publication target for the signed archive,
   checksum, signatures, and public key.
+- [x] Public GitHub Release install validation downloads and verifies the
+  published assets in a clean temporary directory.
+
+### 0.1.1 release candidate
+
+- [x] Source version bumped to `0.1.1`.
+- [x] Local package target is `nexuslang-v0.1.1-local-release.tar.gz`.
+- [x] Release notes describe the `0.1.1` patch scope.
+- [x] Quality gate passes with Clippy for the current RC worktree.
+- [x] Local package validates in a clean temporary directory.
+- [x] Local release dry-run passes with Docker second-environment validation and
+  maintained-key signing.
+- [x] Strict public-release preflight attempted and documented as blocked by
+  dirty local changes.
+- [ ] Current RC changes are committed and pushed.
+- [ ] GitHub Actions is observed for the pushed `0.1.1` commit.
+- [ ] Strict public-release dry-run passes for the pushed `0.1.1` commit.
+- [ ] `v0.1.1` tag and GitHub Release are published.
+- [ ] Public install validation passes with `NEXUS_PUBLIC_RELEASE_TAG=v0.1.1`.

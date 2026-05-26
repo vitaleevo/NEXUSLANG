@@ -1,0 +1,47 @@
+// storage_backup_restore_inventory.nx
+// Small inventory example for storage backup/restore smoke tests.
+
+model InventoryItem {
+    sku: string unique
+    name: string min 2 max 80
+    status: string = "active" index
+    quantity: int min 0
+    unit_price: money min 1 kz
+    warehouse: string?
+}
+
+route GET /health {
+    return "ok"
+}
+
+route POST /items {
+    return InventoryItem::create()
+}
+
+route GET /items {
+    return InventoryItem::all("sku", "asc")
+}
+
+route GET /items/page ?(limit: int = 10, offset: int = 0) {
+    return InventoryItem::page("sku", "asc", limit, offset)
+}
+
+route GET /items/by-status ?(status: string = "active") {
+    return InventoryItem::where("status", status, "sku", "asc")
+}
+
+route GET /items/low-stock ?(max_qty: int = 5) {
+    return InventoryItem::where_compare("quantity", "<=", max_qty, "sku", "asc")
+}
+
+route GET /items/:sku {
+    return InventoryItem::find("sku", sku)
+}
+
+route PUT /items/:sku {
+    return InventoryItem::update("sku", sku)
+}
+
+route DELETE /items/:sku {
+    return InventoryItem::delete("sku", sku)
+}
