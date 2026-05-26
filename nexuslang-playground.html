@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NexusLang Playground 🔷</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c14;
+    --surface: #111520;
+    --surface2: #161b2e;
+    --border: #1e2540;
+    --accent: #3d8bff;
+    --accent2: #00e5c3;
+    --accent3: #ff6b6b;
+    --text: #e2e8f8;
+    --text2: #7b8ab8;
+    --text3: #3d4a6b;
+    --money: #ffd700;
+    --keyword: #c792ea;
+    --string: #c3e88d;
+    --number: #f78c6c;
+    --comment: #546e7a;
+    --type: #82aaff;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(61,139,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(61,139,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  header {
+    position: relative;
+    z-index: 10;
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10,12,20,0.9);
+    backdrop-filter: blur(12px);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-diamond {
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    animation: pulse 3s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+  }
+
+  .logo h1 {
+    font-size: 22px;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.5px;
+  }
+
+  .logo span {
+    font-size: 12px;
+    color: var(--text2);
+    font-weight: 400;
+    margin-left: 4px;
+  }
+
+  .header-tags {
+    display: flex;
+    gap: 8px;
+  }
+
+  .tag {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    border: 1px solid;
+  }
+
+  .tag-erp { color: var(--accent2); border-color: rgba(0,229,195,0.3); background: rgba(0,229,195,0.05); }
+  .tag-rust { color: var(--number); border-color: rgba(247,140,108,0.3); background: rgba(247,140,108,0.05); }
+  .tag-v { color: var(--text2); border-color: var(--border); background: rgba(255,255,255,0.02); }
+
+  .playground {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto 1fr;
+    height: calc(100vh - 73px);
+  }
+
+  .panel {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .panel-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text2);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .dot-blue { background: var(--accent); }
+  .dot-green { background: var(--accent2); }
+  .dot-red { background: var(--accent3); }
+  .dot-gold { background: var(--money); }
+
+  .panel-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .btn {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    font-family: 'Syne', sans-serif;
+    transition: all 0.15s ease;
+    letter-spacing: 0.3px;
+  }
+
+  .btn-run {
+    background: var(--accent);
+    color: white;
+  }
+
+  .btn-run:hover { background: #5a9fff; transform: translateY(-1px); }
+  .btn-run:active { transform: translateY(0); }
+
+  .btn-run.running {
+    background: var(--accent3);
+    animation: blink 0.8s ease infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  .btn-clear {
+    background: transparent;
+    color: var(--text2);
+    border: 1px solid var(--border);
+  }
+
+  .btn-clear:hover { color: var(--text); border-color: var(--text3); }
+
+  .example-select {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-family: 'Syne', sans-serif;
+    cursor: pointer;
+  }
+
+  .example-select:focus { outline: none; border-color: var(--accent); }
+
+  .editor-area {
+    position: relative;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .line-numbers {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 48px;
+    padding: 16px 0;
+    background: rgba(0,0,0,0.2);
+    border-right: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 21px;
+    color: var(--text3);
+    text-align: right;
+    padding-right: 10px;
+    overflow: hidden;
+    user-select: none;
+    z-index: 2;
+  }
+
+  #editor {
+    position: absolute;
+    left: 48px;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    padding: 16px;
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: none;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 21px;
+    color: var(--text);
+    caret-color: var(--accent2);
+    tab-size: 4;
+    white-space: pre;
+    overflow: auto;
+    z-index: 1;
+  }
+
+  /* Syntax highlight overlay */
+  .highlight-overlay {
+    position: absolute;
+    left: 48px;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    padding: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 21px;
+    pointer-events: none;
+    white-space: pre;
+    overflow: hidden;
+    z-index: 0;
+    color: transparent;
+  }
+
+  .right-panel {
+    display: flex;
+    flex-direction: column;
+    border-right: none;
+  }
+
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .tab {
+    padding: 12px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text2);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    transition: all 0.15s;
+  }
+
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  .tab:hover:not(.active) { color: var(--text); }
+
+  .tab-content {
+    display: none;
+    flex: 1;
+    overflow: auto;
+    padding: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .tab-content.active { display: block; }
+
+  .output-line {
+    padding: 2px 0;
+    animation: fadeIn 0.15s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateX(-4px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .out-print { color: var(--text); }
+  .out-section { color: var(--accent); font-weight: 600; margin-top: 12px; }
+  .out-model { color: var(--accent2); margin-left: 8px; }
+  .out-workflow { color: var(--keyword); margin-left: 8px; }
+  .out-route { color: var(--number); margin-left: 8px; }
+  .out-invoice { color: var(--money); margin-left: 8px; }
+  .out-error { color: var(--accent3); }
+  .out-warning { color: var(--number); }
+  .out-info { color: var(--text2); font-style: italic; }
+
+  .token-line {
+    display: flex;
+    gap: 8px;
+    padding: 2px 0;
+    align-items: center;
+  }
+
+  .token-line-num {
+    color: var(--text3);
+    min-width: 36px;
+    text-align: right;
+    font-size: 11px;
+  }
+
+  .token-type {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    min-width: 100px;
+  }
+
+  .token-value {
+    color: var(--text2);
+    font-size: 12px;
+  }
+
+  .tk-keyword { background: rgba(199,146,234,0.15); color: var(--keyword); }
+  .tk-literal { background: rgba(195,232,141,0.15); color: var(--string); }
+  .tk-ident { background: rgba(130,170,255,0.15); color: var(--type); }
+  .tk-op { background: rgba(61,139,255,0.15); color: var(--accent); }
+  .tk-punct { background: rgba(123,138,184,0.1); color: var(--text2); }
+  .tk-money { background: rgba(255,215,0,0.15); color: var(--money); }
+  .tk-type { background: rgba(0,229,195,0.15); color: var(--accent2); }
+
+  .ast-node {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.8;
+    color: var(--text2);
+  }
+
+  .ast-decl {
+    margin-bottom: 16px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface2);
+  }
+
+  .ast-label {
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .ast-fn { color: var(--keyword); }
+  .ast-model-l { color: var(--accent2); }
+  .ast-workflow-l { color: var(--number); }
+  .ast-route-l { color: var(--accent); }
+  .ast-invoice-l { color: var(--money); }
+  .ast-stmt-l { color: var(--text); }
+
+  .ast-field { color: var(--text); margin-left: 12px; }
+  .ast-field span { color: var(--text2); }
+
+  .status-bar {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 6px 16px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text2);
+    grid-column: 1 / -1;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .status-ok { color: var(--accent2); }
+  .status-err { color: var(--accent3); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 12px;
+    color: var(--text3);
+    font-size: 13px;
+  }
+
+  .empty-diamond {
+    width: 40px;
+    height: 40px;
+    background: var(--border);
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  }
+
+  .erp-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .erp-model { background: rgba(0,229,195,0.1); color: var(--accent2); border: 1px solid rgba(0,229,195,0.2); }
+  .erp-workflow { background: rgba(199,146,234,0.1); color: var(--keyword); border: 1px solid rgba(199,146,234,0.2); }
+  .erp-route { background: rgba(61,139,255,0.1); color: var(--accent); border: 1px solid rgba(61,139,255,0.2); }
+  .erp-invoice { background: rgba(255,215,0,0.1); color: var(--money); border: 1px solid rgba(255,215,0,0.2); }
+
+  .doc-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .doc-metric {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface2);
+    padding: 10px;
+    min-width: 0;
+  }
+
+  .doc-metric strong {
+    display: block;
+    color: var(--text);
+    font-size: 18px;
+    line-height: 1.2;
+  }
+
+  .doc-metric span {
+    color: var(--text2);
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  .doc-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface2);
+    padding: 12px;
+    margin-bottom: 8px;
+  }
+
+  .doc-card-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .doc-name {
+    font-weight: 700;
+    color: var(--text);
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .doc-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  .doc-row:last-child { border-bottom: none; }
+  .doc-muted { color: var(--text2); font-size: 12px; }
+  .doc-code { font-family: 'JetBrains Mono', monospace; overflow-wrap: anywhere; }
+  .doc-flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .doc-chip {
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    color: var(--text);
+    font-size: 11px;
+  }
+
+  @media (max-width: 720px) {
+    .doc-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-diamond"></div>
+    <h1>NexusLang <span>Playground</span></h1>
+  </div>
+  <div class="header-tags">
+    <span class="tag tag-erp">ERP-FIRST</span>
+    <span class="tag tag-rust">RUST</span>
+    <span class="tag tag-v">v0.1.0</span>
+  </div>
+</header>
+
+<div class="playground">
+  <!-- LEFT: Editor -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <div class="dot dot-blue"></div>
+        Editor .nx
+      </div>
+      <div class="panel-actions">
+        <select class="example-select" id="exampleSelect" onchange="loadExample()">
+          <option value="erp">erp_basico.nx</option>
+          <option value="fase3">fase3_erp_primitivas.nx</option>
+          <option value="fase4">fase4_tooling_lint.nx</option>
+          <option value="fase5">fase5_runtime_services.nx</option>
+          <option value="hello">hello.nx</option>
+          <option value="ecommerce">e-commerce.nx</option>
+          <option value="banca">banca.nx</option>
+          <option value="inventory">inventory.nx</option>
+          <option value="crm">crm.nx</option>
+          <option value="payroll">payroll_real.nx</option>
+        </select>
+        <button class="btn btn-clear" onclick="clearEditor()">Limpar</button>
+        <button class="btn btn-run" id="runBtn" onclick="runCode()">▶ Executar</button>
+      </div>
+    </div>
+    <div class="editor-area">
+      <div class="line-numbers" id="lineNumbers">1</div>
+      <textarea id="editor" spellcheck="false" oninput="onEditorInput()" onscroll="syncScroll()" onkeydown="handleKey(event)"></textarea>
+    </div>
+  </div>
+
+  <!-- RIGHT: Output / Tokens / AST -->
+  <div class="panel right-panel">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('output', this)">Saída</div>
+      <div class="tab" onclick="switchTab('tokens', this)">Tokens</div>
+      <div class="tab" onclick="switchTab('ast', this)">AST</div>
+      <div class="tab" onclick="switchTab('erp', this)">Docs</div>
+    </div>
+    <div id="tab-output" class="tab-content active">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-diamond"></div>
+        <span>Prima ▶ Executar para ver a saída</span>
+      </div>
+      <div id="outputLines"></div>
+    </div>
+    <div id="tab-tokens" class="tab-content">
+      <div id="tokenLines"></div>
+    </div>
+    <div id="tab-ast" class="tab-content">
+      <div id="astLines"></div>
+    </div>
+    <div id="tab-erp" class="tab-content">
+      <div id="erpLines"></div>
+    </div>
+  </div>
+
+  <!-- STATUS BAR -->
+  <div class="status-bar">
+    <div class="status-item" id="statusLexer">
+      <span style="color:var(--text3)">LEXER</span> <span>—</span>
+    </div>
+    <div class="status-item" id="statusParser">
+      <span style="color:var(--text3)">PARSER</span> <span>—</span>
+    </div>
+    <div class="status-item" id="statusChecker">
+      <span style="color:var(--text3)">CHECKER</span> <span>—</span>
+    </div>
+    <div class="status-item" id="statusInterp">
+      <span style="color:var(--text3)">RUNTIME</span> <span>—</span>
+    </div>
+    <div style="margin-left:auto" id="statusTime"></div>
+  </div>
+</div>
+
+<script type="module" src="nexuslang-playground.js"></script>
+</body>
+</html>

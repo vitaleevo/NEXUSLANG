@@ -1,0 +1,62 @@
+name: NexusLang Quality Gate
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    env:
+      CARGO_TERM_COLOR: always
+      NEXUS_RUN_CLIPPY: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run quality gate
+        run: bash scripts/quality-gate.sh
+
+      - name: Check release scripts
+        run: |
+          bash -n scripts/package-release.sh
+          bash -n scripts/validate-release-package.sh
+          bash -n scripts/validate-release-second-env.sh
+          bash -n scripts/sign-release-artifacts.sh
+          bash -n scripts/release-dry-run.sh
+          bash -n scripts/release-dry-run-strict.sh
+
+      - name: Build local release package
+        run: bash scripts/package-release.sh
+
+      - name: Validate local release package
+        run: bash scripts/validate-release-package.sh
+
+      - name: Upload local release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexuslang-local-release
+          path: |
+            dist/nexuslang-v*-local-release.tar.gz
+            dist/nexuslang-v*-local-release.tar.gz.sha256
+          if-no-files-found: error

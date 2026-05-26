@@ -1,0 +1,21 @@
+// runtime_services.nx — Fase 5: HTTP routes, JSON storage e OpenAPI
+
+model Employee {
+    name: string
+    department: string
+}
+
+route GET /health {
+    return "ok"
+}
+
+route GET /employees {
+    return Employee::all()
+}
+
+route GET /employees/:id {
+    return "employee " + id
+}
+
+print("Execute:")
+print("nexus serve examples/runtime_services.nx")

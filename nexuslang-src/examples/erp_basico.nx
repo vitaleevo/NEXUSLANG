@@ -1,0 +1,92 @@
+// erp_basico.nx — exemplo de sistema ERP em NexusLang
+
+// ─── Modelos de negócio ───────────────────────
+
+model Employee {
+    name: string
+    salary: money
+    department: string
+}
+
+model Department {
+    name: string
+    budget: money
+}
+
+// ─── Funções ──────────────────────────────────
+
+fn calcular_bonus(salario: money) -> money {
+    return salario * 0.1
+}
+
+fn saudar(nome: string) -> string {
+    return "Bem-vindo, " + nome
+}
+
+// ─── Workflow de Pagamento ─────────────────────
+
+workflow Payroll {
+    step calcular_salarios
+    step aprovar_pagamentos
+    step processar_pagamentos
+}
+
+// ─── API Routes ───────────────────────────────
+
+route GET /employees {
+    return Employee::all()
+}
+
+route GET /departments {
+    return Department::all()
+}
+
+route POST /employees {
+    return "Employee criado com sucesso"
+}
+
+// ─── Invoice / Faturação ──────────────────────
+
+invoice {
+    customer: "Empresa Petrolífera SARL"
+    service: "Consultoria ERP"
+    total: 750000 kz
+    currency: "AOA"
+}
+
+// ─── Script de demonstração ───────────────────
+
+print("=== Sistema NexusLang ERP ===")
+
+let salario_base = 300000 kz
+let bonus = calcular_bonus(salario_base)
+let total = salario_base + bonus
+
+print(saudar("Admin"))
+print("Salário base:")
+print(salario_base)
+print("Bónus (10%):")
+print(bonus)
+print("Total:")
+print(total)
+
+// Condicional
+if total > 250000 kz {
+    print("Salário acima da média")
+} else {
+    print("Salário abaixo da média")
+}
+
+// Loop
+let contador = 1
+while contador <= 3 {
+    print("Processando mês:")
+    print(contador)
+    contador = contador + 1
+}
+
+// Array
+let departamentos = ["TI", "RH", "Financeiro", "Operações"]
+for dept in departamentos {
+    print(dept)
+}

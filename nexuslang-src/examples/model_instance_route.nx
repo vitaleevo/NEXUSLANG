@@ -1,0 +1,30 @@
+model Customer {
+    name: string
+    email: string?
+    status: string = "active"
+    balance: money
+    active: bool = true
+}
+
+let customer: Customer = Customer { name: "Ana", balance: 1000 kz }
+print(customer.name)
+print(customer.email)
+print(customer.status)
+print(customer.balance)
+print(customer.active)
+
+route GET /customers/:name {
+    return Customer { name: name, balance: 1000 kz }
+}
+
+route GET /customers/:name/label {
+    return Customer { name: name, balance: 1000 kz }.name
+}
+
+route GET /customers/:name/email {
+    return Customer { name: name, balance: 1000 kz }.email
+}
+
+route GET /customers/:name/status {
+    return Customer { name: name, balance: 1000 kz }.status
+}

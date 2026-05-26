@@ -1,0 +1,88 @@
+// openapi_qa.nx — representative example for external OpenAPI 3.0 validation
+// This file covers all OpenAPI 1.0 features of NexusLang
+
+model Customer {
+    name: string unique
+    status: string = "active" index
+    balance: money min 100 kz max 5000 kz
+    display_name: string min 2 max 80
+    score: int min 0 max 100
+    active: bool = true
+    email: string?
+}
+
+route GET /health {
+    return "ok"
+}
+
+route GET /customers/:name {
+    return Customer::find("name", name)
+}
+
+route POST /customers {
+    return Customer::create()
+}
+
+route PUT /customers/:name {
+    return Customer::update("name", name)
+}
+
+route DELETE /customers/:name {
+    return Customer::delete("name", name)
+}
+
+route GET /customers {
+    return Customer::all()
+}
+
+route GET /customers/list ?(limit: int = 10, offset: int = 0) {
+    return Customer::all("name", "asc", limit, offset)
+}
+
+route GET /customers/page ?(limit: int = 10, offset: int = 0) {
+    return Customer::page("name", "asc", limit, offset)
+}
+
+route GET /customers/search ?(statuses: [string]) {
+    return Customer::where_in("status", statuses)
+}
+
+route GET /customers/search-page ?(statuses: [string], limit: int = 10, offset: int = 0) {
+    return Customer::where_in_page("status", statuses, "name", "asc", limit, offset)
+}
+
+route GET /customers/filter ?(status: string?, limit: int = 10, offset: int = 0) {
+    return Customer::where_optional_page("status", status, "name", "asc", limit, offset)
+}
+
+route GET /customers/search-not ?(status: string) {
+    return Customer::where_not("status", status)
+}
+
+route GET /customers/search-not-in ?(statuses: [string]) {
+    return Customer::where_not_in("status", statuses)
+}
+
+route GET /customers/search-compare ?(min_score: int) {
+    return Customer::where_compare("score", ">=", min_score)
+}
+
+route GET /customers/search-text ?(q: string) {
+    return Customer::where_text("display_name", "contains", q)
+}
+
+route GET /customers/search-range ?(min_balance: money, max_balance: money) {
+    return Customer::where_between("balance", min_balance, max_balance)
+}
+
+route GET /customers/search-all ?(status: string, min_score: int) {
+    return Customer::where_all("status", status, "score", min_score)
+}
+
+route GET /customers/search-any ?(status: string, min_score: int) {
+    return Customer::where_any("status", status, "score", min_score)
+}
+
+route GET /customers/search-active ?(active: bool = true) {
+    return Customer::where("active", active)
+}

@@ -1,0 +1,27 @@
+// tipos_avancados.nx — exemplos da segunda etapa do sistema de tipos
+
+model Employee {
+    name: string
+    salary: money
+}
+
+fn contar_nomes(nomes: [string]) -> int {
+    return len(nomes)
+}
+
+fn listar_empregados() -> [Employee] {
+    return Employee::all()
+}
+
+let departamentos: [string] = ["TI", "RH", "Financeiro"]
+let salarios: [money] = [300000 kz, 450000 kz, 520000 kz]
+let empregados: [Employee] = listar_empregados()
+
+print("Departamentos:")
+print(departamentos)
+print("Total de departamentos:")
+print(contar_nomes(departamentos))
+print("Salários previstos:")
+print(salarios)
+print("Empregados:")
+print(empregados)

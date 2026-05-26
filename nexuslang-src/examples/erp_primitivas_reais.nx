@@ -1,0 +1,37 @@
+// erp_primitivas_reais.nx — Fase 3: invoice, workflow e routes mais reais
+
+model Employee {
+    name: string
+    salary: money
+    department: string
+}
+
+workflow Billing {
+    step preparar {
+        print("Preparando fatura")
+    }
+
+    step emitir {
+        print("Emitindo documento fiscal")
+    }
+
+    step notificar {
+        print("Notificando cliente")
+    }
+}
+
+route GET /employees/:id {
+    return "employee " + id
+}
+
+invoice {
+    customer: "Empresa Petrolífera SARL"
+    currency: "AOA"
+    tax: 14
+    discount: 25000 kz
+    item "Consultoria ERP" qty 2 price 150000 kz
+    item "Suporte mensal" qty 1 price 75000 kz
+}
+
+print("=== ERP Primitivas Reais ===")
+run_workflow("Billing")
