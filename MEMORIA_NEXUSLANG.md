@@ -102,10 +102,21 @@ bash -n scripts/release-dry-run-strict.sh
 Resultado:
 
 - Sintaxe dos scripts: passou.
-- Antes do commit desta fase, ambos os gates falharam corretamente em
+- Antes do commit desta fase, os gates falharam corretamente em
   `dirty-worktree`.
+- Depois do commit, `scripts/connect-github-release.sh --repo
+  vitaleevo/nexuslang --create --push` falhou corretamente em
+  `connect_status=failed:gh-not-authenticated`.
+- Depois do commit, `scripts/release-dry-run-strict.sh --preflight-only`
+  falhou corretamente em `strict_status=failed:gh-not-authenticated`.
+- `scripts/release-dry-run.sh`: passou com quality gate completo, pacote,
+  validacao local, validacao Docker e assinatura GPG efemera de dry-run.
+- Relatorio local final registrou:
+  - `sha256=82b3d0c8be98e66b082ca11a62b8ba6ae1cb8d87b8a12d35f2ca98c0d7bf5b05`;
+  - `signing_status=signed-ephemeral-dry-run`;
+  - `remote_ci_status=not-observed:gh-not-authenticated`;
+  - `second_environment=docker:ruby:3.3-bookworm`.
 - `vitaleevo/nexuslang` nao existe ainda pelo conector GitHub.
-- O proximo bloqueio esperado depois do commit e `gh-not-authenticated`.
 
 Estado atual:
 
@@ -114,6 +125,9 @@ Estado atual:
 - Ainda falta criar o repo remoto real ou confirmar outro repo destino.
 - Ainda falta autenticar `gh` local.
 - Ainda falta configurar chave GPG mantida.
+- O helper de conexao esta pronto para rodar assim que `gh` estiver
+  autenticado:
+  `./scripts/connect-github-release.sh --repo vitaleevo/nexuslang --create --push`.
 - O projeto permanece em 99/100.
 
 ## Proximo passo recomendado
