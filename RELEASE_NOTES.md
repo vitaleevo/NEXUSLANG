@@ -4,8 +4,8 @@ Release type: controlled stable release branch for the `0.2.0` line.
 
 This release promotes the validated RC2 feature surface to the final `0.2.0`
 source version. It does not expand scope beyond RC2; the purpose is to publish a
-clean stable artifact only after package validation, pushed-head CI, maintained
-GPG signing, and strict public-release dry-run all pass.
+clean stable artifact with package validation, pushed-head CI, maintained GPG
+signing, strict public-release dry-run, and public install validation.
 
 ## 0.2.0 Highlights
 
@@ -16,13 +16,13 @@ GPG signing, and strict public-release dry-run all pass.
   the initial `nexus-lsp` crate.
 - Keeps the post-RC2 CI hardening: first-party GitHub Actions refs are pinned by
   commit SHA and use Node 24-compatible action runtimes.
-- Preserves release discipline: `v0.2.0` must be tagged and published only after
-  the stable branch head passes local quality, package validation, remote CI,
-  and strict public-release dry-run.
+- Preserves release discipline: `v0.2.0` is tagged and published only after the
+  release head passes local quality, package validation, remote CI, and strict
+  public-release dry-run.
 
 ## 0.2.0 Validation Summary
 
-This stable branch is prepared to pass:
+This stable release line is validated with:
 
 ```bash
 NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
@@ -31,10 +31,9 @@ NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
 NEXUS_RELEASE_SIGNING_KEY=<fingerprint> ./scripts/release-dry-run-strict.sh
 ```
 
-Before public release, the `v0.2.0` tag should be annotated and signed, and the
-GitHub Release should publish the archive, checksum, detached signatures, public
-key, and fingerprint assets. After publication, the stable install path must
-pass:
+The `v0.2.0` tag must be annotated and signed, and the GitHub Release must
+publish the archive, checksum, detached signatures, public key, and fingerprint
+assets. After publication, the stable install path must pass:
 
 ```bash
 NEXUS_PUBLIC_RELEASE_TAG=v0.2.0 ./scripts/validate-public-release-install.sh
@@ -51,8 +50,8 @@ NEXUS_PUBLIC_RELEASE_TAG=v0.2.0 ./scripts/validate-public-release-install.sh
   product.
 - SQLite physical schema remains experimental; JSON/SQLite behavior is tested
   for supported flows, not a full production database migration system.
-- This release should not be tagged or published from a dirty worktree or before
-  pushed-head CI and strict public-release dry-run pass.
+- This release should not be republished from a dirty worktree or without
+  pushed-head CI and strict public-release dry-run.
 
 ---
 

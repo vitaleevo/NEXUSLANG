@@ -29,16 +29,16 @@ auth, invoices, money, storage, tooling e pequenos servicos de negocio.
 
 ## Foco imediato
 
-A linha atual esta em preparacao controlada da release stable `0.2.0`. O RC2
-ja foi mergeado em `main`, o hardening de CI Node 24 foi aplicado, e a branch
-stable troca a versao fonte para `0.2.0` sem publicar tag antes dos gates. O
-pre-release publico `v0.2.0-rc.2` continua publicado e validado; a release
-stable/latest publica continua sendo `v0.1.1` ate `v0.2.0` ser publicado.
+A linha atual esta na publicacao controlada da release stable `0.2.0`. O RC2
+ja foi mergeado em `main`, o hardening de CI Node 24 foi aplicado, o PR #4
+mergeou a versao fonte `0.2.0`, e a publicacao de `v0.2.0` depende de tag
+assinada, GitHub Release com assets e validacao publica de install. O
+pre-release publico `v0.2.0-rc.2` continua disponivel para comparacao.
 
 ## Trilhas proximas
 
-1. Release/producao: validar a branch stable `0.2.0`, criar PR, observar CI,
-   rodar strict public-release dry-run e so entao publicar `v0.2.0`.
+1. Release/producao: publicar `v0.2.0` com tag assinada, assets de release,
+   validacao publica de install e memoria de fechamento.
 2. Diagnostics/tooling API: preservar JSON v1 enquanto melhora APIs internas
    para consumidores de editor.
 3. LSP/editor tooling: adicionar workspace symbols, formatting, rename ou code

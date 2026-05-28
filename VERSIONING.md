@@ -83,23 +83,23 @@ For any release candidate:
 
 Current source version: `0.2.0`
 
-Latest stable GitHub Release: `v0.1.1`.
+Latest stable GitHub Release: `v0.2.0`.
 
-Current public pre-release RC: `v0.2.0-rc.2`.
+Previous public pre-release RC: `v0.2.0-rc.2`.
 
-Stable `0.2.0` branch status: source version prepared; publish `v0.2.0` only
-after pushed-head CI, package validation, strict public-release dry-run,
-signed tag/release creation, and public install validation.
+Stable `0.2.0` release status: public stable release target, gated by
+pushed-head CI, package validation, strict public-release dry-run, signed
+tag/release creation, and public install validation.
 
 Previous published GitHub Release: `v0.1.0`.
 
 Run the public install validation against the release tag:
 
 ```bash
-NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0 ./scripts/validate-public-release-install.sh
 ```
 
-Validate the current public RC pre-release explicitly:
+Validate the previous public RC pre-release explicitly:
 
 ```bash
 NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.sh

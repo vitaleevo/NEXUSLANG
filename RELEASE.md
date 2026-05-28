@@ -6,9 +6,9 @@ It is intentionally small: the source of truth is still the automated gate.
 ## Current readiness
 
 - Local stable target: `0.2.0`.
-- Stable branch status: source version prepared on dedicated release branch;
-  tag/release publication is still gated by package validation, pushed-head CI,
-  and strict public-release dry-run.
+- Stable branch status: PR #4 merged; stable tag/release publication is gated
+  by package validation, pushed-head CI, strict public-release dry-run, and
+  post-release public install validation.
 - Previous public RC status: `v0.2.0-rc.2` published as a pre-release and public
   install validation passed.
 - Stable `0.2.0` decision on 2026-05-28: promote only through this controlled
@@ -20,7 +20,9 @@ It is intentionally small: the source of truth is still the automated gate.
 - Real production readiness for the 0.1.1 release scope: public release
   published and post-release install validated
 - Overall project score after the latest completed release phase: 100/100
-- Public GitHub Release v0.1.1: published and post-release install validated
+- Public GitHub Release v0.2.0: stable publication target for this release line
+- Public GitHub Release v0.1.1: previous stable, published and post-release
+  install validated
 - Public GitHub pre-release v0.2.0-rc.2: published and public install validated
 - Public GitHub pre-release v0.2.0-rc.1: published and public install validated
 - Previous public GitHub Release v0.1.0: published and post-release install

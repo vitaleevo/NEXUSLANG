@@ -1,10 +1,9 @@
 # NexusLang
 
 NexusLang is an ERP-first programming language for business workflows,
-models, invoices, routes, and small runtime services. The source tree is now
-prepared for the `0.2.0` stable release branch. Until `v0.2.0` is tagged and
-published, the latest stable GitHub Release remains `v0.1.1`; the latest public
-pre-release remains `v0.2.0-rc.2` for RC evaluation.
+models, invoices, routes, and small runtime services. The current stable source
+line is `0.2.0`. The latest stable GitHub Release is `v0.2.0`; the previous
+public pre-release remains `v0.2.0-rc.2` for RC comparison.
 
 ## What is included
 
@@ -26,21 +25,21 @@ pre-release remains `v0.2.0-rc.2` for RC evaluation.
 
 ## Install From The GitHub Release
 
-The published `v0.1.1` release is available at:
+The published `v0.2.0` release is available at:
 
 ```text
-https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.1.1
+https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0
 ```
 
 Download the archive, checksum, signatures, public key, and fingerprint:
 
 ```bash
-curl -LO https://github.com/vitaleevo/NEXUSLANG/releases/download/v0.1.1/nexuslang-v0.1.1-local-release.tar.gz
-curl -LO https://github.com/vitaleevo/NEXUSLANG/releases/download/v0.1.1/nexuslang-v0.1.1-local-release.tar.gz.sha256
-curl -LO https://github.com/vitaleevo/NEXUSLANG/releases/download/v0.1.1/nexuslang-v0.1.1-local-release.tar.gz.asc
-curl -LO https://github.com/vitaleevo/NEXUSLANG/releases/download/v0.1.1/nexuslang-v0.1.1-local-release.tar.gz.sha256.asc
-curl -LO https://github.com/vitaleevo/NEXUSLANG/releases/download/v0.1.1/nexuslang-release-public-key.asc
-curl -LO https://github.com/vitaleevo/NEXUSLANG/releases/download/v0.1.1/nexuslang-release-signing-key.fingerprint
+curl -LO https://github.com/vitaleevo/NEXUSLANG/releases/download/v0.2.0/nexuslang-v0.2.0-local-release.tar.gz
+curl -LO https://github.com/vitaleevo/NEXUSLANG/releases/download/v0.2.0/nexuslang-v0.2.0-local-release.tar.gz.sha256
+curl -LO https://github.com/vitaleevo/NEXUSLANG/releases/download/v0.2.0/nexuslang-v0.2.0-local-release.tar.gz.asc
+curl -LO https://github.com/vitaleevo/NEXUSLANG/releases/download/v0.2.0/nexuslang-v0.2.0-local-release.tar.gz.sha256.asc
+curl -LO https://github.com/vitaleevo/NEXUSLANG/releases/download/v0.2.0/nexuslang-release-public-key.asc
+curl -LO https://github.com/vitaleevo/NEXUSLANG/releases/download/v0.2.0/nexuslang-release-signing-key.fingerprint
 ```
 
 Verify the signing fingerprint, signatures, and checksum before extracting:
@@ -48,16 +47,16 @@ Verify the signing fingerprint, signatures, and checksum before extracting:
 ```bash
 test "$(tr -d '[:space:]' < nexuslang-release-signing-key.fingerprint)" = "3237F7CC5CE2514FC9671BB93CB6808B55385273"
 gpg --import nexuslang-release-public-key.asc
-gpg --verify nexuslang-v0.1.1-local-release.tar.gz.asc nexuslang-v0.1.1-local-release.tar.gz
-gpg --verify nexuslang-v0.1.1-local-release.tar.gz.sha256.asc nexuslang-v0.1.1-local-release.tar.gz.sha256
-sha256sum -c nexuslang-v0.1.1-local-release.tar.gz.sha256
+gpg --verify nexuslang-v0.2.0-local-release.tar.gz.asc nexuslang-v0.2.0-local-release.tar.gz
+gpg --verify nexuslang-v0.2.0-local-release.tar.gz.sha256.asc nexuslang-v0.2.0-local-release.tar.gz.sha256
+sha256sum -c nexuslang-v0.2.0-local-release.tar.gz.sha256
 ```
 
 Extract and enter the package:
 
 ```bash
-tar -xzf nexuslang-v0.1.1-local-release.tar.gz
-cd nexuslang-v0.1.1-local-release
+tar -xzf nexuslang-v0.2.0-local-release.tar.gz
+cd nexuslang-v0.2.0-local-release
 ```
 
 Run the packaged smoke test:
@@ -70,7 +69,7 @@ From a source checkout, maintainers can validate the public installation path
 end to end from a clean temporary directory:
 
 ```bash
-./scripts/validate-public-release-install.sh
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0 ./scripts/validate-public-release-install.sh
 ```
 
 ## Build Or Validate A Local Package
@@ -96,11 +95,11 @@ sha256sum -c nexuslang-v0.2.0-local-release.tar.gz.sha256
 For signed public artifacts, also verify the detached GPG signatures described
 in `SIGNING.md`.
 
-Maintainers can validate the public RC install path end to end with
+Maintainers can validate the public stable install path end to end with
 `scripts/validate-public-release-install.sh`:
 
 ```bash
-NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.sh
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0 ./scripts/validate-public-release-install.sh
 ```
 
 Extract and enter the package:
@@ -447,10 +446,10 @@ maintained GPG key:
 NEXUS_RELEASE_SIGNING_KEY="<fingerprint-or-key-id>" ./scripts/release-dry-run-strict.sh
 ```
 
-Validate the `v0.1.1` public install path with:
+Validate the `v0.2.0` public install path with:
 
 ```bash
-NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0 ./scripts/validate-public-release-install.sh
 ```
 
 ## Current Limits
