@@ -33,16 +33,16 @@ A linha atual esta em estabilizacao de release/producao. O PR
 `https://github.com/vitaleevo/NEXUSLANG/pull/1` foi mergeado em `main` pelo
 commit `bcedf2c feat(release): prepare NexusLang 0.2.0-rc.1`, e o `main`
 pos-merge passou no gate completo com clippy estrito. O pre-release publico
-`v0.2.0-rc.1` continua publicado, instalavel e validado, mas representa uma fase
-historica anterior as correcoes pos-publicacao agora presentes em `main`.
-O foco imediato e publicar um novo artefato/tag RC pos-merge (`v0.2.0-rc.2`
-recomendado) ou aprovar explicitamente um plano de promocao para `0.2.0`
-estavel. A release stable/latest continua sendo `v0.1.1`.
+`v0.2.0-rc.2` foi publicado a partir da branch pos-merge
+`codex/prepare-nexuslang-0.2.0-rc.2` e passou validacao publica de install com
+assinatura, checksum, package smoke, auth, storage e assets HTTP. A release
+stable/latest continua sendo `v0.1.1`.
 
 ## Trilhas proximas
 
-1. Release/producao: preparar novo RC pos-merge (`v0.2.0-rc.2`) ou plano
-   controlado de `0.2.0` estavel a partir do `main` validado.
+1. Release/producao: abrir/revisar PR da branch
+   `codex/prepare-nexuslang-0.2.0-rc.2`, colher feedback e so depois
+   decidir promocao controlada para `0.2.0` estavel.
 2. Diagnostics/tooling API: preservar JSON v1 enquanto melhora APIs internas
    para consumidores de editor.
 3. LSP/editor tooling: adicionar workspace symbols, formatting, rename ou code

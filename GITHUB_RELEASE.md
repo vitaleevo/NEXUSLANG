@@ -145,3 +145,41 @@ The validated public archive SHA-256, rechecked against
 
 Earlier local-only draft artifacts may have different checksums; the value
 above is the checksum for the published `v0.2.0-rc.1` pre-release asset.
+
+The post-merge `0.2.0-rc.2` candidate starts from the validated `main` line
+after PR #1 and carries only the version/docs changes needed to publish the
+post-feedback code as a new signed public pre-release. It remains a pre-release
+and did not replace `v0.1.1` as the latest stable release.
+
+The signed annotated tag `v0.2.0-rc.2` points to:
+
+```text
+5561a2484e7f5082b9d339f94b02ee5dd8d77be0
+```
+
+The `v0.2.0-rc.2` GitHub Release is published as a public pre-release:
+
+```text
+https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0-rc.2
+```
+
+Published RC2 assets include:
+
+- `nexuslang-v0.2.0-rc.2-local-release.tar.gz`
+- `nexuslang-v0.2.0-rc.2-local-release.tar.gz.sha256`
+- `nexuslang-v0.2.0-rc.2-local-release.tar.gz.asc`
+- `nexuslang-v0.2.0-rc.2-local-release.tar.gz.sha256.asc`
+- `nexuslang-release-public-key.asc`
+- `nexuslang-release-signing-key.fingerprint`
+
+The validated public archive SHA-256 is:
+
+```text
+8ed601c2751e86ca84c40cbbd0edec9b4f1266d3663299fd83e8b2b4912eea0b
+```
+
+Public RC2 validation command:
+
+```bash
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.sh
+```

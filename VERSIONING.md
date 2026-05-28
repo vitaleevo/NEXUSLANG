@@ -31,7 +31,7 @@ v<version>
 Example:
 
 ```text
-v0.2.0-rc.1
+v0.2.0-rc.2
 ```
 
 Tags should point to the commit that produced the release artifacts and passed
@@ -46,7 +46,7 @@ quality rather than fully stable.
   or narrow behavior fixes with no intentional breaking changes.
 - Minor releases, such as `0.2.0`, may refine language/runtime contracts when
   needed, but must document breaking changes in `RELEASE_NOTES.md`.
-- Release-candidate tags, such as `v0.2.0-rc.1`, may be used before a minor
+- Release-candidate tags, such as `v0.2.0-rc.2`, may be used before a minor
   line is declared stable enough for a final public release.
 - The package format should remain compatible within a minor line unless the
   release notes explicitly say otherwise.
@@ -81,11 +81,11 @@ For any release candidate:
 
 ## Current Release
 
-Current source version: `0.2.0-rc.1`
+Current source version: `0.2.0-rc.2`
 
 Latest stable GitHub Release: `v0.1.1`.
 
-Current public pre-release RC: `v0.2.0-rc.1`.
+Current public pre-release RC: `v0.2.0-rc.2`.
 
 Previous published GitHub Release: `v0.1.0`.
 
@@ -98,5 +98,5 @@ NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh
 Validate the current public RC pre-release explicitly:
 
 ```bash
-NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.sh
 ```

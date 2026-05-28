@@ -4,9 +4,112 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-28 (Fase 11.59 - PR #1 mergeado e validacao pos-merge verde)
+Ultima atualizacao: 2026-05-28 (Fase 11.60 - RC2 publico pos-merge publicado e validado)
 
-## Etapa concluida: Fase 11.59 - PR #1 mergeado e validacao pos-merge verde
+## Etapa concluida: Fase 11.60 - RC2 publico pos-merge publicado e validado
+
+Objetivo: criar um novo RC publico a partir da linha pos-merge, sem promover
+`0.2.0` estavel, e validar que o artefato publicado no GitHub e instalavel de
+ponta a ponta.
+
+Foi feito:
+
+- Criada branch `codex/prepare-nexuslang-0.2.0-rc.2` a partir de `main`.
+- Atualizada a versao fonte para `0.2.0-rc.2` em `nexuslang-src/Cargo.toml`,
+  `nexuslang-src/nexus-lsp/Cargo.toml` e `nexuslang-src/Cargo.lock`.
+- Atualizados docs de release/versionamento para `v0.2.0-rc.2`.
+- Recompilado o WASM do playground para a versao RC2.
+- Commitado `5561a24 chore(release): prepare nexuslang 0.2.0-rc.2`.
+- Pushada a branch RC2 para `origin`.
+- Observado CI remoto `NexusLang Quality Gate` verde para o commit RC2
+  (`run 26595258834`).
+- Rodado strict preflight e strict dry-run com a chave mantida
+  `3237F7CC5CE2514FC9671BB93CB6808B55385273`; a primeira tentativa do dry-run
+  completo teve flake no asset smoke HTTP do segundo ambiente, o segundo
+  ambiente passou isoladamente e a repeticao do strict dry-run completo passou.
+- Criada e pushada tag anotada/assinada `v0.2.0-rc.2`, apontando para
+  `5561a2484e7f5082b9d339f94b02ee5dd8d77be0`.
+- Publicado GitHub Release `v0.2.0-rc.2` como pre-release publico, com archive,
+  checksum, assinaturas, chave publica e fingerprint.
+- Confirmado que `v0.1.1` continua sendo a release stable/latest.
+- Rodada validacao publica de install contra `v0.2.0-rc.2` com sucesso.
+
+Arquivos principais:
+
+- `nexuslang-src/Cargo.toml`
+- `nexuslang-src/nexus-lsp/Cargo.toml`
+- `nexuslang-src/Cargo.lock`
+- `nexuslang-src/web/nexuslang_playground.wasm`
+- `README.md`
+- `VERSIONING.md`
+- `RELEASE.md`
+- `RELEASE_NOTES.md`
+- `GITHUB_RELEASE.md`
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+- `MEMORY.md`
+- `meta/ROADMAP.md`
+
+Verificacao executada:
+
+```bash
+cd <repo-root>
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check --workspace --all-targets
+git diff --check
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+./scripts/package-release.sh
+./scripts/validate-release-package.sh
+gh run watch 26595258834 -R vitaleevo/NEXUSLANG --exit-status --interval 10
+NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 ./scripts/release-dry-run-strict.sh --preflight-only
+NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 ./scripts/release-dry-run-strict.sh
+git tag -v v0.2.0-rc.2
+gh release view v0.2.0-rc.2 -R vitaleevo/NEXUSLANG --json tagName,isDraft,isPrerelease,publishedAt,url,targetCommitish,assets
+gh release view -R vitaleevo/NEXUSLANG --json tagName,isDraft,isPrerelease,publishedAt,url,targetCommitish
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.sh
+```
+
+Resultado:
+
+- Branch RC2: `codex/prepare-nexuslang-0.2.0-rc.2`.
+- Commit RC2: `5561a2484e7f5082b9d339f94b02ee5dd8d77be0`.
+- CI remoto RC2: `NexusLang Quality Gate` PASS (`run 26595258834`).
+- Strict preflight/dry-run: PASS, com assinatura por chave mantida e CI remoto
+  observado.
+- Tag `v0.2.0-rc.2`: assinada e verificada com a chave NexusLang.
+- Release publico: `https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0-rc.2`.
+- Release `v0.2.0-rc.2`: `isDraft=false`, `isPrerelease=true`.
+- Latest estavel: `v0.1.1`, `isPrerelease=false`.
+- Archive publico: `nexuslang-v0.2.0-rc.2-local-release.tar.gz`.
+- SHA-256: `8ed601c2751e86ca84c40cbbd0edec9b4f1266d3663299fd83e8b2b4912eea0b`.
+- Archive bytes: `1590587`.
+- WASM bytes: `479717`.
+- Public install validation: PASS, incluindo GPG, checksum, package smoke,
+  auth smoke, storage backup/restore, playground JS e asset HTTP.
+
+Estado do projeto:
+
+- Fase/trilha atual: RC2 publico pos-merge concluido; falta integrar a branch
+  RC2 de volta em `main` por PR/review.
+- Solido agora: artefato publico RC2 assinado, validado localmente, em segundo
+  ambiente, no CI remoto e via install publico.
+- Falta imediato: abrir/revisar PR da branch RC2, observar feedback
+  automatizado e decidir merge; depois planejar `0.2.0` estavel apenas se nao
+  houver bloqueadores.
+- Distancia do fim: a trilha RC pos-merge esta quase fechada; o produto
+  completo ainda nao esta 100/100 producao por registry remoto, hardening
+  SQLite/migracoes, LSP editorial completo, playground hospedado e aviso Node.js
+  20 nas Actions.
+
+## Proximo passo recomendado
+
+Fase 11.61 - PR/review/merge do RC2: abrir PR da branch
+`codex/prepare-nexuslang-0.2.0-rc.2`, observar CI/CodeRabbit, corrigir feedback
+se houver e decidir merge em `main`. So depois disso preparar plano controlado
+de `0.2.0` estavel.
+
+AVISO: O proximo passo e criar/implementar PR/review/merge do RC2 `v0.2.0-rc.2`. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e `meta/CURRENT_TASKS.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Historico: Fase 11.59 - PR #1 mergeado e validacao pos-merge verde
 
 Objetivo: decidir o merge do PR #1 com criterios objetivos, atualizar `main`,
 validar a linha pos-merge e manter clara a diferenca entre o RC publico
