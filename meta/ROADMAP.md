@@ -32,27 +32,26 @@ auth, invoices, money, storage, tooling e pequenos servicos de negocio.
 
 A release stable `v0.2.0` ja foi publicada com tag assinada, GitHub Release,
 assets assinados, checksum, strict public-release dry-run e validacao publica
-de install. A Fase 11.66 implementou o package registry remoto MVP read-only
-em branch controlada e abriu o PR #5. O foco imediato agora e review/merge
-desse PR e validacao pos-merge antes de abrir a proxima trilha de produto.
+de install. As Fases 11.66/11.67 implementaram, revisaram e mergearam o
+package registry remoto MVP read-only em `main` pelo PR #5. O foco imediato
+agora e SQLite/migracoes MVP, com introspeccao de schema, plano/dry-run e
+testes de compatibilidade antes de prometer persistencia forte de longo prazo.
 
 ## Trilhas proximas
 
-1. Review/merge do registry remoto MVP read-only: revisar PR #5, confirmar CI,
-   mergear em `main` e rodar validacao pos-merge do package manager.
-2. SQLite/migracoes: desenhar introspeccao de schema, dry-run e migracoes sem
+1. SQLite/migracoes: desenhar introspeccao de schema, dry-run e migracoes sem
    quebrar dados persistidos.
-3. Registry hardening posterior: avaliar HTTPS, assinaturas, dependencias
+2. Registry hardening posterior: avaliar HTTPS, assinaturas, dependencias
    transitivas, publish/auth e solver em fases separadas.
-4. LSP/editor tooling: adicionar workspace symbols, formatting, rename ou code
+3. LSP/editor tooling: adicionar workspace symbols, formatting, rename ou code
    actions apenas em fases separadas.
-5. Diagnostics/tooling API: preservar JSON v1 enquanto melhora APIs internas
+4. Diagnostics/tooling API: preservar JSON v1 enquanto melhora APIs internas
    para consumidores de editor.
-6. HIR/checker: continuar migracoes pequenas para contratos HIR tipados,
+5. HIR/checker: continuar migracoes pequenas para contratos HIR tipados,
    mantendo compatibilidade de mensagens.
-7. Playground/docs: demonstrar apenas recursos suportados e manter exemplos
+6. Playground/docs: demonstrar apenas recursos suportados e manter exemplos
    executaveis.
-8. Release hardening: smoke tests, contratos publicos, instalacao e artefatos
+7. Release hardening: smoke tests, contratos publicos, instalacao e artefatos
    assinados.
 
 ## Nao objetivos atuais

@@ -4,7 +4,100 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-28 (Fase 11.66 - registry remoto MVP read-only)
+Ultima atualizacao: 2026-05-28 (Fase 11.67 - review/merge do PR #5)
+
+## Etapa concluida: Fase 11.67 - review/merge do PR #5
+
+Objetivo: revisar e mergear o PR #5 do registry remoto MVP read-only com CI
+verde, corrigindo feedback acionavel antes do merge e validando o package
+manager em `main` antes de iniciar SQLite/migracoes ou outra trilha.
+
+Foi feito:
+
+- Revisado o PR #5:
+  `https://github.com/vitaleevo/NEXUSLANG/pull/5`.
+- Confirmado que o feedback acionavel era sobre timeouts no cliente HTTP do
+  registry em `fetch_http_url`.
+- Corrigido o cliente HTTP do registry para usar resolucao de socket,
+  `TcpStream::connect_timeout`, timeout de leitura e timeout de escrita.
+- Mantida a tentativa sobre todos os enderecos resolvidos antes de falhar a
+  conexao.
+- Clarificado em `PACKAGE_MANAGER.md` que `sha256` em
+  `nexus-package.toml` e opcional e, quando presente, e verificado antes da
+  extracao.
+- Commit de correcao no PR: `f6d3a2c fix(package): add registry HTTP timeouts`.
+- Revalidado o PR #5 apos push: duas jobs `quality` PASS e CodeRabbit PASS.
+- Mergeado o PR #5 em `main` com merge commit
+  `637065994c04cc211a00297b6ea64d7c75be6bf7`.
+- Atualizada a `main` local para `6370659`.
+- Rodada validacao pos-merge focada do package manager.
+- Rodado quality gate completo em `main`.
+- Observado CI remoto da `main` verde no run `26603041120`.
+
+Arquivos principais:
+
+- `nexuslang-src/src/package_manager.rs`
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/tests/cli_package_manager.rs`
+- `PACKAGE_MANAGER.md`
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+- `meta/POST_RELEASE_0_2_0_TRIAGE.md`
+- `meta/ROADMAP.md`
+
+Verificacao executada:
+
+```bash
+cd <repo-root>/nexuslang-src
+CARGO_TARGET_DIR=/tmp/nexuslang-target-registry cargo test -p nexuslang --test cli_package_manager -- --nocapture
+CARGO_TARGET_DIR=/tmp/nexuslang-target-registry cargo clippy --workspace --all-targets -- -D warnings
+
+cd <repo-root>
+git diff --check
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+git push origin codex/package-registry-readonly-mvp
+gh pr checks 5 -R vitaleevo/NEXUSLANG --watch --interval 10 --fail-fast
+gh pr merge 5 -R vitaleevo/NEXUSLANG --merge --match-head-commit f6d3a2cfd02a3106aa059e1cad9ffa32f416d6df
+git fetch origin main
+git switch main
+git pull --ff-only origin main
+
+cd <repo-root>/nexuslang-src
+CARGO_TARGET_DIR=/tmp/nexuslang-target-registry-main cargo test -p nexuslang --test cli_package_manager -- --nocapture
+
+cd <repo-root>
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+gh run watch 26603041120 -R vitaleevo/NEXUSLANG --interval 10 --exit-status
+```
+
+Resultado:
+
+- PR #5: MERGED.
+- Merge commit: `637065994c04cc211a00297b6ea64d7c75be6bf7`.
+- Testes focados do package manager pos-merge: PASS, 12/12.
+- Quality gate local em `main`: PASS.
+- CI remoto da `main`: PASS, run `26603041120`.
+- O registry remoto read-only MVP agora esta integrado em `main`.
+
+Estado atual:
+
+- Fase/trilha atual: registry remoto read-only MVP concluido e mergeado.
+- Solido agora: contrato de registry, `NEXUS_REGISTRY_URL`, download/cache de
+  `.tar`, checksum opcional, extracao segura, lockfile e imports via cache
+  estao cobertos por testes e CI.
+- Falta imediato: iniciar SQLite/migracoes como proxima trilha de produto, sem
+  alterar assets da release `v0.2.0`.
+- Limites conhecidos do registry: ainda sem HTTPS, assinaturas de pacote,
+  auth/publish, dependencias transitivas e solver semantico completo.
+
+## Proximo passo recomendado
+
+Fase 11.68 - SQLite/migracoes MVP: desenhar e implementar o primeiro fluxo
+controlado de schema/migracoes para storage, com introspeccao, plano/dry-run,
+testes de compatibilidade JSON/SQLite e protecoes para nao quebrar dados
+existentes.
+
+AVISO: O proximo passo e criar/implementar Fase 11.68 - SQLite/migracoes MVP com introspeccao de schema, plano/dry-run de migracoes e testes de compatibilidade entre JSON/SQLite, sem alterar dados existentes nem prometer ORM completo. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, `meta/CURRENT_TASKS.md`, `meta/POST_RELEASE_0_2_0_TRIAGE.md`, `nexuslang-src/src/server/sqlite.rs`, `nexuslang-src/src/server/storage_backend.rs` e `nexuslang-src/tests/core.rs` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
 
 ## Etapa concluida: Fase 11.66 - registry remoto MVP read-only
 

@@ -5,15 +5,18 @@ repositorio.
 
 ## Status atual
 
-Fase 11.66 concluida em 2026-05-28 na branch
-`codex/package-registry-readonly-mvp`: o package manager agora tem registry
-read-only MVP por `NEXUS_REGISTRY_URL`, com metadata `nexus-package.toml`,
-download/leitura de archive `.tar`, SHA-256 opcional, extracao segura, cache em
-`.nexus/packages/<pacote>`, lockfile com checksum/resolved_path e imports de
-registry dependencies instaladas. Sem `NEXUS_REGISTRY_URL`, o comportamento
-contrato/marker anterior continua. Ainda nao foram adicionados publish, auth,
-solver semantico completo, dependencias transitivas, HTTPS ou registry central.
-PR #5 esta aberto em `https://github.com/vitaleevo/NEXUSLANG/pull/5`.
+Fase 11.67 concluida em 2026-05-28: o PR #5 do registry remoto MVP read-only
+foi revisado, recebeu correcao de timeouts HTTP no cliente de registry, teve CI
+verde e foi mergeado em `main` pelo merge commit
+`637065994c04cc211a00297b6ea64d7c75be6bf7`. O package manager agora tem
+registry read-only MVP integrado em `main` por `NEXUS_REGISTRY_URL`, com
+metadata `nexus-package.toml`, download/leitura de archive `.tar`, SHA-256
+opcional, extracao segura, cache em `.nexus/packages/<pacote>`, lockfile com
+checksum/resolved_path e imports de registry dependencies instaladas. Sem
+`NEXUS_REGISTRY_URL`, o comportamento contrato/marker anterior continua. Ainda
+nao foram adicionados publish, auth, solver semantico completo, dependencias
+transitivas, HTTPS ou registry central. Proxima trilha recomendada:
+SQLite/migracoes MVP.
 
 ## Tarefas concluidas
 
@@ -138,6 +141,21 @@ PR #5 esta aberto em `https://github.com/vitaleevo/NEXUSLANG/pull/5`.
 - [x] Atualizar `PACKAGE_MANAGER.md`, roadmaps, memoria e tarefas atuais.
 - [x] Criar PR #5 para review:
   `https://github.com/vitaleevo/NEXUSLANG/pull/5`.
+- [x] Revisar PR #5, checks e feedback automatizado.
+- [x] Corrigir feedback acionavel do CodeRabbit sobre timeouts HTTP no
+  registry client.
+- [x] Clarificar em `PACKAGE_MANAGER.md` que `sha256` e opcional e verificado
+  quando presente.
+- [x] Rodar testes focados do package manager e clippy workspace apos a
+  correcao.
+- [x] Rodar `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh` no HEAD do PR.
+- [x] Pushar commit `f6d3a2c fix(package): add registry HTTP timeouts`.
+- [x] Observar PR #5 com duas jobs `quality` PASS e CodeRabbit PASS.
+- [x] Mergear PR #5 em `main` com match-head commit.
+- [x] Atualizar `main` local para merge commit `6370659`.
+- [x] Rodar validacao pos-merge focada do package manager: 12/12 PASS.
+- [x] Rodar quality gate completo em `main`: PASS.
+- [x] Observar CI remoto da `main` verde no run `26603041120`.
 
 ## Validacao executada
 
@@ -256,6 +274,19 @@ cargo fmt
 CARGO_TARGET_DIR=/tmp/nexuslang-target-registry cargo test -p nexuslang --test cli_package_manager -- --nocapture
 CARGO_TARGET_DIR=/tmp/nexuslang-target-registry cargo check --workspace --all-targets
 CARGO_TARGET_DIR=/tmp/nexuslang-target-registry cargo clippy --workspace --all-targets -- -D warnings
+git diff --check
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+git push origin codex/package-registry-readonly-mvp
+gh pr checks 5 -R vitaleevo/NEXUSLANG --watch --interval 10 --fail-fast
+gh pr merge 5 -R vitaleevo/NEXUSLANG --merge --match-head-commit f6d3a2cfd02a3106aa059e1cad9ffa32f416d6df
+git fetch origin main
+git switch main
+git pull --ff-only origin main
+cd <repo-root>/nexuslang-src
+CARGO_TARGET_DIR=/tmp/nexuslang-target-registry-main cargo test -p nexuslang --test cli_package_manager -- --nocapture
+cd <repo-root>
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+gh run watch 26603041120 -R vitaleevo/NEXUSLANG --interval 10 --exit-status
 ```
 
 Resultado: PASS para LSP, quality gate, package-release, validate-release-package,
@@ -300,23 +331,27 @@ clippy tambem passaram. A proxima trilha escolhida e package registry remoto
 MVP read-only. Na Fase 11.66, o registry read-only foi implementado em branch
 controlada com metadata, `.tar`, checksum, extracao segura, lockfile, cache e
 imports instalados. Os testes focados do package manager passaram 12/12,
-incluindo registry HTTP simples e falhas de seguranca.
+incluindo registry HTTP simples e falhas de seguranca. Na Fase 11.67, o
+feedback acionavel do PR #5 foi corrigido com timeouts de conexao, leitura e
+escrita no cliente HTTP do registry, o campo `sha256` foi documentado como
+opcional, o PR #5 passou nos checks remotos, foi mergeado em `main` por
+`637065994c04cc211a00297b6ea64d7c75be6bf7`, e a validacao pos-merge passou:
+package manager 12/12, quality gate local PASS e CI remoto `26603041120` PASS.
 
 ## Proxima fase recomendada
 
-Fase 11.67: review/merge do PR #5 do registry remoto MVP read-only. Revisar
-feedback automatizado, confirmar CI, mergear em `main` apenas com checks verdes
-e rodar validacao pos-merge focada no package manager.
+Fase 11.68: SQLite/migracoes MVP. Desenhar e implementar introspeccao de
+schema, plano/dry-run de migracoes e testes de compatibilidade JSON/SQLite sem
+alterar dados existentes nem prometer ORM completo.
 
 ## Arquivos para abrir primeiro na proxima fase
 
 - `MEMORIA_NEXUSLANG.md`
 - `meta/CURRENT_TASKS.md`
-- `PACKAGE_MANAGER.md`
-- `nexuslang-src/src/package_manager.rs`
-- `nexuslang-src/src/module_loader.rs`
-- `nexuslang-src/tests/cli_package_manager.rs`
-- PR #5 `https://github.com/vitaleevo/NEXUSLANG/pull/5`
+- `meta/POST_RELEASE_0_2_0_TRIAGE.md`
+- `nexuslang-src/src/server/sqlite.rs`
+- `nexuslang-src/src/server/storage_backend.rs`
+- `nexuslang-src/tests/core.rs`
 
 ## Riscos de compatibilidade
 
@@ -324,5 +359,8 @@ e rodar validacao pos-merge focada no package manager.
   substituir assets sem novo gate explicito.
 - Extracao de archives deve bloquear path traversal e validar checksums quando
   o metadata fornecer hash.
-- Registry read-only atual nao tem HTTPS, assinatura de pacote, publish, auth,
-  dependencias transitivas nem solver semantico completo.
+- Registry read-only atual esta em `main`, mas ainda nao tem HTTPS, assinatura
+  de pacote, publish, auth, dependencias transitivas nem solver semantico
+  completo.
+- SQLite/migracoes deve priorizar plano/dry-run e compatibilidade de dados
+  antes de expor qualquer promessa de producao persistente ampla.

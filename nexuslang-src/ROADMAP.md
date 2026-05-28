@@ -398,8 +398,8 @@ evaluation, demos, and QA, with public artifact checksum/signature verification
 in place. The next work should reduce real user friction and narrow
 compatibility risk before adding broad new language surface.
 
-Current source line: post-`v0.1.1` local development, with Package Manager MVP
-changes present locally but not included in the published `v0.1.1` tag.
+Current source line: post-`v0.2.0` stable development, with the read-only
+registry MVP merged on `main` after PR #5.
 
 ### 0.1.1 maintenance focus
 
@@ -427,7 +427,11 @@ changes present locally but not included in the published `v0.1.1` tag.
   `nexus update`, generated local `.nexus/packages/` cache, and CLI tests.
 - Harden the package-manager MVP with local path dependencies, stronger
   `nexus.toml` validation, safe stale-cache cleanup, and an initial registry
-  declaration contract. DONE locally; needs commit/push and CI observation.
+  declaration contract. DONE.
+- Add a read-only remote registry MVP for package installs. DONE in PR #5 with
+  `NEXUS_REGISTRY_URL`, `nexus-package.toml`, `.tar` download/cache, optional
+  SHA-256 verification, safe extraction, lockfile metadata, and package-name
+  imports from the installed cache.
 - Wire the graph-aware module loader into user-facing `nexus check`,
   `nexus run`, and `nexus serve`. DONE locally, including CLI regression tests
   for the real multi-module ERP example and `std/math`.
@@ -445,10 +449,9 @@ Real risks to retire in `0.1.1`:
 - The first package is still local-platform oriented; there are no Windows or
   macOS installers yet.
 - The language package manager is still MVP-level: local `path:` dependencies
-  now feed the module graph, and registry declarations are supported as
-  metadata, but no remote downloads, semantic version solver, package
-  publishing, transitive dependency resolution, or dependency
-  signature/checksum verification exists yet.
+  and read-only registry downloads now feed the module graph, but there is
+  still no HTTPS requirement, semantic version solver, package publishing,
+  auth, transitive dependency resolution, or package signature verification.
 - JSON/SQLite persistence works for the supported QA flows, but migrations and
   long-term schema compatibility are limited to the documented `0.1.x` policy:
   additive optional/defaulted fields are supported, while renames, removals,
@@ -469,8 +472,9 @@ Real risks to retire in `0.1.1`:
 
 - Choose one durable ERP vertical slice, such as inventory plus billing or CRM
   plus orders, and make it excellent end to end.
-- Decide whether storage migrations, physical indexes, and a stable SQLite
-  contract are required before larger runtime features.
+- Implement the first SQLite/migrations MVP with schema introspection,
+  migration plan/dry-run, and JSON/SQLite compatibility tests before larger
+  runtime features.
 - Decide whether docs generation belongs in the CLI as a first-class command
   before expanding documentation UI in the playground.
 - Improve runtime diagnostics with structured locations where feasible, so

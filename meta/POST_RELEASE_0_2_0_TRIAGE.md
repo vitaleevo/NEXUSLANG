@@ -28,17 +28,17 @@ Release: https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0
 | CLI | 90% | `run`, `check`, `tokens`, `ast`, `docs`, `test`, package commands e flows de release funcionais. Falta polir UX de pacotes remotos e comandos editoriais. |
 | Runtime HTTP/ERP | 82% | Rotas, models, auth, storage, OpenAPI e smokes estao verdes. SQLite fisico ainda precisa plano de schema/migracoes antes de producao forte com dados persistentes. |
 | LSP/editor | 68% | Diagnostics multi-file, go-to-definition cross-file, semantic tokens e document symbols MVP existem. Ainda faltam rename, formatting, workspace symbols e code actions. |
-| Package/release | 88% | Stable `v0.2.0`, tag assinada, assets assinados, checksum, strict dry-run e install publico passaram. O package manager ainda nao baixa pacotes remotos. |
-| Producao real | 72% | Distribuicao publica esta forte; faltam registry remoto, SQLite/migracoes e hardening operacional para uso de longo prazo. |
+| Package/release | 91% | Stable `v0.2.0`, tag assinada, assets assinados, checksum, strict dry-run e install publico passaram. O package manager agora baixa pacotes de registry read-only configurado. |
+| Producao real | 75% | Distribuicao publica e package install remoto MVP estao fortes; faltam SQLite/migracoes e hardening operacional para uso de longo prazo. |
 | Playground/public demo | 70% | WASM empacotado e validado, mas o playground ainda nao esta hospedado como experiencia publica continua. |
-| Ecossistema/registry | 35% | Manifest/lockfile ja aceitam contrato `registry:<pkg>@<versao>`, mas nao ha download, cache remoto, checksum por dependencia ou publish. |
+| Ecossistema/registry | 60% | Registry read-only MVP esta em `main` com metadata, download/cache, checksum opcional, extracao segura e imports instalados. Ainda nao ha HTTPS, publish/auth, assinaturas, transitivas ou solver completo. |
 
 ## Trilhas candidatas
 
 | Trilha | Valor | Risco | Decisao |
 | --- | --- | --- | --- |
-| Registry remoto MVP read-only | Alto | Medio | Escolhida para a proxima fase porque fecha a maior lacuna pos-stable: distribuicao de pacotes alem de `path:` local. |
-| SQLite/migracoes | Alto | Medio/Alto | Proxima candidata depois do registry MVP; precisa design de schema, introspeccao e migracoes sem quebrar dados. |
+| Registry remoto MVP read-only | Alto | Medio | Concluida nas Fases 11.66/11.67 e mergeada em `main` pelo PR #5. |
+| SQLite/migracoes | Alto | Medio/Alto | Escolhida para Fase 11.68; precisa design de schema, introspeccao e migracoes sem quebrar dados. |
 | LSP editorial | Medio/Alto | Medio | Bom ganho de DX, mas menos critico que permitir consumo de pacotes remotos depois da stable. |
 | Playground hospedado | Medio | Baixo/Medio | Importante para demonstracao publica, mas depende mais de infraestrutura do que do core do produto. |
 
@@ -84,8 +84,8 @@ Nao incluir nesta fase:
 
 ## Proximo aviso
 
-Fase 11.66 foi implementada na branch `codex/package-registry-readonly-mvp`
-e publicada no PR #5: `https://github.com/vitaleevo/NEXUSLANG/pull/5`.
-O proximo passo operacional passou a ser review/merge controlado desse PR.
+Fases 11.66/11.67 concluiram o registry remoto MVP read-only e o PR #5 foi
+mergeado em `main` pelo commit `637065994c04cc211a00297b6ea64d7c75be6bf7`.
+O proximo passo operacional passou a ser SQLite/migracoes MVP.
 
-AVISO: O proximo passo e criar/implementar Fase 11.67 - review/merge do PR #5 do registry remoto MVP read-only, com CI verde e validacao pos-merge do package manager antes de iniciar SQLite/migracoes ou outra trilha. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, `meta/CURRENT_TASKS.md`, `PACKAGE_MANAGER.md` e o PR #5 `https://github.com/vitaleevo/NEXUSLANG/pull/5` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+AVISO: O proximo passo e criar/implementar Fase 11.68 - SQLite/migracoes MVP com introspeccao de schema, plano/dry-run de migracoes e testes de compatibilidade entre JSON/SQLite, sem alterar dados existentes nem prometer ORM completo. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, `meta/CURRENT_TASKS.md`, `meta/POST_RELEASE_0_2_0_TRIAGE.md`, `nexuslang-src/src/server/sqlite.rs`, `nexuslang-src/src/server/storage_backend.rs` e `nexuslang-src/tests/core.rs` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
