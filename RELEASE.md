@@ -6,9 +6,8 @@ It is intentionally small: the source of truth is still the automated gate.
 ## Current readiness
 
 - Local stable target: `0.2.0`.
-- Stable branch status: PR #4 merged; stable tag/release publication is gated
-  by package validation, pushed-head CI, strict public-release dry-run, and
-  post-release public install validation.
+- Stable release status: `v0.2.0` published and public install validation
+  passed.
 - Previous public RC status: `v0.2.0-rc.2` published as a pre-release and public
   install validation passed.
 - Stable `0.2.0` decision on 2026-05-28: promote only through this controlled
@@ -20,7 +19,7 @@ It is intentionally small: the source of truth is still the automated gate.
 - Real production readiness for the 0.1.1 release scope: public release
   published and post-release install validated
 - Overall project score after the latest completed release phase: 100/100
-- Public GitHub Release v0.2.0: stable publication target for this release line
+- Public GitHub Release v0.2.0: published and public install validated
 - Public GitHub Release v0.1.1: previous stable, published and post-release
   install validated
 - Public GitHub pre-release v0.2.0-rc.2: published and public install validated
@@ -196,12 +195,16 @@ NEXUS_PUBLIC_RELEASE_TAG=v0.2.0 ./scripts/validate-public-release-install.sh
 - [x] GitHub Actions workflow is moved to Node 24 compatible first-party action
   refs pinned by commit SHA for pre-stable hardening.
 - [x] Stable `0.2.0` source version is prepared on a dedicated release branch.
-- [ ] Stable `v0.2.0` tag and GitHub Release are published.
-- [ ] Public GitHub stable install validation passes for `v0.2.0`.
+- [x] Stable `v0.2.0` tag and GitHub Release are published.
+- [x] Public GitHub stable install validation passes for `v0.2.0`.
 
 ### Published release
 
-- [x] `v0.1.1` source tag is the latest stable published release target.
+- [x] `v0.2.0` source tag is the latest stable published release target.
+- [x] GitHub Release `v0.2.0` is published with signed archive, checksum,
+  signatures, public key, and fingerprint.
+- [x] Public GitHub Release install validation passes for `v0.2.0`.
+- [x] `v0.1.1` source tag is the previous stable published release target.
 - [x] GitHub Release `v0.1.1` is published with signed archive, checksum,
   signatures, public key, and fingerprint.
 - [x] Public GitHub Release install validation passes for `v0.1.1`.

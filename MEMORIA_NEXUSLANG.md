@@ -4,9 +4,107 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-28 (Fase 11.63 - branch stable 0.2.0 preparada)
+Ultima atualizacao: 2026-05-28 (Fase 11.64 - stable v0.2.0 publicado)
 
-## Etapa concluida: Fase 11.63 - branch stable 0.2.0 preparada
+## Etapa concluida: Fase 11.64 - stable v0.2.0 publicado
+
+Objetivo: revisar/mergear PR #4, criar tag assinada `v0.2.0`, publicar a
+GitHub Release stable com assets assinados e validar a instalacao publica
+pos-release.
+
+Foi feito:
+
+- PR #4 `https://github.com/vitaleevo/NEXUSLANG/pull/4` revisado com checks
+  verdes e CodeRabbit sem comentarios acionaveis.
+- PR #4 mergeado em `main` por
+  `f6d9431e0b354917ecdfa4e9db6ed8b9a250c258`.
+- Docs publicos finais ajustados em `main` para apontar `v0.2.0` como stable.
+- Quality gate local e CI remoto passaram no commit final
+  `a05bb74a663a4e2e7cc18dd4de7adb25e3f1faeb`.
+- Strict public-release dry-run passou no commit final com a chave mantida
+  `3237F7CC5CE2514FC9671BB93CB6808B55385273`.
+- Criada e verificada a tag assinada `v0.2.0`.
+- Publicada a GitHub Release stable `v0.2.0`:
+  `https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0`.
+- Anexados archive, checksum, assinaturas, chave publica e fingerprint.
+- Rodada validacao publica de install contra `v0.2.0` com sucesso.
+
+Arquivos principais:
+
+- `README.md`
+- `RELEASE.md`
+- `RELEASE_NOTES.md`
+- `VERSIONING.md`
+- `GITHUB_RELEASE.md`
+- `meta/ROADMAP.md`
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+
+Verificacao executada:
+
+```bash
+cd <repo-root>
+gh pr view 4 -R vitaleevo/NEXUSLANG --json ...
+gh pr merge 4 -R vitaleevo/NEXUSLANG --merge --match-head-commit dff25c11e4298ce45b5d4b6ccfa157a640aa8229
+git fetch origin main
+git switch main
+git pull --ff-only origin main
+git diff --check
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+git push origin main
+gh run watch 26600083912 -R vitaleevo/NEXUSLANG --exit-status --interval 10
+NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 ./scripts/release-dry-run-strict.sh
+git tag -u 3CB6808B55385273 -m NexusLang-0.2.0 v0.2.0 HEAD
+git tag -v v0.2.0
+git push origin refs/tags/v0.2.0
+gh release create v0.2.0 -R vitaleevo/NEXUSLANG --title 'NexusLang 0.2.0' --notes-file RELEASE_NOTES.md --latest --verify-tag ...
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0 ./scripts/validate-public-release-install.sh
+gh release view v0.2.0 -R vitaleevo/NEXUSLANG --json ...
+```
+
+Resultado:
+
+- PR #4: `MERGED`.
+- Merge commit: `f6d9431e0b354917ecdfa4e9db6ed8b9a250c258`.
+- Commit final tagueado: `a05bb74a663a4e2e7cc18dd4de7adb25e3f1faeb`.
+- CI remoto do commit final: PASS (`run 26600083912`).
+- Strict public-release dry-run: PASS.
+- Tag `v0.2.0`: assinada e verificada.
+- GitHub Release `v0.2.0`: publicada como stable, nao pre-release, nao draft.
+- Archive publico validado: `nexuslang-v0.2.0-local-release.tar.gz`.
+- SHA-256: `7979dc7ad2e24b81c0bf8bb126bebb8147a6feb289b234ee5c5b038b4d238950`.
+- Archive bytes: 1595212.
+- WASM bytes: 479716.
+- Public install validation: PASS.
+
+Estado atual:
+
+- `v0.2.0` e a stable/latest publicada.
+- `v0.1.1` passa a ser a stable anterior.
+- `v0.2.0-rc.2` continua disponivel como pre-release historico.
+- A release `0.2.0` esta fechada no nivel de publicacao/instalacao.
+
+Estado do projeto:
+
+- Fase/trilha atual: release stable `0.2.0` concluida.
+- Solido agora: tag assinada, release publica, assets assinados, checksum,
+  CI, strict dry-run e install publico estao verdes.
+- Falta imediato: fazer triagem pos-release curta e decidir a proxima trilha
+  de produto: registry remoto, schema/migracoes SQLite, LSP editorial ou
+  playground hospedado.
+- Distancia do fim: a trilha `0.2.0` esta concluida; o produto completo ainda
+  nao esta 100/100 producao por causa dos limites conhecidos acima.
+
+## Proximo passo recomendado
+
+Fase 11.65 - triagem pos-release `0.2.0` e escolha da proxima trilha:
+confirmar links/downloads, revisar issues/feedback, atualizar diagnostico de
+progresso e escolher entre registry remoto, SQLite/migracoes, LSP editorial ou
+playground hospedado.
+
+AVISO: O proximo passo e criar/implementar triagem pos-release `0.2.0` e escolha da proxima trilha de produto entre registry remoto, SQLite/migracoes, LSP editorial ou playground hospedado. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e `meta/CURRENT_TASKS.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Historico: Fase 11.63 - branch stable 0.2.0 preparada
 
 Objetivo: criar a branch controlada de stable `0.2.0`, trocar a versao fonte
 de `0.2.0-rc.2` para `0.2.0`, atualizar release notes/docs finais, validar
@@ -98,7 +196,7 @@ Estado do projeto:
   produto completo ainda tem riscos conhecidos em registry remoto, SQLite
   fisico/migracoes, LSP editorial e playground hospedado.
 
-## Proximo passo recomendado
+### Historico - proximo passo recomendado na Fase 11.63
 
 Fase 11.64 - review/merge e publicacao controlada do stable `v0.2.0`: revisar
 PR #4, mergear somente se checks e review estiverem verdes, criar tag assinada

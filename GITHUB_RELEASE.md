@@ -204,3 +204,30 @@ After publication, run:
 ```bash
 NEXUS_PUBLIC_RELEASE_TAG=v0.2.0 ./scripts/validate-public-release-install.sh
 ```
+
+The stable `v0.2.0` release was published at:
+
+```text
+https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0
+```
+
+Published stable assets include:
+
+- `nexuslang-v0.2.0-local-release.tar.gz`
+- `nexuslang-v0.2.0-local-release.tar.gz.sha256`
+- `nexuslang-v0.2.0-local-release.tar.gz.asc`
+- `nexuslang-v0.2.0-local-release.tar.gz.sha256.asc`
+- `nexuslang-release-public-key.asc`
+- `nexuslang-release-signing-key.fingerprint`
+
+The validated public archive SHA-256 is:
+
+```text
+7979dc7ad2e24b81c0bf8bb126bebb8147a6feb289b234ee5c5b038b4d238950
+```
+
+Public stable validation command:
+
+```bash
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0 ./scripts/validate-public-release-install.sh
+```
