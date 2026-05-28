@@ -5,6 +5,22 @@ the short English-named memory requested for architecture decisions.
 
 Last updated: 2026-05-28
 
+## 2026-05-28 - PR #1 merged; post-merge validation passed
+
+- PR #1 is merged into `main` with merge commit
+  `bcedf2c feat(release): prepare NexusLang 0.2.0-rc.1`.
+- Local `main` is synchronized with `origin/main` at
+  `bcedf2c1d8ef37c4afdf014a99e79fa8d8757e64` and the worktree is clean.
+- Post-merge validation passed on `main`:
+  `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`.
+- Public install validation for historical pre-release `v0.2.0-rc.1` also
+  passed:
+  `NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh`.
+- Release state remains intentional: `v0.2.0-rc.1` is public pre-release, while
+  `v0.1.1` is still the stable/latest release. The next release artifact should
+  be `v0.2.0-rc.2` or an explicitly approved stable `0.2.0` plan from
+  post-merge `main`.
+
 ## 2026-05-28 - PR post-feedback CI passed; RC status clarified
 
 - Commit `38b64e6 fix(rc): address automated review feedback` is on

@@ -5,12 +5,12 @@ repositorio.
 
 ## Status atual
 
-Fase 11.58 concluida em 2026-05-28: as correcoes pos-feedback foram commitadas
-e pushadas, o PR #1 esta fora de draft, aberto, mergeable e com CI/CodeRabbit
-verdes no head pos-feedback. O unico comentario novo foi documental em
-`meta/ROADMAP.md` e foi corrigido nesta fase. Nenhum merge foi feito; `v0.1.1`
-continua sendo a linha estavel/latest, e o `v0.2.0-rc.1` publico nao representa
-as correcoes pos-publicacao do PR.
+Fase 11.59 concluida em 2026-05-28: o PR #1 foi mergeado em `main` pelo merge
+commit `bcedf2c feat(release): prepare NexusLang 0.2.0-rc.1`, o `main` local
+foi atualizado por fast-forward e o gate completo pos-merge passou com clippy
+estrito. A validacao publica de install do `v0.2.0-rc.1` tambem passou, mas esse
+pre-release continua historico e anterior as correcoes pos-publicacao; `v0.1.1`
+segue como release stable/latest.
 
 ## Tarefas concluidas
 
@@ -51,6 +51,14 @@ as correcoes pos-publicacao do PR.
   CodeRabbit PASS.
 - [x] Corrigir comentario documental residual do CodeRabbit em
   `meta/ROADMAP.md`, separando o RC publico historico do head atual do PR.
+- [x] Reconfirmar checks finais do PR #1 no head `a8ee64a`.
+- [x] Confirmar que threads ainda abertos eram antigos/`isOutdated=true` e sem
+  review bloqueante atual.
+- [x] Mergear PR #1 em `main`.
+- [x] Atualizar `main` local para `bcedf2c`.
+- [x] Rodar `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh` em `main`.
+- [x] Rodar `NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh`.
+- [x] Confirmar `v0.2.0-rc.1` como pre-release publico e `v0.1.1` como stable/latest.
 
 ## Validacao executada
 
@@ -90,6 +98,14 @@ CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo clippy --workspace --all-targ
 CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test --workspace --all-targets
 gh pr checks 1 -R vitaleevo/NEXUSLANG --watch --interval 10 --fail-fast
 gh pr view 1 -R vitaleevo/NEXUSLANG --json number,title,state,isDraft,url,headRefOid,mergeable,reviewDecision,statusCheckRollup,latestReviews,comments
+gh pr view 1 -R vitaleevo/NEXUSLANG --json number,state,mergedAt,mergeCommit,url,title
+git fetch origin main
+git switch main
+git pull --ff-only origin main
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh
+gh release view v0.2.0-rc.1 -R vitaleevo/NEXUSLANG --json tagName,isDraft,isPrerelease,publishedAt,url,targetCommitish
+gh release view -R vitaleevo/NEXUSLANG --json tagName,isDraft,isPrerelease,publishedAt,url,targetCommitish
 ```
 
 Resultado: PASS para LSP, quality gate, package-release, validate-release-package,
@@ -104,14 +120,18 @@ publica e fingerprint como assets. O archive publico validado tem SHA-256
 `nexus-lsp` 25/25, `core.rs` 266/266, lib 78/78, quality gate completo PASS,
 Clippy workspace PASS e `cargo test --workspace --all-targets` PASS. CI remoto
 pos-feedback PASS; CodeRabbit PASS com um comentario documental corrigido em
-`meta/ROADMAP.md`.
+`meta/ROADMAP.md`. Pos-merge, PR #1 esta `MERGED`, `main` esta em
+`bcedf2c1d8ef37c4afdf014a99e79fa8d8757e64`, o quality gate completo passou de
+novo em `main`, a validacao publica de install do `v0.2.0-rc.1` passou, o
+pre-release segue `isDraft=false`/`isPrerelease=true`, e a release latest
+estavel continua `v0.1.1`.
 
 ## Proxima fase recomendada
 
-Fase 11.59: decisao de merge e novo RC/pos-merge. Observar checks finais do PR
-#1 apos a clarificacao documental de `meta/ROADMAP.md`, decidir merge com
-criterios objetivos e preparar `v0.2.0-rc.2` ou validacao pos-merge antes de
-qualquer `0.2.0` estavel.
+Fase 11.60: novo RC pos-merge ou plano controlado de `0.2.0` estavel. A opcao
+mais segura e publicar `v0.2.0-rc.2` a partir do `main` validado em `bcedf2c`,
+com strict release preflight/dry-run, assinatura, assets e validacao publica,
+antes de promover qualquer `0.2.0` estavel.
 
 ## Arquivos para abrir primeiro na proxima fase
 
@@ -119,14 +139,15 @@ qualquer `0.2.0` estavel.
 - `meta/CURRENT_TASKS.md`
 - `RELEASE_NOTES.md`
 - `GITHUB_RELEASE.md`
-- PR `https://github.com/vitaleevo/NEXUSLANG/pull/1`
+- `scripts/release-dry-run-strict.sh`
+- Release publico `https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0-rc.1`
 
 ## Riscos de compatibilidade
 
 - Nao promover para release estavel; este alvo continua RC/pre-release.
 - Nao prometer registry remoto real enquanto `PACKAGE_MANAGER.md` ainda o
   define como contrato futuro.
-- O PR saiu de draft, mas ainda precisa de CI/CodeRabbit no novo head apos
-  push antes de qualquer merge/main/`0.2.0` estavel.
+- O PR #1 ja foi mergeado; a distribuicao publica das correcoes pos-merge ainda
+  precisa de novo RC/tag ou plano explicito de stable.
 - GitHub Actions avisou sobre futura migracao de actions Node.js 20 para
   Node.js 24; isso nao bloqueou o RC, mas deve entrar no hardening de CI.

@@ -4,7 +4,85 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-28 (Fase 11.58 - PR pos-feedback com CI verde e release status clarificado)
+Ultima atualizacao: 2026-05-28 (Fase 11.59 - PR #1 mergeado e validacao pos-merge verde)
+
+## Etapa concluida: Fase 11.59 - PR #1 mergeado e validacao pos-merge verde
+
+Objetivo: decidir o merge do PR #1 com criterios objetivos, atualizar `main`,
+validar a linha pos-merge e manter clara a diferenca entre o RC publico
+historico `v0.2.0-rc.1` e o head atual de `main`.
+
+Foi feito:
+
+- Reconfirmado que o PR #1 estava aberto, fora de draft, `MERGEABLE` e com duas
+  jobs remotas `quality` em `SUCCESS` no head
+  `a8ee64a1cfe3f229f48435b827b5682f2c6623a4`.
+- Conferidos review threads via GitHub GraphQL; os threads ainda abertos eram
+  antigos e `isOutdated=true`, sem `CHANGES_REQUESTED` nem bloqueador atual.
+- Mergeado o PR #1 em `main` com merge commit convencional:
+  `bcedf2c feat(release): prepare NexusLang 0.2.0-rc.1`.
+- Atualizado o `main` local por fast-forward para `origin/main`.
+- Durante o fast-forward, alguns arquivos root-owned ficaram como untracked por
+  erro de permissao; todos foram comparados byte-a-byte com `origin/main`,
+  confirmados como identicos e removidos apenas nesses caminhos especificos
+  antes de repetir o `git pull --ff-only`.
+- Rodado o gate completo pos-merge em `main` com clippy estrito.
+- Rodada a validacao publica de install do pre-release `v0.2.0-rc.1`.
+- Confirmado que `v0.2.0-rc.1` continua publico como pre-release e que o latest
+  estavel ainda e `v0.1.1`.
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang
+gh pr checks 1 -R vitaleevo/NEXUSLANG --watch --interval 10 --fail-fast
+gh pr view 1 -R vitaleevo/NEXUSLANG --json number,state,mergedAt,mergeCommit,url,title
+git fetch origin main
+git switch main
+git pull --ff-only origin main
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh
+gh release view v0.2.0-rc.1 -R vitaleevo/NEXUSLANG --json tagName,isDraft,isPrerelease,publishedAt,url,targetCommitish
+gh release view -R vitaleevo/NEXUSLANG --json tagName,isDraft,isPrerelease,publishedAt,url,targetCommitish
+git status --short --branch
+```
+
+Resultado:
+
+- PR #1 esta `MERGED`.
+- `main` local esta sincronizado com `origin/main` em
+  `bcedf2c1d8ef37c4afdf014a99e79fa8d8757e64`.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh` passou em `main`, incluindo
+  fmt/check/clippy, 78 testes lib, 58 testes CLI, 7 testes de package manager,
+  266 testes core, storage policy, model-op docs, node check, smoke HTTP,
+  smoke auth, backup/restore storage e validacao OpenAPI externa.
+- `NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh`
+  passou, incluindo download publico, GPG, checksum, package smoke, auth,
+  storage, playground JS e asset HTTP.
+- Release `v0.2.0-rc.1`: `isDraft=false`, `isPrerelease=true`.
+- Latest estavel do repositorio: `v0.1.1`, `isPrerelease=false`.
+- Worktree final: limpo em `main`.
+
+Estado do projeto:
+
+- Fase/trilha atual: pos-merge RC concluido; proxima decisao e artefato publico
+  pos-merge.
+- Solido agora: PR #1 mergeado, `main` verde no gate completo e RC publico
+  existente ainda instalavel.
+- Falta imediato: decidir entre publicar `v0.2.0-rc.2` com o conteudo atual de
+  `main` ou preparar a promocao controlada para `0.2.0` estavel.
+- Distancia do fim: a trilha de merge/validacao do RC esta concluida; o produto
+  ainda nao deve ser chamado de 100/100 producao ate existir artefato publico
+  pos-merge, decisao de stable, e hardening restante de registry/CI/editor.
+
+## Proximo passo recomendado
+
+Fase 11.60 - novo RC pos-merge ou plano de `0.2.0` estavel: criar/validar um
+artefato publico que represente o `main` pos-merge (`v0.2.0-rc.2` recomendado
+antes de stable), reexecutar strict release preflight/dry-run e so depois
+decidir promocao para `0.2.0`.
+
+AVISO: O proximo passo e criar/implementar novo RC pos-merge `v0.2.0-rc.2` ou plano controlado de release estavel `0.2.0`. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e `meta/CURRENT_TASKS.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
 
 ## Etapa concluida: Fase 11.58 - PR pos-feedback com CI verde e release status clarificado
 

@@ -29,20 +29,20 @@ auth, invoices, money, storage, tooling e pequenos servicos de negocio.
 
 ## Foco imediato
 
-A linha atual esta em estabilizacao de release/producao. O merge deste PR nao
-publica tag/release: o pre-release publico `v0.2.0-rc.1` ja foi publicado em uma
-fase anterior da trilha e passou validacao de install publico com assinatura,
-checksum, package smoke, auth, storage e assets HTTP. O PR
-`https://github.com/vitaleevo/NEXUSLANG/pull/1` saiu de draft, segue aberto e
-mergeable, e agora contem correcoes pos-publicacao que nao pertencem ao tag nem
-aos assets publicados de `v0.2.0-rc.1`. O foco imediato e concluir a revisao do
-PR no head atual e, se o merge for aprovado, planejar um novo artefato/tag RC
-ou uma validacao pos-merge explicita antes de qualquer `0.2.0` estavel.
+A linha atual esta em estabilizacao de release/producao. O PR
+`https://github.com/vitaleevo/NEXUSLANG/pull/1` foi mergeado em `main` pelo
+commit `bcedf2c feat(release): prepare NexusLang 0.2.0-rc.1`, e o `main`
+pos-merge passou no gate completo com clippy estrito. O pre-release publico
+`v0.2.0-rc.1` continua publicado, instalavel e validado, mas representa uma fase
+historica anterior as correcoes pos-publicacao agora presentes em `main`.
+O foco imediato e publicar um novo artefato/tag RC pos-merge (`v0.2.0-rc.2`
+recomendado) ou aprovar explicitamente um plano de promocao para `0.2.0`
+estavel. A release stable/latest continua sendo `v0.1.1`.
 
 ## Trilhas proximas
 
-1. Release/producao: concluir revisao do PR #1 no head pos-feedback, decidir
-   merge e planejar novo RC/validacao pos-merge antes de `0.2.0` estavel.
+1. Release/producao: preparar novo RC pos-merge (`v0.2.0-rc.2`) ou plano
+   controlado de `0.2.0` estavel a partir do `main` validado.
 2. Diagnostics/tooling API: preservar JSON v1 enquanto melhora APIs internas
    para consumidores de editor.
 3. LSP/editor tooling: adicionar workspace symbols, formatting, rename ou code
