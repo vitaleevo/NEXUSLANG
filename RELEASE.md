@@ -5,11 +5,14 @@ It is intentionally small: the source of truth is still the automated gate.
 
 ## Current readiness
 
-- Local RC target: `0.2.0-rc.2`.
-- Current RC status: post-merge public pre-release `v0.2.0-rc.2` published and
-  public install validation passed.
-- Stable `0.2.0` decision on 2026-05-28: do not promote stable yet; run a short
-  pre-stable hardening cycle first. See `meta/STABLE_0_2_0_DECISION.md`.
+- Local stable target: `0.2.0`.
+- Stable branch status: source version prepared on dedicated release branch;
+  tag/release publication is still gated by package validation, pushed-head CI,
+  and strict public-release dry-run.
+- Previous public RC status: `v0.2.0-rc.2` published as a pre-release and public
+  install validation passed.
+- Stable `0.2.0` decision on 2026-05-28: promote only through this controlled
+  branch and the gates in `meta/STABLE_0_2_0_DECISION.md`.
 - Language/core: 78/100
 - Playground: 84/100
 - OpenAPI/runtime: 66/100
@@ -136,6 +139,12 @@ Validate the `v0.2.0-rc.2` public pre-release explicitly when checking the RC:
 NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.sh
 ```
 
+After publishing `v0.2.0`, validate the stable public release explicitly:
+
+```bash
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0 ./scripts/validate-public-release-install.sh
+```
+
 ## Release 1.0 checklist
 
 ### Local release candidate
@@ -184,7 +193,7 @@ NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.s
   immediate promotion.
 - [x] GitHub Actions workflow is moved to Node 24 compatible first-party action
   refs pinned by commit SHA for pre-stable hardening.
-- [ ] Stable `0.2.0` source version is prepared on a dedicated release branch.
+- [x] Stable `0.2.0` source version is prepared on a dedicated release branch.
 - [ ] Stable `v0.2.0` tag and GitHub Release are published.
 - [ ] Public GitHub stable install validation passes for `v0.2.0`.
 
