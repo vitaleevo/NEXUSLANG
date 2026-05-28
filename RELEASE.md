@@ -7,8 +7,9 @@ It is intentionally small: the source of truth is still the automated gate.
 
 - Local RC target: `0.2.0-rc.2`.
 - Current RC status: post-merge public pre-release `v0.2.0-rc.2` published and
-  public install validation passed. Do not promote to stable `0.2.0` until this
-  RC has feedback review and an explicit stable release decision.
+  public install validation passed.
+- Stable `0.2.0` decision on 2026-05-28: do not promote stable yet; run a short
+  pre-stable hardening cycle first. See `meta/STABLE_0_2_0_DECISION.md`.
 - Language/core: 78/100
 - Playground: 84/100
 - OpenAPI/runtime: 66/100
@@ -179,6 +180,13 @@ NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.s
 - [x] `v0.2.0-rc.1` pre-release was published with signed archive, checksum,
   signatures, public key, and fingerprint.
 - [x] Public GitHub pre-release install validation passes for `v0.2.0-rc.1`.
+- [x] Stable `0.2.0` decision is documented as hardening pre-stable, not
+  immediate promotion.
+- [x] GitHub Actions workflow is moved to Node 24 compatible first-party action
+  refs pinned by commit SHA for pre-stable hardening.
+- [ ] Stable `0.2.0` source version is prepared on a dedicated release branch.
+- [ ] Stable `v0.2.0` tag and GitHub Release are published.
+- [ ] Public GitHub stable install validation passes for `v0.2.0`.
 
 ### Published release
 

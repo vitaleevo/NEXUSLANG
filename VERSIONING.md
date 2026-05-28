@@ -87,6 +87,9 @@ Latest stable GitHub Release: `v0.1.1`.
 
 Current public pre-release RC: `v0.2.0-rc.2`.
 
+Stable `0.2.0` decision: hold stable publication and run a short pre-stable
+hardening cycle first. See `meta/STABLE_0_2_0_DECISION.md`.
+
 Previous published GitHub Release: `v0.1.0`.
 
 Run the public install validation against the release tag:

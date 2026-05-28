@@ -39,8 +39,8 @@ stable/latest continua sendo `v0.1.1`.
 
 ## Trilhas proximas
 
-1. Release/producao: decidir promocao controlada para `0.2.0` estavel ou
-   hardening pre-stable curto, usando RC2 mergeado como base validada.
+1. Release/producao: executar hardening pre-stable curto antes de qualquer
+   `0.2.0` estavel, com RC2 mergeado como base validada.
 2. Diagnostics/tooling API: preservar JSON v1 enquanto melhora APIs internas
    para consumidores de editor.
 3. LSP/editor tooling: adicionar workspace symbols, formatting, rename ou code
