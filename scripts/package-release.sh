@@ -79,11 +79,13 @@ copy_runtime_assets() {
     mkdir -p "$PACKAGE_DIR/examples"
     mkdir -p "$PACKAGE_DIR/nexuslang-src"
     mkdir -p "$PACKAGE_DIR/scripts"
+    mkdir -p "$PACKAGE_DIR/stdlib"
 
     cp "$CRATE_DIR/target/release/nexus" "$PACKAGE_DIR/bin/nexus"
     cp "$ROOT_DIR/nexuslang-playground.html" "$PACKAGE_DIR/nexuslang-playground.html"
     cp "$ROOT_DIR/nexuslang-playground.js" "$PACKAGE_DIR/nexuslang-playground.js"
     cp -R "$CRATE_DIR/web" "$PACKAGE_DIR/nexuslang-src/web"
+    cp -R "$CRATE_DIR/stdlib/." "$PACKAGE_DIR/stdlib/"
     find "$CRATE_DIR/examples" -maxdepth 1 -type f -name "*.nx" -exec cp {} "$PACKAGE_DIR/examples/" \;
     cp "$ROOT_DIR/scripts/validate-release-second-env.sh" "$PACKAGE_DIR/scripts/validate-release-second-env.sh"
     cp "$ROOT_DIR/scripts/sign-release-artifacts.sh" "$PACKAGE_DIR/scripts/sign-release-artifacts.sh"
@@ -92,6 +94,7 @@ copy_runtime_assets() {
     cp "$ROOT_DIR/scripts/validate-public-release-install.sh" "$PACKAGE_DIR/scripts/validate-public-release-install.sh"
     cp "$ROOT_DIR/scripts/validate-storage-compatibility-policy.sh" "$PACKAGE_DIR/scripts/validate-storage-compatibility-policy.sh"
     cp "$ROOT_DIR/scripts/smoke-storage-backup-restore.sh" "$PACKAGE_DIR/scripts/smoke-storage-backup-restore.sh"
+    cp "$ROOT_DIR/scripts/smoke-auth.sh" "$PACKAGE_DIR/scripts/smoke-auth.sh"
 }
 
 write_package_smoke() {
@@ -132,7 +135,136 @@ run "$ROOT_DIR/bin/nexus" new "$package_manager_tmp/package_manager_app"
 )
 run "$ROOT_DIR/bin/nexus" check "$ROOT_DIR/examples/erp_basico.nx"
 run "$ROOT_DIR/bin/nexus" run "$ROOT_DIR/examples/erp_basico.nx"
+cat > "$package_manager_tmp/std_math.nx" <<'NX'
+import abs from "std/math"
+import contains from "std/string"
+import contains_int from "std/collections"
+import is_email from "std/validation"
+import is_iso_date from "std/date"
+import is_positive_money from "std/money"
+import number_is_even from "std/number"
+import inventory_stock_status from "std/inventory"
+import crm_is_active_status from "std/crm"
+import invoice_line_total from "std/invoice"
+import json_pair from "std/json"
+import json_bool from "std/json"
+import json_object_1 from "std/json"
+import csv_row_2 from "std/csv"
+import http_status_text from "std/http"
+import crypto_sha256_hex from "std/crypto"
+import time_seconds_between from "std/time"
+import env_get_or from "std/env"
+import log_info from "std/log"
+import path_basename from "std/path"
+import sales_line_total from "std/sales"
+import tax_amount from "std/tax"
+import discount_final_percent from "std/discount"
+import payment_status from "std/payment"
+import banking_is_debit from "std/banking"
+import accounting_is_balanced from "std/accounting"
+import ledger_side from "std/ledger"
+import shipping_status from "std/shipping"
+import warehouse_utilization_percent from "std/warehouse"
+import procurement_status from "std/procurement"
+import supplier_is_active_status from "std/supplier"
+import customer_balance_status from "std/customer"
+import project_progress_percent from "std/project"
+import task_priority_label from "std/task"
+import kpi_percent from "std/kpi"
+import report_money_line from "std/report"
+import pagination_offset from "std/pagination"
+import security_is_https from "std/security"
+import config_flag_enabled from "std/config"
+import commerce_cart_total_3 from "std/commerce"
+print(abs(-9))
+print(contains("NexusLang", "Lang"))
+print(contains_int([1, 2, 3], 2))
+print(is_email("ana@example.com"))
+print(is_iso_date("2026-05-27"))
+print(is_positive_money(100 kz))
+print(number_is_even(10))
+print(inventory_stock_status(3, 5))
+print(crm_is_active_status(" ACTIVE "))
+print(invoice_line_total(2, 150 kz))
+print(json_object_1(json_pair("ok", json_bool(true))))
+print(csv_row_2("Ana", "Luanda, Angola"))
+print(http_status_text(201))
+print(crypto_sha256_hex("nexus"))
+print(time_seconds_between(10, 16))
+print(env_get_or("NEXUS_STDLIB_PACKAGE_MISSING", "fallback"))
+print(log_info("ok"))
+print(path_basename("/tmp/report.csv"))
+print(sales_line_total(2, 100 kz))
+print(tax_amount(1000 kz, 0.1))
+print(discount_final_percent(1000 kz, 0.1))
+print(payment_status(100 kz, 40 kz))
+print(banking_is_debit(-10 kz))
+print(accounting_is_balanced(100 kz, 100 kz))
+print(ledger_side(-5 kz))
+print(shipping_status(3, 5))
+print(warehouse_utilization_percent(100, 25))
+print(procurement_status(3, 5))
+print(supplier_is_active_status(" ACTIVE "))
+print(customer_balance_status(0 kz))
+print(project_progress_percent(2, 4))
+print(task_priority_label(1))
+print(kpi_percent(3, 4))
+print(report_money_line("total", 99 kz))
+print(pagination_offset(3, 20))
+print(security_is_https("https://nexus.local"))
+print(config_flag_enabled(" YES "))
+print(commerce_cart_total_3(10 kz, 20 kz, 30 kz))
+NX
+run "$ROOT_DIR/bin/nexus" check "$package_manager_tmp/std_math.nx"
+stdlib_output="$("$ROOT_DIR/bin/nexus" run "$package_manager_tmp/std_math.nx")"
+expected_stdlib_output="$(
+    printf '%s\n' \
+        9 \
+        true \
+        true \
+        true \
+        true \
+        true \
+        true \
+        reorder \
+        true \
+        "300.00 KZ" \
+        '{"ok":true}' \
+        'Ana,"Luanda, Angola"' \
+        Created \
+        f5cfcb570b7edac2ed16e1a025d50155d6148de7397f4068790cdfc142300070 \
+        6 \
+        fallback \
+        "[INFO] ok" \
+        report.csv \
+        "200.00 KZ" \
+        "100.00 KZ" \
+        "900.00 KZ" \
+        partial \
+        true \
+        true \
+        credit \
+        partial \
+        "25.00" \
+        partial \
+        true \
+        settled \
+        "50.00" \
+        high \
+        "75.00" \
+        "total: 99.00 KZ" \
+        40 \
+        true \
+        true \
+        "60.00 KZ"
+)"
+[ "$stdlib_output" = "$expected_stdlib_output" ] || {
+    echo "Unexpected stdlib smoke output:" >&2
+    printf '%s\n' "$stdlib_output" >&2
+    exit 1
+}
 run "$ROOT_DIR/bin/nexus" check "$ROOT_DIR/examples/auth_secure_crm.nx"
+run "$ROOT_DIR/scripts/smoke-auth.sh"
 run "$ROOT_DIR/bin/nexus" check "$ROOT_DIR/examples/storage_backup_restore_inventory.nx"
 run "$ROOT_DIR/scripts/smoke-storage-backup-restore.sh"
 run node --check "$ROOT_DIR/nexuslang-playground.js"
@@ -165,6 +297,7 @@ Version: $PACKAGE_VERSION
 - nexuslang-playground.html and nexuslang-playground.js: browser playground
 - nexuslang-src/web/nexuslang_playground.wasm: WebAssembly runtime artifact
 - examples/: language/runtime examples
+- stdlib/: installed NexusLang standard library modules
 - docs/: public guide, release policy, compatibility, signing, roadmap, syntax, and memory
 - scripts/: local validation helpers
 
@@ -213,6 +346,7 @@ archive=$ARCHIVE_NAME
 checksum=$CHECKSUM_NAME
 cli_binary=bin/nexus
 playground=nexuslang-playground.html
+stdlib=stdlib
 EOF
 
     (
