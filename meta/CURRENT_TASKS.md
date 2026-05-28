@@ -5,12 +5,12 @@ repositorio.
 
 ## Status atual
 
-Fase 11.60 concluida em 2026-05-28: a branch
-`codex/prepare-nexuslang-0.2.0-rc.2` foi criada a partir do `main` pos-merge,
-a versao fonte/LSP foi atualizada para `0.2.0-rc.2`, CI remoto passou, strict
-release preflight/dry-run passou com chave mantida, a tag assinada
-`v0.2.0-rc.2` foi enviada e o GitHub Release foi publicado como pre-release
-publico. A validacao publica de install do `v0.2.0-rc.2` passou. `v0.1.1`
+Fase 11.61 concluida em 2026-05-28: o PR #2 da branch
+`codex/prepare-nexuslang-0.2.0-rc.2` para `main` foi criado, revisado,
+corrigido apos feedback automatizado valido, passou com duas jobs `quality` e
+CodeRabbit verdes, foi mergeado em `main` por
+`8c243bb62fd627421e914ccabc4d6caf8daf205a` e teve validacao pos-merge verde
+com quality gate completo e install publico do `v0.2.0-rc.2`. `v0.1.1`
 continua sendo a release stable/latest.
 
 ## Tarefas concluidas
@@ -70,6 +70,15 @@ continua sendo a release stable/latest.
 - [x] Criar e pushar tag assinada `v0.2.0-rc.2`.
 - [x] Publicar GitHub Release `v0.2.0-rc.2` como pre-release, nao latest.
 - [x] Rodar validacao publica de install contra `v0.2.0-rc.2`.
+- [x] Criar PR #2 para mergear RC2 em `main`.
+- [x] Corrigir feedback acionavel do CodeRabbit no PR #2 em `4403e94`.
+- [x] Observar checks finais do PR #2: duas jobs `quality` PASS e CodeRabbit
+  PASS.
+- [x] Mergear PR #2 em `main`.
+- [x] Atualizar `main` local para `8c243bb`.
+- [x] Rodar `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh` em `main` apos o
+  merge.
+- [x] Rodar install publico do `v0.2.0-rc.2` apos o merge.
 
 ## Validacao executada
 
@@ -131,6 +140,14 @@ git tag -v v0.2.0-rc.2
 git push origin refs/tags/v0.2.0-rc.2
 gh release create v0.2.0-rc.2 -R vitaleevo/NEXUSLANG --title 'NexusLang 0.2.0-rc.2' --notes-file RELEASE_NOTES.md --prerelease --latest=false --verify-tag ...
 NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.sh
+GitHub connector: create PR #2
+GitHub/API: observe checks for 4403e94122e7d85deb3e562732cec327c956683f
+GitHub connector: merge PR #2
+git fetch origin main
+git switch main
+git pull --ff-only origin main
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.sh
 ```
 
 Resultado: PASS para LSP, quality gate, package-release, validate-release-package,
@@ -156,13 +173,16 @@ estavel continua `v0.1.1`. Para RC2, o commit validado e
 `https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0-rc.2`, e a
 validacao publica de install passou. Archive publico RC2:
 `8ed601c2751e86ca84c40cbbd0edec9b4f1266d3663299fd83e8b2b4912eea0b`,
-1590587 bytes; WASM: 479717 bytes.
+1590587 bytes; WASM: 479717 bytes. PR #2 foi criado, feedback valido do
+CodeRabbit foi corrigido em `4403e94`, checks finais do PR passaram, e o PR foi
+mergeado em `main` por `8c243bb62fd627421e914ccabc4d6caf8daf205a`. Pos-merge,
+o quality gate completo e o install publico do `v0.2.0-rc.2` passaram de novo.
 
 ## Proxima fase recomendada
 
-Fase 11.61: abrir/revisar PR da branch `codex/prepare-nexuslang-0.2.0-rc.2`,
-observar feedback automatizado e decidir se a linha RC2 entra em `main` antes
-de qualquer plano de `0.2.0` estavel.
+Fase 11.62: decidir entre promocao controlada para `0.2.0` estavel ou um ciclo
+curto de hardening pre-stable, auditando riscos restantes antes de qualquer
+tag/release estavel.
 
 ## Arquivos para abrir primeiro na proxima fase
 
@@ -178,7 +198,7 @@ de qualquer plano de `0.2.0` estavel.
 - Nao promover para release estavel; este alvo continua RC/pre-release.
 - Nao prometer registry remoto real enquanto `PACKAGE_MANAGER.md` ainda o
   define como contrato futuro.
-- O PR #1 ja foi mergeado e RC2 ja foi publicado; a branch RC2 ainda precisa de
-  PR/review/merge para manter `main` alinhado ao artefato publico.
+- O PR #2 ja foi mergeado e `main` esta alinhado ao RC2; nao promover stable
+  sem decisao explicita de risco/producao.
 - GitHub Actions avisou sobre futura migracao de actions Node.js 20 para
   Node.js 24; isso nao bloqueou o RC, mas deve entrar no hardening de CI.

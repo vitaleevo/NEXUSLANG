@@ -29,20 +29,18 @@ auth, invoices, money, storage, tooling e pequenos servicos de negocio.
 
 ## Foco imediato
 
-A linha atual esta em estabilizacao de release/producao. O PR
-`https://github.com/vitaleevo/NEXUSLANG/pull/1` foi mergeado em `main` pelo
-commit `bcedf2c feat(release): prepare NexusLang 0.2.0-rc.1`, e o `main`
+A linha atual esta em estabilizacao de release/producao. O PR #2
+`https://github.com/vitaleevo/NEXUSLANG/pull/2` mergeou o RC2 em `main` pelo
+merge commit `8c243bb62fd627421e914ccabc4d6caf8daf205a`, e o `main`
 pos-merge passou no gate completo com clippy estrito. O pre-release publico
-`v0.2.0-rc.2` foi publicado a partir da branch pos-merge
-`codex/prepare-nexuslang-0.2.0-rc.2` e passou validacao publica de install com
+`v0.2.0-rc.2` esta publicado e passou validacao publica de install com
 assinatura, checksum, package smoke, auth, storage e assets HTTP. A release
 stable/latest continua sendo `v0.1.1`.
 
 ## Trilhas proximas
 
-1. Release/producao: abrir/revisar PR da branch
-   `codex/prepare-nexuslang-0.2.0-rc.2`, colher feedback e so depois
-   decidir promocao controlada para `0.2.0` estavel.
+1. Release/producao: decidir promocao controlada para `0.2.0` estavel ou
+   hardening pre-stable curto, usando RC2 mergeado como base validada.
 2. Diagnostics/tooling API: preservar JSON v1 enquanto melhora APIs internas
    para consumidores de editor.
 3. LSP/editor tooling: adicionar workspace symbols, formatting, rename ou code

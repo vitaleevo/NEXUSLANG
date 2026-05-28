@@ -4,9 +4,80 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-28 (Fase 11.60 - RC2 publico pos-merge publicado e validado)
+Ultima atualizacao: 2026-05-28 (Fase 11.61 - PR #2 mergeado e validacao pos-merge verde)
 
-## Etapa concluida: Fase 11.60 - RC2 publico pos-merge publicado e validado
+## Etapa concluida: Fase 11.61 - PR #2 mergeado e validacao pos-merge verde
+
+Objetivo: levar a branch RC2 publicada para `main` por PR/review, corrigir o
+feedback automatizado valido e validar a linha pos-merge sem promover
+`0.2.0` estavel.
+
+Foi feito:
+
+- Criado PR #2 `https://github.com/vitaleevo/NEXUSLANG/pull/2` como PR pronto
+  para revisao da branch `codex/prepare-nexuslang-0.2.0-rc.2` para `main`.
+- Observado CI remoto verde no head inicial `f7092c2`.
+- Revisado feedback do CodeRabbit; os comentarios validos foram corrigidos em
+  `4403e94 docs(review): address rc2 pr feedback`.
+- Mantido o caminho real do workspace (`/home/alexandre/Nesusang`) sem trocar
+  para o caminho inexistente sugerido; os comandos documentados foram tornados
+  portaveis com `<repo-root>`.
+- Observado head final `4403e94122e7d85deb3e562732cec327c956683f` com duas
+  jobs `quality` PASS e status CodeRabbit PASS.
+- Mergeado PR #2 em `main` com merge commit
+  `8c243bb62fd627421e914ccabc4d6caf8daf205a`.
+- Atualizado `main` local para o merge commit `8c243bb`.
+- Rodado `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh` em `main` com sucesso.
+- Rodada validacao publica de install contra `v0.2.0-rc.2` com sucesso depois
+  do merge.
+
+Verificacao executada:
+
+```bash
+cd <repo-root>
+GitHub connector: criar PR #2
+GitHub/API: observar checks do commit 4403e94122e7d85deb3e562732cec327c956683f
+GitHub connector: merge PR #2 com expected_head_sha 4403e94122e7d85deb3e562732cec327c956683f
+git fetch origin main
+git switch main
+git pull --ff-only origin main
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.sh
+```
+
+Resultado:
+
+- PR #2: `MERGED`.
+- Merge commit em `main`: `8c243bb62fd627421e914ccabc4d6caf8daf205a`.
+- Checks do PR no head final: duas jobs `quality` PASS; CodeRabbit PASS.
+- Quality gate pos-merge: PASS, incluindo fmt, check, clippy, testes, smokes
+  HTTP/auth/storage e validacao OpenAPI.
+- Install publico pos-merge do `v0.2.0-rc.2`: PASS, incluindo GPG, checksum,
+  package smoke, auth smoke, storage backup/restore, playground JS e asset HTTP.
+- Tag/release `v0.2.0-rc.2` continua sendo pre-release; stable/latest continua
+  `v0.1.1`.
+
+Estado do projeto:
+
+- Fase/trilha atual: RC2 publicado, revisado, mergeado em `main` e validado.
+- Solido agora: `main` esta alinhado ao RC2 publico e tem validacao local
+  pos-merge completa.
+- Falta imediato: decidir se o caminho certo e promover `0.2.0` estavel de
+  forma controlada ou executar um ciclo curto de hardening pre-stable.
+- Distancia do fim: a trilha RC2 esta fechada; o produto completo ainda nao
+  esta 100/100 producao por registry remoto, hardening SQLite/migracoes,
+  features editoriais LSP, playground hospedado e hardening das Actions Node.js
+  20.
+
+## Proximo passo recomendado
+
+Fase 11.62 - decisao controlada de stable `0.2.0` ou hardening pre-stable:
+auditar riscos restantes, decidir criterios de promocao e so criar uma release
+estavel se os gates de producao estiverem explicitamente aceites.
+
+AVISO: O proximo passo e criar/implementar decisao controlada de stable `0.2.0` ou hardening pre-stable do RC2. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e `meta/CURRENT_TASKS.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Historico: Fase 11.60 - RC2 publico pos-merge publicado e validado
 
 Objetivo: criar um novo RC publico a partir da linha pos-merge, sem promover
 `0.2.0` estavel, e validar que o artefato publicado no GitHub e instalavel de
@@ -86,28 +157,23 @@ Resultado:
 - Public install validation: PASS, incluindo GPG, checksum, package smoke,
   auth smoke, storage backup/restore, playground JS e asset HTTP.
 
-Estado do projeto:
+Estado do projeto naquela fase:
 
-- Fase/trilha atual: RC2 publico pos-merge concluido; falta integrar a branch
-  RC2 de volta em `main` por PR/review.
-- Solido agora: artefato publico RC2 assinado, validado localmente, em segundo
+- A branch RC2 ainda precisava voltar para `main` por PR/review.
+- O artefato publico RC2 ja estava assinado, validado localmente, em segundo
   ambiente, no CI remoto e via install publico.
-- Falta imediato: abrir/revisar PR da branch RC2, observar feedback
-  automatizado e decidir merge; depois planejar `0.2.0` estavel apenas se nao
-  houver bloqueadores.
-- Distancia do fim: a trilha RC pos-merge esta quase fechada; o produto
-  completo ainda nao esta 100/100 producao por registry remoto, hardening
-  SQLite/migracoes, LSP editorial completo, playground hospedado e aviso Node.js
-  20 nas Actions.
+- O plano era abrir/revisar PR da branch RC2, observar feedback automatizado e
+  decidir merge; esse passo foi concluido na Fase 11.61.
+- O produto completo ainda nao estava 100/100 producao por registry remoto,
+  hardening SQLite/migracoes, LSP editorial completo, playground hospedado e
+  aviso Node.js 20 nas Actions.
 
-## Proximo passo recomendado
+### Historico - proximo passo recomendado na Fase 11.60
 
 Fase 11.61 - PR/review/merge do RC2: abrir PR da branch
 `codex/prepare-nexuslang-0.2.0-rc.2`, observar CI/CodeRabbit, corrigir feedback
 se houver e decidir merge em `main`. So depois disso preparar plano controlado
 de `0.2.0` estavel.
-
-AVISO: O proximo passo e criar/implementar PR/review/merge do RC2 `v0.2.0-rc.2`. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e `meta/CURRENT_TASKS.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
 
 ## Historico: Fase 11.59 - PR #1 mergeado e validacao pos-merge verde
 
