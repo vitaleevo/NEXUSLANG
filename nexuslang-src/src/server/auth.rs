@@ -1,4 +1,5 @@
 use crate::ast::*;
+use crate::auth_ops::{AuthStaticOperation, CheckedAuthOperationArgs, AUTH_STATIC_TYPE_NAME};
 
 use super::storage::*;
 use super::storage_backend::Storage;
@@ -21,7 +22,6 @@ pub(crate) struct AuthRouteResponse {
 
 #[cfg(not(target_arch = "wasm32"))]
 mod native {
-    use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
@@ -30,6 +30,10 @@ mod native {
     use sha2::{Digest, Sha256};
 
     use super::*;
+
+    const RATE_LIMIT_WINDOW_SECONDS: u64 = 5 * 60;
+    const RATE_LIMIT_MAX_ATTEMPTS: u32 = 5;
+    const RATE_LIMIT_BLOCK_SECONDS: u64 = 15 * 60;
 
     #[derive(Debug, Clone)]
     struct AuthUser {
@@ -45,6 +49,7 @@ mod native {
         auth: String,
         identity: String,
         session_hash: String,
+        csrf_hash: Option<String>,
         role: Option<String>,
         created_at: u64,
         last_seen_at: u64,
@@ -61,17 +66,27 @@ mod native {
         expires_at: u64,
     }
 
+    #[derive(Debug, Clone)]
+    struct AuthRateLimit {
+        key: String,
+        attempts: u32,
+        window_start: u64,
+        blocked_until: u64,
+    }
+
     #[derive(Debug, Clone, Default)]
     struct AuthStore {
         users: Vec<AuthUser>,
         sessions: Vec<AuthSession>,
         tokens: Vec<AuthToken>,
+        rate_limits: Vec<AuthRateLimit>,
     }
 
     pub(crate) fn authenticate_request(
         program: &Program,
         storage: &Storage,
         guard: &RouteAuthGuard,
+        method: &str,
         headers: &[(String, String)],
     ) -> Result<AuthenticatedUser, String> {
         let config = auth_config(program, &guard.auth)
@@ -80,32 +95,7 @@ mod native {
         let mut store = read_store(storage)?;
         store.prune_expired(now);
 
-        let user = if let Some(session) = session_token(headers) {
-            let session_hash = token_hash(&session);
-            let idle_ttl = config.idle_ttl_minutes * 60;
-            let found = store.sessions.iter_mut().find(|candidate| {
-                candidate.auth == config.name && candidate.session_hash == session_hash
-            });
-            let Some(session_record) = found else {
-                write_store(storage, &store)?;
-                return Err("Nao autorizado: sessao invalida".to_string());
-            };
-            if now.saturating_sub(session_record.last_seen_at) > idle_ttl {
-                store.sessions.retain(|candidate| {
-                    !(candidate.auth == config.name && candidate.session_hash == session_hash)
-                });
-                write_store(storage, &store)?;
-                return Err("Nao autorizado: sessao expirada".to_string());
-            }
-            session_record.last_seen_at = now;
-            let user = AuthenticatedUser {
-                auth: session_record.auth.clone(),
-                identity: session_record.identity.clone(),
-                role: session_record.role.clone(),
-            };
-            write_store(storage, &store)?;
-            user
-        } else if let Some(token) = bearer_token(headers) {
+        let user = if let Some(token) = bearer_token(headers) {
             let token_hash = token_hash(&token);
             let Some(token_record) = store.tokens.iter().find(|candidate| {
                 candidate.auth == config.name && candidate.token_hash == token_hash
@@ -118,6 +108,39 @@ mod native {
                 identity: token_record.identity.clone(),
                 role: token_record.role.clone(),
             };
+            write_store(storage, &store)?;
+            user
+        } else if let Some(session) = session_token(headers) {
+            let session_hash = token_hash(&session);
+            let idle_ttl = config.idle_ttl_minutes * 60;
+            let found = store.sessions.iter().position(|candidate| {
+                candidate.auth == config.name && candidate.session_hash == session_hash
+            });
+            let Some(session_index) = found else {
+                write_store(storage, &store)?;
+                return Err("Nao autorizado: sessao invalida".to_string());
+            };
+            let session_record = &store.sessions[session_index];
+            if now.saturating_sub(session_record.last_seen_at) > idle_ttl {
+                store.sessions.retain(|candidate| {
+                    !(candidate.auth == config.name && candidate.session_hash == session_hash)
+                });
+                write_store(storage, &store)?;
+                return Err("Nao autorizado: sessao expirada".to_string());
+            }
+            if requires_csrf(method) {
+                let presented_hash = csrf_token(headers).map(|token| token_hash(&token));
+                if session_record.csrf_hash.as_deref() != presented_hash.as_deref() {
+                    write_store(storage, &store)?;
+                    return Err("Proibido: CSRF token ausente ou invalido".to_string());
+                }
+            }
+            let user = AuthenticatedUser {
+                auth: session_record.auth.clone(),
+                identity: session_record.identity.clone(),
+                role: session_record.role.clone(),
+            };
+            store.sessions[session_index].last_seen_at = now;
             write_store(storage, &store)?;
             user
         } else {
@@ -134,6 +157,7 @@ mod native {
         Ok(user)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn eval_auth_return(
         expr: &Expr,
         program: &Program,
@@ -148,36 +172,62 @@ mod native {
         else {
             return None;
         };
-        if ty != "Auth" {
+        if ty != AUTH_STATIC_TYPE_NAME {
             return None;
         }
 
-        Some(match method.as_str() {
-            "register" => register(program, storage, args, request_body),
-            "login" => login(program, storage, args, request_body),
-            "logout" => logout(storage, headers, current_user),
-            "user" => current_user_response(program, storage, current_user),
-            _ => Err(format!("Metodo estatico 'Auth::{}' nao existe", method)),
-        })
+        let Some(operation) = AuthStaticOperation::from_method(method) else {
+            return Some(Err(format!(
+                "Metodo estatico 'Auth::{}' nao existe",
+                method
+            )));
+        };
+        let Some(checked_args) = operation.checked_args(args) else {
+            return Some(Err(operation.argument_error(args)));
+        };
+
+        Some(eval_checked_auth_return(
+            operation,
+            checked_args,
+            program,
+            storage,
+            headers,
+            request_body,
+            current_user,
+        ))
+    }
+
+    pub(crate) fn eval_checked_auth_return(
+        operation: AuthStaticOperation,
+        args: CheckedAuthOperationArgs<'_>,
+        program: &Program,
+        storage: &Storage,
+        headers: &[(String, String)],
+        request_body: &str,
+        current_user: Option<&AuthenticatedUser>,
+    ) -> Result<AuthRouteResponse, String> {
+        match operation {
+            AuthStaticOperation::Register => {
+                register(operation, program, storage, args, request_body)
+            }
+            AuthStaticOperation::Login => login(operation, program, storage, args, request_body),
+            AuthStaticOperation::Logout => logout(storage, headers, current_user),
+            AuthStaticOperation::User => current_user_response(program, storage, current_user),
+        }
     }
 
     fn register(
+        operation: AuthStaticOperation,
         program: &Program,
         storage: &Storage,
-        args: &[Expr],
+        args: CheckedAuthOperationArgs<'_>,
         request_body: &str,
     ) -> Result<AuthRouteResponse, String> {
-        let config = auth_config_arg(program, "register", args)?;
-        let mut fields = request_object(request_body, "Auth::register()")?;
+        let config = auth_config_arg(program, operation, args)?;
+        let context = operation.call_name();
+        let mut fields = request_object(request_body, &context)?;
         let password = take_string_field(&mut fields, "password")
             .ok_or_else(|| "Requisicao invalida: campo 'password' obrigatorio".to_string())?;
-        if password.chars().count() < config.password_min {
-            return Err(format!(
-                "Requisicao invalida: password deve ter pelo menos {} caracteres",
-                config.password_min
-            ));
-        }
-
         let identity = string_json_field(&fields, &config.identity)
             .ok_or_else(|| {
                 format!(
@@ -188,12 +238,28 @@ mod native {
             .to_string();
 
         let mut store = read_store(storage)?;
-        store.prune_expired(unix_now()?);
+        let now = unix_now()?;
+        store.prune_expired(now);
+        let rate_key = rate_limit_key(operation.method_name(), &config.name, &identity);
+        if let Err(e) = enforce_rate_limit(&mut store, &rate_key, now) {
+            write_store(storage, &store)?;
+            return Err(e);
+        }
+
+        if password.chars().count() < config.password_min {
+            record_rate_limit_failure(&mut store, &rate_key, now);
+            write_store(storage, &store)?;
+            return Err(format!(
+                "Requisicao invalida: password deve ter pelo menos {} caracteres",
+                config.password_min
+            ));
+        }
         if store
             .users
             .iter()
             .any(|user| user.auth == config.name && user.identity == identity)
         {
+            record_rate_limit_failure(&mut store, &rate_key, now);
             write_store(storage, &store)?;
             return Err("Conflito: credencial ja existe".to_string());
         }
@@ -209,22 +275,29 @@ mod native {
             identity: identity.clone(),
             password_hash: hash_password(&password)?,
             role: role.clone(),
-            created_at: unix_now()?,
+            created_at: now,
         });
 
+        clear_rate_limit(&mut store, &rate_key);
         let issued = issue_session_and_token(&mut store, config, &identity, role)?;
         write_store(storage, &store)?;
-        Ok(auth_success_response(201, user, issued))
+        Ok(auth_success_response(
+            operation.success_status(),
+            user,
+            issued,
+        ))
     }
 
     fn login(
+        operation: AuthStaticOperation,
         program: &Program,
         storage: &Storage,
-        args: &[Expr],
+        args: CheckedAuthOperationArgs<'_>,
         request_body: &str,
     ) -> Result<AuthRouteResponse, String> {
-        let config = auth_config_arg(program, "login", args)?;
-        let fields = request_object(request_body, "Auth::login()")?;
+        let config = auth_config_arg(program, operation, args)?;
+        let context = operation.call_name();
+        let fields = request_object(request_body, &context)?;
         let identity = string_json_field(&fields, &config.identity)
             .ok_or_else(|| {
                 format!(
@@ -237,16 +310,25 @@ mod native {
             .ok_or_else(|| "Requisicao invalida: campo 'password' deve ser string".to_string())?;
 
         let mut store = read_store(storage)?;
-        store.prune_expired(unix_now()?);
+        let now = unix_now()?;
+        store.prune_expired(now);
+        let rate_key = rate_limit_key(operation.method_name(), &config.name, &identity);
+        if let Err(e) = enforce_rate_limit(&mut store, &rate_key, now) {
+            write_store(storage, &store)?;
+            return Err(e);
+        }
         let Some(user_credential) = store
             .users
             .iter()
             .find(|user| user.auth == config.name && user.identity == identity)
+            .cloned()
         else {
+            record_rate_limit_failure(&mut store, &rate_key, now);
             write_store(storage, &store)?;
             return Err("Nao autorizado: credenciais invalidas".to_string());
         };
         if !verify_password(password, &user_credential.password_hash)? {
+            record_rate_limit_failure(&mut store, &rate_key, now);
             write_store(storage, &store)?;
             return Err("Nao autorizado: credenciais invalidas".to_string());
         }
@@ -262,9 +344,14 @@ mod native {
             .as_ref()
             .and_then(|field| server_object_field_string(&user, field))
             .or_else(|| user_credential.role.clone());
+        clear_rate_limit(&mut store, &rate_key);
         let issued = issue_session_and_token(&mut store, config, &identity, role)?;
         write_store(storage, &store)?;
-        Ok(auth_success_response(200, user, issued))
+        Ok(auth_success_response(
+            operation.success_status(),
+            user,
+            issued,
+        ))
     }
 
     fn logout(
@@ -322,6 +409,7 @@ mod native {
     struct IssuedSecrets {
         session: String,
         token: String,
+        csrf_token: String,
         expires_in: u64,
     }
 
@@ -336,10 +424,12 @@ mod native {
         let expires_at = now + expires_in;
         let session = random_token();
         let token = random_token();
+        let csrf_token = random_token();
         store.sessions.push(AuthSession {
             auth: config.name.clone(),
             identity: identity.to_string(),
             session_hash: token_hash(&session),
+            csrf_hash: Some(token_hash(&csrf_token)),
             role: role.clone(),
             created_at: now,
             last_seen_at: now,
@@ -356,6 +446,7 @@ mod native {
         Ok(IssuedSecrets {
             session,
             token,
+            csrf_token,
             expires_in,
         })
     }
@@ -368,9 +459,10 @@ mod native {
         AuthRouteResponse {
             status,
             body: format!(
-                r#"{{"user":{},"token":"{}","expires_in":{}}}"#,
+                r#"{{"user":{},"token":"{}","csrf_token":"{}","expires_in":{}}}"#,
                 server_value_json(user),
                 escape_json(&issued.token),
+                escape_json(&issued.csrf_token),
                 issued.expires_in
             ),
             headers: vec![(
@@ -382,14 +474,11 @@ mod native {
 
     fn auth_config_arg<'a>(
         program: &'a Program,
-        method: &str,
-        args: &[Expr],
+        operation: AuthStaticOperation,
+        args: CheckedAuthOperationArgs<'_>,
     ) -> Result<&'a AuthConfig, String> {
-        if args.len() != 1 {
-            return Err(format!("Auth::{}() recebe exatamente 1 auth", method));
-        }
-        let Expr::Ident { name, .. } = &args[0] else {
-            return Err(format!("Auth::{}() espera nome de auth", method));
+        let Some(name) = args.auth_config_name() else {
+            return Err(operation.argument_error(args.raw));
         };
         auth_config(program, name).ok_or_else(|| format!("Auth '{}' nao declarado", name))
     }
@@ -477,6 +566,52 @@ mod native {
         hex_encode(&digest)
     }
 
+    fn rate_limit_key(operation: &str, auth: &str, identity: &str) -> String {
+        format!("{}:{}:{}", operation, auth, identity.to_ascii_lowercase())
+    }
+
+    fn enforce_rate_limit(store: &mut AuthStore, key: &str, now: u64) -> Result<(), String> {
+        store.prune_rate_limits(now);
+        if let Some(entry) = store
+            .rate_limits
+            .iter()
+            .find(|entry| entry.key == key && entry.blocked_until > now)
+        {
+            return Err(format!(
+                "Muitas requisicoes: tente novamente em {} segundos",
+                entry.blocked_until.saturating_sub(now)
+            ));
+        }
+        Ok(())
+    }
+
+    fn record_rate_limit_failure(store: &mut AuthStore, key: &str, now: u64) {
+        store.prune_rate_limits(now);
+        if let Some(entry) = store.rate_limits.iter_mut().find(|entry| entry.key == key) {
+            if now.saturating_sub(entry.window_start) > RATE_LIMIT_WINDOW_SECONDS {
+                entry.attempts = 1;
+                entry.window_start = now;
+                entry.blocked_until = 0;
+            } else {
+                entry.attempts = entry.attempts.saturating_add(1);
+            }
+            if entry.attempts >= RATE_LIMIT_MAX_ATTEMPTS {
+                entry.blocked_until = now + RATE_LIMIT_BLOCK_SECONDS;
+            }
+        } else {
+            store.rate_limits.push(AuthRateLimit {
+                key: key.to_string(),
+                attempts: 1,
+                window_start: now,
+                blocked_until: 0,
+            });
+        }
+    }
+
+    fn clear_rate_limit(store: &mut AuthStore, key: &str) {
+        store.rate_limits.retain(|entry| entry.key != key);
+    }
+
     fn hex_encode(bytes: &[u8]) -> String {
         const HEX: &[u8; 16] = b"0123456789abcdef";
         let mut out = String::with_capacity(bytes.len() * 2);
@@ -524,12 +659,23 @@ mod native {
             .filter(|token| !token.is_empty())
     }
 
+    fn csrf_token(headers: &[(String, String)]) -> Option<String> {
+        header_value(headers, "X-Nexus-CSRF-Token")
+            .map(|token| token.trim().to_string())
+            .filter(|token| !token.is_empty())
+    }
+
+    fn requires_csrf(method: &str) -> bool {
+        matches!(method, "POST" | "PUT" | "DELETE")
+    }
+
     fn session_token(headers: &[(String, String)]) -> Option<String> {
         let cookie = header_value(headers, "Cookie")?;
         for part in cookie.split(';') {
-            let (name, value) = part.trim().split_once('=')?;
-            if name == SESSION_COOKIE && !value.is_empty() {
-                return Some(value.to_string());
+            if let Some((name, value)) = part.trim().split_once('=') {
+                if name == SESSION_COOKIE && !value.is_empty() {
+                    return Some(value.to_string());
+                }
             }
         }
         None
@@ -539,15 +685,26 @@ mod native {
         fn prune_expired(&mut self, now: u64) {
             self.sessions.retain(|session| session.expires_at > now);
             self.tokens.retain(|token| token.expires_at > now);
+            self.prune_rate_limits(now);
+        }
+
+        fn prune_rate_limits(&mut self, now: u64) {
+            self.rate_limits.retain(|entry| {
+                if entry.blocked_until > now {
+                    true
+                } else if entry.blocked_until != 0 {
+                    false
+                } else {
+                    now.saturating_sub(entry.window_start) <= RATE_LIMIT_WINDOW_SECONDS
+                }
+            });
         }
     }
 
     fn read_store(storage: &Storage) -> Result<AuthStore, String> {
-        let path = storage.auth_file()?;
-        if !path.exists() {
+        let Some(source) = storage.read_auth_store_json()? else {
             return Ok(AuthStore::default());
-        }
-        let source = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        };
         if source.trim().is_empty() {
             return Ok(AuthStore::default());
         }
@@ -557,11 +714,7 @@ mod native {
     }
 
     fn write_store(storage: &Storage, store: &AuthStore) -> Result<(), String> {
-        let path = storage.auth_file()?;
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
-        fs::write(path, auth_store_json(store)).map_err(|e| e.to_string())
+        storage.write_auth_store_json(&auth_store_json(store))
     }
 
     fn auth_store_from_json(value: JsonValue) -> Result<AuthStore, String> {
@@ -572,6 +725,7 @@ mod native {
             users: auth_users_from_json(take_array(&mut fields, "users")?)?,
             sessions: auth_sessions_from_json(take_array(&mut fields, "sessions")?)?,
             tokens: auth_tokens_from_json(take_array(&mut fields, "tokens")?)?,
+            rate_limits: auth_rate_limits_from_json(take_array(&mut fields, "rate_limits")?)?,
         })
     }
 
@@ -617,10 +771,28 @@ mod native {
                     auth: take_required_string(&mut fields, "auth")?,
                     identity: take_required_string(&mut fields, "identity")?,
                     session_hash: take_required_string(&mut fields, "session_hash")?,
+                    csrf_hash: take_optional_string(&mut fields, "csrf_hash")?,
                     role: take_optional_string(&mut fields, "role")?,
                     created_at: take_required_u64(&mut fields, "created_at")?,
                     last_seen_at: take_required_u64(&mut fields, "last_seen_at")?,
                     expires_at: take_required_u64(&mut fields, "expires_at")?,
+                })
+            })
+            .collect()
+    }
+
+    fn auth_rate_limits_from_json(items: Vec<JsonValue>) -> Result<Vec<AuthRateLimit>, String> {
+        items
+            .into_iter()
+            .map(|item| {
+                let JsonValue::Object(mut fields) = item else {
+                    return Err("rate limit auth deve ser object".to_string());
+                };
+                Ok(AuthRateLimit {
+                    key: take_required_string(&mut fields, "key")?,
+                    attempts: take_required_u32(&mut fields, "attempts")?,
+                    window_start: take_required_u64(&mut fields, "window_start")?,
+                    blocked_until: take_required_u64(&mut fields, "blocked_until")?,
                 })
             })
             .collect()
@@ -685,9 +857,14 @@ mod native {
         Ok(value as u64)
     }
 
+    fn take_required_u32(fields: &mut Vec<(String, JsonValue)>, name: &str) -> Result<u32, String> {
+        let value = take_required_u64(fields, name)?;
+        u32::try_from(value).map_err(|_| format!("campo '{}' excede u32", name))
+    }
+
     fn auth_store_json(store: &AuthStore) -> String {
         format!(
-            r#"{{"users":[{}],"sessions":[{}],"tokens":[{}]}}"#,
+            r#"{{"users":[{}],"sessions":[{}],"tokens":[{}],"rate_limits":[{}]}}"#,
             store
                 .users
                 .iter()
@@ -704,6 +881,12 @@ mod native {
                 .tokens
                 .iter()
                 .map(auth_token_json)
+                .collect::<Vec<_>>()
+                .join(","),
+            store
+                .rate_limits
+                .iter()
+                .map(auth_rate_limit_json)
                 .collect::<Vec<_>>()
                 .join(",")
         )
@@ -722,10 +905,11 @@ mod native {
 
     fn auth_session_json(session: &AuthSession) -> String {
         format!(
-            r#"{{"auth":"{}","identity":"{}","session_hash":"{}","role":{},"created_at":{},"last_seen_at":{},"expires_at":{}}}"#,
+            r#"{{"auth":"{}","identity":"{}","session_hash":"{}","csrf_hash":{},"role":{},"created_at":{},"last_seen_at":{},"expires_at":{}}}"#,
             escape_json(&session.auth),
             escape_json(&session.identity),
             escape_json(&session.session_hash),
+            option_string_json(session.csrf_hash.as_deref()),
             option_string_json(session.role.as_deref()),
             session.created_at,
             session.last_seen_at,
@@ -745,6 +929,16 @@ mod native {
         )
     }
 
+    fn auth_rate_limit_json(entry: &AuthRateLimit) -> String {
+        format!(
+            r#"{{"key":"{}","attempts":{},"window_start":{},"blocked_until":{}}}"#,
+            escape_json(&entry.key),
+            entry.attempts,
+            entry.window_start,
+            entry.blocked_until
+        )
+    }
+
     fn option_string_json(value: Option<&str>) -> String {
         value
             .map(|value| format!(r#""{}""#, escape_json(value)))
@@ -760,11 +954,13 @@ mod native {
         _program: &Program,
         _storage: &Storage,
         _guard: &RouteAuthGuard,
+        _method: &str,
         _headers: &[(String, String)],
     ) -> Result<AuthenticatedUser, String> {
         Err("Auth nativo nao esta disponivel no target WASM".to_string())
     }
 
+    #[allow(dead_code)]
     pub(crate) fn eval_auth_return(
         expr: &Expr,
         _program: &Program,
@@ -773,7 +969,7 @@ mod native {
         _request_body: &str,
         _current_user: Option<&AuthenticatedUser>,
     ) -> Option<Result<AuthRouteResponse, String>> {
-        if matches!(expr, Expr::StaticCall { ty, .. } if ty == "Auth") {
+        if matches!(expr, Expr::StaticCall { ty, .. } if ty == AUTH_STATIC_TYPE_NAME) {
             Some(Err(
                 "Auth nativo nao esta disponivel no target WASM".to_string()
             ))
@@ -781,6 +977,18 @@ mod native {
             None
         }
     }
+
+    pub(crate) fn eval_checked_auth_return(
+        _operation: AuthStaticOperation,
+        _args: CheckedAuthOperationArgs<'_>,
+        _program: &Program,
+        _storage: &Storage,
+        _headers: &[(String, String)],
+        _request_body: &str,
+        _current_user: Option<&AuthenticatedUser>,
+    ) -> Result<AuthRouteResponse, String> {
+        Err("Auth nativo nao esta disponivel no target WASM".to_string())
+    }
 }
 
-pub(crate) use native::{authenticate_request, eval_auth_return};
+pub(crate) use native::{authenticate_request, eval_checked_auth_return};

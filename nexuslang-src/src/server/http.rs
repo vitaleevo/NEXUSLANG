@@ -1,11 +1,10 @@
-use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::path::Path;
 
 use crate::ast::Program;
-use crate::parse_checked_source;
 
-use super::storage_backend::{default_data_dir, Storage};
+use super::storage_backend::{default_data_dir, Storage, StorageDriver};
 
 #[derive(Debug, Clone)]
 pub struct HttpResponse {
@@ -16,11 +15,17 @@ pub struct HttpResponse {
 }
 
 pub fn serve_file(file_path: &str, addr: &str) -> Result<(), String> {
-    let source =
-        fs::read_to_string(file_path).map_err(|e| format!("Erro ao ler '{}': {}", file_path, e))?;
-    let program = parse_checked_source(&source)?;
+    serve_file_with_storage_driver(file_path, addr, StorageDriver::DEFAULT)
+}
+
+pub fn serve_file_with_storage_driver(
+    file_path: &str,
+    addr: &str,
+    storage_driver: StorageDriver,
+) -> Result<(), String> {
+    let (program, _) = crate::load_and_check_with_graph(Path::new(file_path))?;
     let data_dir = default_data_dir(file_path);
-    let storage = Storage::new_json(&data_dir);
+    let storage = Storage::new_driver(storage_driver, &data_dir)?;
     storage.ensure_storage(&program)?;
 
     let listener = TcpListener::bind(addr)
@@ -28,7 +33,11 @@ pub fn serve_file(file_path: &str, addr: &str) -> Result<(), String> {
 
     println!("NexusLang serve em http://{}", addr);
     println!("OpenAPI em http://{}/openapi.json", addr);
-    println!("Storage JSON em {}", data_dir.display());
+    println!(
+        "Storage driver {} em {}",
+        storage.driver(),
+        storage.driver().target_path(&data_dir).display()
+    );
 
     for stream in listener.incoming() {
         match stream {
@@ -97,6 +106,8 @@ pub(crate) fn route_error_status(message: &str) -> u16 {
         400
     } else if message.starts_with("Conflito") {
         409
+    } else if message.starts_with("Muitas requisicoes") {
+        429
     } else if message.starts_with("Nao encontrado") {
         404
     } else {
@@ -113,6 +124,7 @@ fn write_response(stream: &mut TcpStream, response: HttpResponse) -> Result<(), 
         403 => "Forbidden",
         404 => "Not Found",
         409 => "Conflict",
+        429 => "Too Many Requests",
         500 => "Internal Server Error",
         _ => "OK",
     };
