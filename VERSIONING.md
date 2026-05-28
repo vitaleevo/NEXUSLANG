@@ -83,9 +83,9 @@ For any release candidate:
 
 Current source version: `0.2.0-rc.1`
 
-Latest published GitHub Release: `v0.1.1`.
+Latest stable GitHub Release: `v0.1.1`.
 
-Current local RC target: `v0.2.0-rc.1`.
+Current public pre-release RC: `v0.2.0-rc.1`.
 
 Previous published GitHub Release: `v0.1.0`.
 
@@ -93,4 +93,10 @@ Run the public install validation against the release tag:
 
 ```bash
 NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh
+```
+
+Validate the current public RC pre-release explicitly:
+
+```bash
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh
 ```

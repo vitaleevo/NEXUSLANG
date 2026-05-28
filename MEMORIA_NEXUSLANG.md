@@ -4,7 +4,123 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-28 (Fase 11.55 - tag e release draft do RC criados)
+Ultima atualizacao: 2026-05-28 (Fase 11.56 - pre-release publico e install validado)
+
+## Etapa concluida: Fase 11.56 - pre-release publico e install validado
+
+Objetivo: publicar o draft `v0.2.0-rc.1` como pre-release publico, corrigir
+os assets necessarios para validacao de assinatura e confirmar que a instalacao
+publica do RC funciona de ponta a ponta.
+
+Foi feito:
+
+- Confirmado que o PR draft `https://github.com/vitaleevo/NEXUSLANG/pull/1`
+  continua aberto, mergeable e com checks verdes no head atual
+  `f60e09552d63d73e21efbe27f651f0b6d084b7bb`.
+- Confirmado que a tag assinada `v0.2.0-rc.1` verifica com a chave
+  `3237F7CC5CE2514FC9671BB93CB6808B55385273` e aponta para o commit validado
+  `75c5ef8fb8b67494d741d3231965d81ba1ef33b7`.
+- Confirmado que os assets principais do release draft batiam com o pacote
+  local em `dist/`.
+- Publicado o GitHub Release `v0.2.0-rc.1` como pre-release publico, sem marcar
+  como `latest` estavel.
+- A primeira validacao publica falhou corretamente com `404` porque faltavam
+  `nexuslang-release-public-key.asc` e
+  `nexuslang-release-signing-key.fingerprint` no release.
+- Enviados os assets de chave publica e fingerprint para o pre-release.
+- Reexecutada a validacao publica com sucesso.
+- Atualizado o corpo local das notas para refletir que o RC esta publicado como
+  pre-release, nao mais em draft.
+
+Arquivos/artefatos principais:
+
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+- `MEMORY.md`
+- `meta/ROADMAP.md`
+- `GITHUB_RELEASE.md`
+- `RELEASE_NOTES.md`
+- GitHub Release publico: `https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0-rc.1`
+- Relatorio local: `dist/public-release-install-validation-report.txt`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang
+gh pr view 1 --json number,title,state,isDraft,url,headRefName,baseRefName,statusCheckRollup,mergeable,reviewDecision
+gh run watch 26586404432 --exit-status
+git tag -v v0.2.0-rc.1
+gh release view v0.2.0-rc.1 --json tagName,name,isDraft,isPrerelease,url,publishedAt,assets,targetCommitish
+gh release edit v0.2.0-rc.1 --draft=false --prerelease --latest=false --verify-tag
+gh release upload v0.2.0-rc.1 dist/nexuslang-release-public-key.asc dist/nexuslang-release-signing-key.fingerprint
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh
+```
+
+Resultado:
+
+- PR draft #1 continua aberto, mergeable e com `NexusLang Quality Gate` PASS
+  nos dois runs do head atual.
+- Publicacao do pre-release PASS.
+- Primeiro install publico detectou corretamente asset ausente (`404` para
+  chave publica); corrigido com upload da chave e fingerprint.
+- Install publico final PASS.
+- GPG validou assinaturas do arquivo e do checksum com a chave publica
+  publicada.
+- Checksum do archive PASS:
+  `3d1f376e81aa855c69db3da70674811098169d3aaec8d19cbf50fc36bcbe91d5`.
+- Pacote publico validado:
+  `nexuslang-v0.2.0-rc.1-local-release.tar.gz` com 1582178 bytes.
+- WASM publico no pacote: 477426 bytes.
+- Smokes do pacote, auth, storage backup/restore, `node --check` e assets HTTP
+  PASS.
+- Observacao: GitHub Actions emitiu aviso de manutencao sobre actions Node.js
+  20, sem falhar o CI.
+
+Estado atual:
+
+- `v0.2.0-rc.1` esta publicado como pre-release publico.
+- `v0.1.1` continua sendo a linha estavel/latest.
+- A branch RC e o PR draft continuam abertos; ainda nao houve merge em `main`.
+- O pre-release esta funcional para instalacao publica, mas o produto ainda
+  precisa de revisao/feedback antes de promover qualquer linha estavel.
+
+Estado do projeto:
+
+- Fase/trilha atual: release/producao, com RC publico validado.
+- Solido agora: CI remoto, strict dry-run, tag assinada, assets assinados,
+  pre-release publico e install publico passaram.
+- Falta imediato: revisar PR/feedback, resolver eventuais comentarios,
+  decidir se o PR sai de draft e planejar merge/pos-merge sem quebrar a linha
+  estavel.
+- Distancia do fim: a trilha de RC publico esta praticamente concluida; o
+  produto completo ainda nao esta 100/100 porque falta feedback real, merge,
+  pos-merge validation e decisao sobre uma release estavel `0.2.0`.
+
+## Proximo passo recomendado
+
+Fase 11.57 - revisao do PR/feedback do pre-release e decisao de merge: revisar
+comentarios/checks do PR #1, resolver feedback se houver, decidir se o PR pode
+sair de draft, e preparar validacao pos-merge antes de qualquer `0.2.0` estavel.
+
+AVISO: O proximo passo e criar/implementar revisao do PR/feedback do pre-release e decisao de merge do RC `0.2.0-rc.1`. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e `meta/CURRENT_TASKS.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Conferir PR #1, comentarios, CodeRabbit e checks recentes.
+- Resolver comentarios bloqueantes ou registrar que nao ha bloqueio.
+- Decidir se o PR sai de draft ou se fica aberto para mais QA.
+- Se sair de draft/for mergeado, rodar validacao em `main` e registrar estado.
+- Manter `v0.2.0-rc.1` como pre-release ate haver decisao explicita sobre
+  `0.2.0` estavel.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+- `GITHUB_RELEASE.md`
+- `RELEASE_NOTES.md`
+- `scripts/validate-public-release-install.sh`
+- PR `https://github.com/vitaleevo/NEXUSLANG/pull/1`
 
 ## Etapa concluida: Fase 11.55 - tag e release draft do RC criados
 

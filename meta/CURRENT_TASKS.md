@@ -5,11 +5,10 @@ repositorio.
 
 ## Status atual
 
-Fase 11.55 concluida em 2026-05-28: a tag assinada `v0.2.0-rc.1` foi criada e
-pushada para `origin`, apontando para o commit validado
-`75c5ef8fb8b67494d741d3231965d81ba1ef33b7`. Um GitHub Release draft foi criado
-para essa tag como pre-release, com pacote, checksum e assinaturas anexados.
-O draft ainda nao foi publicado como pre-release publico; nenhum merge foi feito.
+Fase 11.56 concluida em 2026-05-28: `v0.2.0-rc.1` foi publicado como
+pre-release publico e a validacao de install publico passou. O PR draft #1
+continua aberto e mergeable; nenhum merge foi feito e `v0.1.1` continua sendo a
+linha estavel/latest.
 
 ## Tarefas concluidas
 
@@ -33,6 +32,12 @@ O draft ainda nao foi publicado como pre-release publico; nenhum merge foi feito
 - [x] Criar GitHub Release draft marcado como pre-release.
 - [x] Anexar pacote, checksum e assinaturas ao draft.
 - [x] Confirmar que `v0.2.0-rc.1` nao e a release `latest` e continua draft.
+- [x] Observar CI verde no head atual do PR apos o handoff de draft release.
+- [x] Publicar `v0.2.0-rc.1` como pre-release publico sem marcar como latest.
+- [x] Corrigir assets ausentes para validacao publica:
+  `nexuslang-release-public-key.asc` e
+  `nexuslang-release-signing-key.fingerprint`.
+- [x] Rodar install publico contra `v0.2.0-rc.1` com sucesso.
 
 ## Validacao executada
 
@@ -58,6 +63,10 @@ git tag -u 3CB6808B55385273 -m NexusLang-0.2.0-rc.1 v0.2.0-rc.1 HEAD
 git push origin refs/tags/v0.2.0-rc.1
 gh release create v0.2.0-rc.1 --draft --prerelease --verify-tag ...
 gh release view v0.2.0-rc.1 --json tagName,isDraft,isPrerelease,assets
+gh run watch 26586404432 --exit-status
+gh release edit v0.2.0-rc.1 --draft=false --prerelease --latest=false --verify-tag
+gh release upload v0.2.0-rc.1 dist/nexuslang-release-public-key.asc dist/nexuslang-release-signing-key.fingerprint
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh
 ```
 
 Resultado: PASS para LSP, quality gate, package-release, validate-release-package,
@@ -65,28 +74,33 @@ diff check, varredura de marcadores, push da branch e criacao do PR draft.
 CI remoto PASS. Strict preflight PASS. Strict dry-run PASS. O `gh` no
 PowerShell ainda nao esta autenticado, mas o `gh` no WSL esta autenticado e foi
 usado pelo strict flow. Tag assinada PASS. Release draft/pre-release PASS.
+Publicacao do pre-release PASS. Install publico PASS depois de adicionar chave
+publica e fingerprint como assets. O archive publico validado tem SHA-256
+`3d1f376e81aa855c69db3da70674811098169d3aaec8d19cbf50fc36bcbe91d5` e
+1582178 bytes.
 
 ## Proxima fase recomendada
 
-Fase 11.56: revisar/publicar o pre-release do RC `0.2.0-rc.1` e validar o
-install publico. Publicar o draft somente quando a revisao humana/operacional
-estiver ok; depois rodar `NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1
-./scripts/validate-public-release-install.sh`.
+Fase 11.57: revisar PR/feedback do pre-release e decidir merge. Conferir
+comentarios/checks do PR #1, resolver feedback se houver, decidir se o PR pode
+sair de draft, e preparar validacao pos-merge antes de qualquer `0.2.0`
+estavel.
 
 ## Arquivos para abrir primeiro na proxima fase
 
 - `MEMORIA_NEXUSLANG.md`
 - `meta/CURRENT_TASKS.md`
 - `RELEASE_NOTES.md`
-- `scripts/release-dry-run-strict.sh`
-- `scripts/sign-release-artifacts.sh`
 - `scripts/validate-public-release-install.sh`
 - `GITHUB_RELEASE.md`
+- PR `https://github.com/vitaleevo/NEXUSLANG/pull/1`
 
 ## Riscos de compatibilidade
 
-- Nao publicar release estavel; este alvo continua RC/pre-release.
+- Nao promover para release estavel; este alvo continua RC/pre-release.
 - Nao prometer registry remoto real enquanto `PACKAGE_MANAGER.md` ainda o
   define como contrato futuro.
-- O draft ainda nao e publico; validacao de install publico so faz sentido
-  depois de publicar o pre-release.
+- O PR ainda esta em draft; merge/main/`0.2.0` estavel precisam de revisao e
+  validacao propria.
+- GitHub Actions avisou sobre futura migracao de actions Node.js 20 para
+  Node.js 24; isso nao bloqueou o RC, mas deve entrar no hardening de CI.

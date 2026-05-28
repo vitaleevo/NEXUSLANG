@@ -36,9 +36,23 @@ NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
 NEXUS_RELEASE_SIGNING_KEY=<fingerprint> ./scripts/release-dry-run-strict.sh
 ```
 
-The `v0.2.0-rc.1` tag is an annotated signed tag. The GitHub Release is kept as
-a draft pre-release until review/publication. The `.sha256` and `.asc` assets
-attached to the draft are the source of truth for archive integrity.
+The `v0.2.0-rc.1` tag is an annotated signed tag. The GitHub Release is
+published as a public pre-release, not as the latest stable release. The
+`.sha256`, `.asc`, public key, and fingerprint assets attached to the
+pre-release are the source of truth for archive integrity.
+
+Public install validation passed with:
+
+```bash
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh
+```
+
+Validated public archive:
+
+```text
+SHA-256: 3d1f376e81aa855c69db3da70674811098169d3aaec8d19cbf50fc36bcbe91d5
+Bytes: 1582178
+```
 
 ## 0.2.0-rc.1 Known Limits
 

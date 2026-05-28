@@ -2,8 +2,8 @@
 
 NexusLang is an ERP-first programming language for business workflows,
 models, invoices, routes, and small runtime services. The current release line
-is preparing `0.2.0-rc.1` for local QA. The latest published GitHub Release is
-still `v0.1.1` for evaluation, demos, and QA.
+has a public pre-release `v0.2.0-rc.1` for RC evaluation. The latest stable
+GitHub Release is still `v0.1.1` for demos and conservative QA.
 
 ## What is included
 
@@ -74,7 +74,7 @@ end to end from a clean temporary directory:
 
 ## Build Or Validate A Local Package
 
-Build or download the local package artifacts for the current source version:
+Build or download the public pre-release package artifacts for the current RC:
 
 ```text
 nexuslang-v0.2.0-rc.1-local-release.tar.gz
@@ -89,6 +89,12 @@ sha256sum -c nexuslang-v0.2.0-rc.1-local-release.tar.gz.sha256
 
 For signed public artifacts, also verify the detached GPG signatures described
 in `SIGNING.md`.
+
+Maintainers can validate the public RC install path with:
+
+```bash
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh
+```
 
 Extract and enter the package:
 

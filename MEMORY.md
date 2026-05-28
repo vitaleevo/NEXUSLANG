@@ -5,6 +5,21 @@ the short English-named memory requested for architecture decisions.
 
 Last updated: 2026-05-28
 
+## 2026-05-28 - Public RC pre-release validated
+
+- `v0.2.0-rc.1` is now published as a public GitHub pre-release, not as a
+  stable latest release.
+- The public release initially lacked `nexuslang-release-public-key.asc` and
+  `nexuslang-release-signing-key.fingerprint`; public install validation caught
+  the missing assets with a 404, then passed after both assets were uploaded.
+- `NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh`
+  passed, including GPG verification, checksum verification, package smoke,
+  auth smoke, storage backup/restore smoke, playground syntax, and HTTP asset
+  fetches.
+- PR #1 remains a draft and has not been merged. Next work is PR/feedback
+  review and deciding whether the RC branch can leave draft/merge toward a
+  future stable `0.2.0`.
+
 ## 2026-05-28 - RC draft release created
 
 - Signed annotated tag `v0.2.0-rc.1` was created with the NexusLang release key
@@ -14,8 +29,7 @@ Last updated: 2026-05-28
 - A GitHub Release draft was created for `v0.2.0-rc.1` as a pre-release, with
   the local package archive, `.sha256`, and both detached `.asc` signatures
   attached.
-- The draft is not public yet; `v0.1.1` remains the latest public stable
-  release until the RC draft is reviewed and published as a pre-release.
+- This was superseded by the public RC pre-release validation phase above.
 
 ## 2026-05-28 - RC PR, CI, and strict dry-run passed
 
