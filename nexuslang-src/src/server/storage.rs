@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::*;
+use crate::model_ops::CheckedModelOperationArgs;
 
 use super::storage_backend::Storage;
 
@@ -55,16 +56,6 @@ pub enum JsonValue {
     Number(f64),
     Bool(bool),
     Null,
-}
-
-#[derive(Debug)]
-pub struct RouteView<'a> {
-    pub method: &'a HttpMethod,
-    pub path: &'a str,
-    pub params: &'a [String],
-    pub query_params: &'a [QueryParam],
-    pub auth: Option<&'a RouteAuthGuard>,
-    pub body: &'a [Stmt],
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -128,32 +119,6 @@ impl OpenApiPath for String {
             .collect::<Vec<_>>()
             .join("/")
     }
-}
-
-pub(crate) fn routes(program: &Program) -> Vec<RouteView<'_>> {
-    program
-        .decls
-        .iter()
-        .filter_map(|decl| match decl {
-            Decl::Route {
-                method,
-                path,
-                params,
-                query_params,
-                auth,
-                body,
-                ..
-            } => Some(RouteView {
-                method,
-                path,
-                params,
-                query_params,
-                auth: auth.as_ref(),
-                body,
-            }),
-            _ => None,
-        })
-        .collect()
 }
 
 #[allow(dead_code)]
@@ -799,569 +764,291 @@ pub(crate) fn record_matches_filter(
 
 pub(crate) fn eval_all_list_options(
     model: &str,
-    args: &[Expr],
+    args: CheckedModelOperationArgs<'_>,
     params: &HashMap<String, ServerValue>,
     storage: &Storage,
     program: &Program,
     request_body: &str,
     route_method: &HttpMethod,
 ) -> Result<ListOptions, String> {
-    match args.len() {
-        2 if starts_ordering_args(args) => Ok(ListOptions {
-            ordering: Some(parse_list_ordering(model, "all", &args[0], &args[1])?),
-            pagination: None,
-        }),
-        2 => Ok(ListOptions {
-            ordering: None,
-            pagination: Some(eval_pagination(
-                &args[0],
-                &args[1],
-                params,
-                storage,
-                program,
-                request_body,
-                route_method,
-            )?),
-        }),
-        4 => Ok(ListOptions {
-            ordering: Some(parse_list_ordering(model, "all", &args[0], &args[1])?),
-            pagination: Some(eval_pagination(
-                &args[2],
-                &args[3],
-                params,
-                storage,
-                program,
-                request_body,
-                route_method,
-            )?),
-        }),
-        _ => Err(format!(
-            "Requisicao invalida: {}::all() argumentos invalidos",
-            model
-        )),
-    }
+    eval_checked_list_options(
+        model,
+        "all",
+        args,
+        params,
+        storage,
+        program,
+        request_body,
+        route_method,
+    )
 }
 
 pub(crate) fn eval_page_list_options(
     model: &str,
-    args: &[Expr],
+    args: CheckedModelOperationArgs<'_>,
     params: &HashMap<String, ServerValue>,
     storage: &Storage,
     program: &Program,
     request_body: &str,
     route_method: &HttpMethod,
 ) -> Result<ListOptions, String> {
-    match args.len() {
-        2 => Ok(ListOptions {
-            ordering: None,
-            pagination: Some(eval_pagination(
-                &args[0],
-                &args[1],
-                params,
-                storage,
-                program,
-                request_body,
-                route_method,
-            )?),
-        }),
-        4 => Ok(ListOptions {
-            ordering: Some(parse_list_ordering(model, "page", &args[0], &args[1])?),
-            pagination: Some(eval_pagination(
-                &args[2],
-                &args[3],
-                params,
-                storage,
-                program,
-                request_body,
-                route_method,
-            )?),
-        }),
-        _ => Err(format!(
-            "Requisicao invalida: {}::page() argumentos invalidos",
-            model
-        )),
-    }
+    eval_checked_list_options(
+        model,
+        "page",
+        args,
+        params,
+        storage,
+        program,
+        request_body,
+        route_method,
+    )
 }
 
 pub(crate) fn eval_where_list_options(
     model: &str,
     method: &str,
-    args: &[Expr],
+    args: CheckedModelOperationArgs<'_>,
     params: &HashMap<String, ServerValue>,
     storage: &Storage,
     program: &Program,
     request_body: &str,
     route_method: &HttpMethod,
 ) -> Result<ListOptions, String> {
-    match args.len() {
-        2 => Ok(ListOptions {
-            ordering: None,
-            pagination: None,
-        }),
-        4 if starts_ordering_args(&args[2..]) => Ok(ListOptions {
-            ordering: Some(parse_list_ordering(model, method, &args[2], &args[3])?),
-            pagination: None,
-        }),
-        4 => Ok(ListOptions {
-            ordering: None,
-            pagination: Some(eval_pagination(
-                &args[2],
-                &args[3],
-                params,
-                storage,
-                program,
-                request_body,
-                route_method,
-            )?),
-        }),
-        6 => Ok(ListOptions {
-            ordering: Some(parse_list_ordering(model, method, &args[2], &args[3])?),
-            pagination: Some(eval_pagination(
-                &args[4],
-                &args[5],
-                params,
-                storage,
-                program,
-                request_body,
-                route_method,
-            )?),
-        }),
-        _ => Err(format!(
-            "Requisicao invalida: {}::{}() argumentos invalidos",
-            model, method
-        )),
-    }
+    eval_checked_list_options(
+        model,
+        method,
+        args,
+        params,
+        storage,
+        program,
+        request_body,
+        route_method,
+    )
 }
 
 pub(crate) fn eval_where_page_list_options(
     model: &str,
     method: &str,
-    args: &[Expr],
+    args: CheckedModelOperationArgs<'_>,
     params: &HashMap<String, ServerValue>,
     storage: &Storage,
     program: &Program,
     request_body: &str,
     route_method: &HttpMethod,
 ) -> Result<ListOptions, String> {
-    match args.len() {
-        4 => Ok(ListOptions {
-            ordering: None,
-            pagination: Some(eval_pagination(
-                &args[2],
-                &args[3],
-                params,
-                storage,
-                program,
-                request_body,
-                route_method,
-            )?),
-        }),
-        6 => Ok(ListOptions {
-            ordering: Some(parse_list_ordering(model, method, &args[2], &args[3])?),
-            pagination: Some(eval_pagination(
-                &args[4],
-                &args[5],
-                params,
-                storage,
-                program,
-                request_body,
-                route_method,
-            )?),
-        }),
-        _ => Err(format!(
-            "Requisicao invalida: {}::{}() argumentos invalidos",
-            model, method
-        )),
-    }
+    eval_checked_list_options(
+        model,
+        method,
+        args,
+        params,
+        storage,
+        program,
+        request_body,
+        route_method,
+    )
 }
 
 pub(crate) fn eval_where_compare_list_options(
     model: &str,
     method: &str,
-    args: &[Expr],
+    args: CheckedModelOperationArgs<'_>,
     params: &HashMap<String, ServerValue>,
     storage: &Storage,
     program: &Program,
     request_body: &str,
     route_method: &HttpMethod,
 ) -> Result<ListOptions, String> {
-    match args.len() {
-        3 => Ok(ListOptions {
-            ordering: None,
-            pagination: None,
-        }),
-        5 if starts_ordering_args(&args[3..]) => Ok(ListOptions {
-            ordering: Some(parse_list_ordering(model, method, &args[3], &args[4])?),
-            pagination: None,
-        }),
-        5 => Ok(ListOptions {
-            ordering: None,
-            pagination: Some(eval_pagination(
-                &args[3],
-                &args[4],
-                params,
-                storage,
-                program,
-                request_body,
-                route_method,
-            )?),
-        }),
-        7 => Ok(ListOptions {
-            ordering: Some(parse_list_ordering(model, method, &args[3], &args[4])?),
-            pagination: Some(eval_pagination(
-                &args[5],
-                &args[6],
-                params,
-                storage,
-                program,
-                request_body,
-                route_method,
-            )?),
-        }),
-        _ => Err(format!(
-            "Requisicao invalida: {}::{}() argumentos invalidos",
-            model, method
-        )),
-    }
+    eval_checked_list_options(
+        model,
+        method,
+        args,
+        params,
+        storage,
+        program,
+        request_body,
+        route_method,
+    )
 }
 
 pub(crate) fn eval_where_all_filters_and_options(
     model: &str,
-    args: &[Expr],
+    args: CheckedModelOperationArgs<'_>,
     params: &HashMap<String, ServerValue>,
     storage: &Storage,
     program: &Program,
     request_body: &str,
     route_method: &HttpMethod,
 ) -> Result<(Vec<ModelFilter>, ListOptions), String> {
-    let filter_arg_count = where_all_filter_arg_count(args).ok_or_else(|| {
-        format!(
-            "Requisicao invalida: {}::where_all() argumentos invalidos",
-            model
-        )
-    })?;
-    let mut filters = Vec::new();
-    for pair in args[..filter_arg_count].chunks(2) {
-        let field = match &pair[0] {
-            Expr::StringLit { value, .. } => value.clone(),
-            _ => {
-                return Err(format!(
-                    "Requisicao invalida: {}::where_all() espera campo string literal",
-                    model
-                ));
-            }
-        };
-        let expected = crate::server::router::eval_expr_value(
-            &pair[1],
-            params,
-            storage,
-            program,
-            request_body,
-            route_method,
-        )?;
-        filters.push(ModelFilter { field, expected });
-    }
-
-    let ordering = if where_all_args_have_ordering(args) {
-        let order_index = args.len() - 4;
-        Some(parse_list_ordering(
-            model,
-            "where_all",
-            &args[order_index],
-            &args[order_index + 1],
-        )?)
-    } else {
-        None
-    };
-    let pagination = if where_all_args_have_pagination(args) {
-        let limit_index = args.len() - 2;
-        Some(eval_pagination(
-            &args[limit_index],
-            &args[limit_index + 1],
-            params,
-            storage,
-            program,
-            request_body,
-            route_method,
-        )?)
-    } else {
-        None
-    };
-
-    Ok((
-        filters,
-        ListOptions {
-            ordering,
-            pagination,
-        },
-    ))
+    eval_composite_filters_and_options(
+        model,
+        "where_all",
+        args,
+        params,
+        storage,
+        program,
+        request_body,
+        route_method,
+    )
 }
 
 pub(crate) fn eval_where_all_page_filters_and_options(
     model: &str,
-    args: &[Expr],
+    args: CheckedModelOperationArgs<'_>,
     params: &HashMap<String, ServerValue>,
     storage: &Storage,
     program: &Program,
     request_body: &str,
     route_method: &HttpMethod,
 ) -> Result<(Vec<ModelFilter>, ListOptions), String> {
-    let filter_arg_count = where_all_page_filter_arg_count(args).ok_or_else(|| {
-        format!(
-            "Requisicao invalida: {}::where_all_page() argumentos invalidos",
-            model
-        )
-    })?;
-    let mut filters = Vec::new();
-    for pair in args[..filter_arg_count].chunks(2) {
-        let field = match &pair[0] {
-            Expr::StringLit { value, .. } => value.clone(),
-            _ => {
-                return Err(format!(
-                    "Requisicao invalida: {}::where_all_page() espera campo string literal",
-                    model
-                ));
-            }
-        };
-        let expected = crate::server::router::eval_expr_value(
-            &pair[1],
-            params,
-            storage,
-            program,
-            request_body,
-            route_method,
-        )?;
-        filters.push(ModelFilter { field, expected });
-    }
-
-    let ordering = if where_all_args_have_ordering(args) {
-        let order_index = args.len() - 4;
-        Some(parse_list_ordering(
-            model,
-            "where_all_page",
-            &args[order_index],
-            &args[order_index + 1],
-        )?)
-    } else {
-        None
-    };
-    let limit_index = args.len() - 2;
-    let pagination = Some(eval_pagination(
-        &args[limit_index],
-        &args[limit_index + 1],
+    eval_composite_filters_and_options(
+        model,
+        "where_all_page",
+        args,
         params,
         storage,
         program,
         request_body,
         route_method,
-    )?);
-
-    Ok((
-        filters,
-        ListOptions {
-            ordering,
-            pagination,
-        },
-    ))
+    )
 }
 
 pub(crate) fn eval_where_any_filters_and_options(
     model: &str,
-    args: &[Expr],
+    args: CheckedModelOperationArgs<'_>,
     params: &HashMap<String, ServerValue>,
     storage: &Storage,
     program: &Program,
     request_body: &str,
     route_method: &HttpMethod,
 ) -> Result<(Vec<ModelFilter>, ListOptions), String> {
-    let filter_arg_count = where_all_filter_arg_count(args).ok_or_else(|| {
-        format!(
-            "Requisicao invalida: {}::where_any() argumentos invalidos",
-            model
-        )
-    })?;
-    let mut filters = Vec::new();
-    for pair in args[..filter_arg_count].chunks(2) {
-        let field = match &pair[0] {
-            Expr::StringLit { value, .. } => value.clone(),
-            _ => {
-                return Err(format!(
-                    "Requisicao invalida: {}::where_any() espera campo string literal",
-                    model
-                ));
-            }
-        };
-        let expected = crate::server::router::eval_expr_value(
-            &pair[1],
-            params,
-            storage,
-            program,
-            request_body,
-            route_method,
-        )?;
-        filters.push(ModelFilter { field, expected });
-    }
-
-    let ordering = if where_all_args_have_ordering(args) {
-        let order_index = args.len() - 4;
-        Some(parse_list_ordering(
-            model,
-            "where_any",
-            &args[order_index],
-            &args[order_index + 1],
-        )?)
-    } else {
-        None
-    };
-    let pagination = if where_all_args_have_pagination(args) {
-        let limit_index = args.len() - 2;
-        Some(eval_pagination(
-            &args[limit_index],
-            &args[limit_index + 1],
-            params,
-            storage,
-            program,
-            request_body,
-            route_method,
-        )?)
-    } else {
-        None
-    };
-
-    Ok((
-        filters,
-        ListOptions {
-            ordering,
-            pagination,
-        },
-    ))
-}
-
-pub(crate) fn eval_where_any_page_filters_and_options(
-    model: &str,
-    args: &[Expr],
-    params: &HashMap<String, ServerValue>,
-    storage: &Storage,
-    program: &Program,
-    request_body: &str,
-    route_method: &HttpMethod,
-) -> Result<(Vec<ModelFilter>, ListOptions), String> {
-    let filter_arg_count = where_all_page_filter_arg_count(args).ok_or_else(|| {
-        format!(
-            "Requisicao invalida: {}::where_any_page() argumentos invalidos",
-            model
-        )
-    })?;
-    let mut filters = Vec::new();
-    for pair in args[..filter_arg_count].chunks(2) {
-        let field = match &pair[0] {
-            Expr::StringLit { value, .. } => value.clone(),
-            _ => {
-                return Err(format!(
-                    "Requisicao invalida: {}::where_any_page() espera campo string literal",
-                    model
-                ));
-            }
-        };
-        let expected = crate::server::router::eval_expr_value(
-            &pair[1],
-            params,
-            storage,
-            program,
-            request_body,
-            route_method,
-        )?;
-        filters.push(ModelFilter { field, expected });
-    }
-
-    let ordering = if where_all_args_have_ordering(args) {
-        let order_index = args.len() - 4;
-        Some(parse_list_ordering(
-            model,
-            "where_any_page",
-            &args[order_index],
-            &args[order_index + 1],
-        )?)
-    } else {
-        None
-    };
-    let limit_index = args.len() - 2;
-    let pagination = Some(eval_pagination(
-        &args[limit_index],
-        &args[limit_index + 1],
+    eval_composite_filters_and_options(
+        model,
+        "where_any",
+        args,
         params,
         storage,
         program,
         request_body,
         route_method,
-    )?);
+    )
+}
+
+pub(crate) fn eval_where_any_page_filters_and_options(
+    model: &str,
+    args: CheckedModelOperationArgs<'_>,
+    params: &HashMap<String, ServerValue>,
+    storage: &Storage,
+    program: &Program,
+    request_body: &str,
+    route_method: &HttpMethod,
+) -> Result<(Vec<ModelFilter>, ListOptions), String> {
+    eval_composite_filters_and_options(
+        model,
+        "where_any_page",
+        args,
+        params,
+        storage,
+        program,
+        request_body,
+        route_method,
+    )
+}
+
+fn eval_checked_list_options(
+    model: &str,
+    method: &str,
+    args: CheckedModelOperationArgs<'_>,
+    params: &HashMap<String, ServerValue>,
+    storage: &Storage,
+    program: &Program,
+    request_body: &str,
+    route_method: &HttpMethod,
+) -> Result<ListOptions, String> {
+    let ordering = match args.ordering {
+        Some(ordering) => Some(parse_list_ordering(
+            model,
+            method,
+            ordering.field,
+            ordering.direction,
+        )?),
+        None => None,
+    };
+    let pagination = match args.pagination {
+        Some(pagination) => Some(eval_pagination(
+            pagination.limit,
+            pagination.offset,
+            params,
+            storage,
+            program,
+            request_body,
+            route_method,
+        )?),
+        None => None,
+    };
+
+    Ok(ListOptions {
+        ordering,
+        pagination,
+    })
+}
+
+fn eval_composite_filters_and_options(
+    model: &str,
+    method: &str,
+    args: CheckedModelOperationArgs<'_>,
+    params: &HashMap<String, ServerValue>,
+    storage: &Storage,
+    program: &Program,
+    request_body: &str,
+    route_method: &HttpMethod,
+) -> Result<(Vec<ModelFilter>, ListOptions), String> {
+    let filter_args = args.composite_filter_args().ok_or_else(|| {
+        format!(
+            "Requisicao invalida: {}::{}() argumentos invalidos",
+            model, method
+        )
+    })?;
+    let mut filters = Vec::new();
+    for pair in filter_args.chunks(2) {
+        let [field_expr, value_expr] = pair else {
+            return Err(format!(
+                "Requisicao invalida: {}::{}() argumentos invalidos",
+                model, method
+            ));
+        };
+        let field = match field_expr {
+            Expr::StringLit { value, .. } => value.clone(),
+            _ => {
+                return Err(format!(
+                    "Requisicao invalida: {}::{}() espera campo string literal",
+                    model, method
+                ));
+            }
+        };
+        let expected = crate::server::router::eval_expr_value(
+            value_expr,
+            params,
+            storage,
+            program,
+            request_body,
+            route_method,
+        )?;
+        filters.push(ModelFilter { field, expected });
+    }
 
     Ok((
         filters,
-        ListOptions {
-            ordering,
-            pagination,
-        },
+        eval_checked_list_options(
+            model,
+            method,
+            args,
+            params,
+            storage,
+            program,
+            request_body,
+            route_method,
+        )?,
     ))
-}
-
-pub(crate) fn where_all_filter_arg_count(args: &[Expr]) -> Option<usize> {
-    let mut count = 0;
-    let mut pos = 0;
-    while pos + 1 < args.len() {
-        match &args[pos] {
-            Expr::StringLit { .. } => {
-                if pos + 3 < args.len() {
-                    if let Expr::StringLit { value, .. } = &args[pos + 1] {
-                        if (value == "asc" || value == "desc")
-                            && !matches!(&args[pos + 2], Expr::StringLit { .. })
-                        {
-                            break;
-                        }
-                    }
-                }
-                count += 1;
-                pos += 2;
-            }
-            _ => break,
-        }
-    }
-    if count == 0 {
-        None
-    } else {
-        Some(count * 2)
-    }
-}
-
-pub(crate) fn where_all_page_filter_arg_count(args: &[Expr]) -> Option<usize> {
-    if args.len() < 6 || !where_all_args_have_pagination(args) {
-        return None;
-    }
-    let filter_arg_count = if where_all_args_have_ordering(args) {
-        args.len() - 4
-    } else {
-        args.len() - 2
-    };
-    if filter_arg_count >= 4 && filter_arg_count % 2 == 0 {
-        Some(filter_arg_count)
-    } else {
-        None
-    }
-}
-
-pub(crate) fn starts_ordering_args(args: &[Expr]) -> bool {
-    matches!(&args[0], Expr::StringLit { .. })
-}
-
-pub(crate) fn where_all_args_have_ordering(args: &[Expr]) -> bool {
-    args.len() >= 8
-        && matches!(&args[args.len() - 4], Expr::StringLit { .. })
-        && matches!(&args[args.len() - 3], Expr::StringLit { value, .. } if value == "asc" || value == "desc")
-        && !matches!(&args[args.len() - 2], Expr::StringLit { .. })
-}
-
-pub(crate) fn where_all_args_have_pagination(args: &[Expr]) -> bool {
-    args.len() >= 6 && !matches!(&args[args.len() - 2], Expr::StringLit { .. })
 }
 
 pub(crate) fn parse_list_ordering(

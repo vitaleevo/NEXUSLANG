@@ -319,6 +319,17 @@ pub struct WorkflowStep {
     pub span: Span,
 }
 
+#[derive(Debug, Clone)]
+pub struct ImportDecl {
+    pub name: String,
+    pub alias: Option<String>,
+    pub source: String,
+    pub span: Span,
+    pub name_span: Span,
+    pub alias_span: Option<Span>,
+    pub source_span: Span,
+}
+
 /// Top-level declarations
 #[derive(Debug, Clone)]
 pub enum Decl {
@@ -368,6 +379,18 @@ pub enum Decl {
         span: Span,
     },
 
+    // import Name [as Alias] from "path"
+    Import {
+        import: ImportDecl,
+    },
+
+    // export model/fn/workflow/auth
+    Export {
+        decl: Box<Decl>,
+        export_span: Span,
+        span: Span,
+    },
+
     // Statement no topo (scripts)
     Statement(Stmt),
 }
@@ -381,7 +404,18 @@ impl Decl {
             | Decl::Route { span, .. }
             | Decl::Invoice { span, .. } => *span,
             Decl::Auth { config } => config.span,
+            Decl::Import { import } => import.span,
+            Decl::Export { span, .. } => *span,
             Decl::Statement(stmt) => stmt.span(),
+        }
+    }
+
+    /// If this declaration is wrapped in `export`, return the inner declaration.
+    /// Otherwise, return `None`.
+    pub fn exported_inner(&self) -> Option<&Decl> {
+        match self {
+            Decl::Export { decl, .. } => Some(decl.as_ref()),
+            _ => None,
         }
     }
 }

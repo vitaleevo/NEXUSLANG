@@ -1,0 +1,29 @@
+// NexusLang Standard Library - Path Utilities
+
+export fn path_join(left: string, right: string) -> string {
+    return __std_path_join(left, right)
+}
+
+export fn path_basename(value: string) -> string {
+    return __std_path_basename(value)
+}
+
+export fn path_dirname(value: string) -> string {
+    return __std_path_dirname(value)
+}
+
+export fn path_extension(value: string) -> string {
+    return __std_path_extension(value)
+}
+
+export fn path_stem(value: string) -> string {
+    return __std_path_stem(value)
+}
+
+export fn path_normalize(value: string) -> string {
+    return __std_path_normalize(value)
+}
+
+export fn path_is_absolute(value: string) -> bool {
+    return __std_path_is_absolute(value)
+}

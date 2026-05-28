@@ -1,0 +1,21 @@
+// NexusLang Standard Library - Security Utilities
+
+import starts_with from "std/string"
+import to_lower from "std/string"
+import trim from "std/string"
+
+export fn security_is_https(url: string) -> bool {
+    return starts_with(url, "https://")
+}
+
+export fn security_role_is_admin(role: string) -> bool {
+    return to_lower(trim(role)) == "admin"
+}
+
+export fn security_is_strong_pin(pin: string) -> bool {
+    return len(pin) >= 6
+}
+
+export fn security_token_label(prefix: string, token_id: string) -> string {
+    return prefix + ":" + token_id
+}

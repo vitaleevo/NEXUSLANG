@@ -1,3 +1,74 @@
+# NexusLang 0.2.0-rc.1 Release Notes
+
+Release type: local/public release-candidate preparation for the `0.2.0`
+line.
+
+This RC collects the post-`v0.1.1` development work into a traceable release
+candidate. It expands tooling, package-manager, diagnostics, runtime, stdlib,
+and release infrastructure surfaces, so it is intentionally tracked as a
+minor-line RC rather than a `0.1.x` patch.
+
+## 0.2.0-rc.1 Highlights
+
+- Version target updated to `0.2.0-rc.1`.
+- Initial separate `nexus-lsp` crate with diagnostics, hover, completion,
+  go-to-definition for imports/aliases, semantic tokens, and document symbols.
+- Multi-module diagnostics/report APIs and source database tooling contracts.
+- Expanded module loader, HIR/checker internals, and import/package path
+  handling.
+- Local package manager MVP with manifests, lockfiles, path dependencies, and
+  registry declaration contract.
+- Initial stdlib modules for ERP/business, data, HTTP, security, reporting, and
+  operational helpers.
+- Runtime/auth/storage/OpenAPI hardening with JSON/SQLite parity checks,
+  native auth smokes, and release validation updates.
+- Release packaging scripts updated to include new docs, stdlib, smokes, and
+  validation assets.
+
+## 0.2.0-rc.1 Validation Summary
+
+This RC was prepared from a clean release branch and validated with:
+
+```bash
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+./scripts/package-release.sh
+./scripts/validate-release-package.sh
+NEXUS_RELEASE_SIGNING_KEY=<fingerprint> ./scripts/release-dry-run-strict.sh
+```
+
+The `v0.2.0-rc.1` tag is an annotated signed tag. The GitHub Release is
+published as a public pre-release, not as the latest stable release. The
+`.sha256`, `.asc`, public key, and fingerprint assets attached to the
+pre-release are the source of truth for archive integrity.
+
+Public install validation passed with:
+
+```bash
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh
+```
+
+Validated public archive:
+
+```text
+SHA-256: 3d1f376e81aa855c69db3da70674811098169d3aaec8d19cbf50fc36bcbe91d5
+Bytes: 1582178
+```
+
+## 0.2.0-rc.1 Known Limits
+
+- Registry dependencies are declarations only; there are still no remote
+  downloads, package publishing command, semantic version solver, or
+  transitive dependency solver.
+- LSP features remain MVP-level and do not yet include workspace symbols,
+  formatting, rename, code actions, or persistent source database indexing.
+- The playground is still a local/package asset, not a hosted public web
+  product.
+- SQLite physical schema remains experimental; JSON/SQLite behavior is tested
+  for supported flows, not a full production database migration system.
+- This RC should not be published from a dirty worktree.
+
+---
+
 # NexusLang 0.1.1 Release Notes
 
 Release type: public `0.1.1` patch release.

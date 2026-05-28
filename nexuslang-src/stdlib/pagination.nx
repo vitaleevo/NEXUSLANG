@@ -1,0 +1,19 @@
+// NexusLang Standard Library - Pagination Utilities
+
+export fn pagination_offset(page: int, page_size: int) -> int {
+    if page <= 1 { return 0 }
+    return (page - 1) * page_size
+}
+
+export fn pagination_has_next(page: int, page_size: int, total: int) -> bool {
+    return page * page_size < total
+}
+
+export fn pagination_has_prev(page: int) -> bool {
+    return page > 1
+}
+
+export fn pagination_next_page(page: int, page_size: int, total: int) -> int {
+    if pagination_has_next(page, page_size, total) { return page + 1 }
+    return page
+}

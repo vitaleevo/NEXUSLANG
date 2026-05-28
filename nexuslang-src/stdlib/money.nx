@@ -1,0 +1,17 @@
+// NexusLang Standard Library - Money Utilities
+
+export fn format_money(value: money) -> string {
+    return str(value)
+}
+
+export fn is_positive_money(value: money) -> bool {
+    return __std_money_is_positive(value)
+}
+
+export fn is_zero_money(value: money) -> bool {
+    return __std_money_is_zero(value)
+}
+
+export fn same_currency(left: money, right: money) -> bool {
+    return __std_money_same_currency(left, right)
+}

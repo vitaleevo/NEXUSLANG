@@ -1,0 +1,9 @@
+// business.nx — Funções de negócio (exportadas)
+
+export fn calcular_bonus(salario: money) -> money {
+    return salario * 0.1
+}
+
+export fn saudar(nome: string) -> string {
+    return "Bem-vindo, " + nome
+}

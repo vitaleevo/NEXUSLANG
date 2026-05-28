@@ -1,0 +1,37 @@
+// NexusLang Standard Library - HTTP Utilities
+
+export fn http_status_text(code: int) -> string {
+    return __std_http_status_text(code)
+}
+
+export fn http_is_success(code: int) -> bool {
+    return code >= 200 && code < 300
+}
+
+export fn http_is_redirect(code: int) -> bool {
+    return code >= 300 && code < 400
+}
+
+export fn http_is_client_error(code: int) -> bool {
+    return code >= 400 && code < 500
+}
+
+export fn http_is_server_error(code: int) -> bool {
+    return code >= 500 && code < 600
+}
+
+export fn http_method_allows_body(method: string) -> bool {
+    return __std_http_method_allows_body(method)
+}
+
+export fn http_url_encode(value: string) -> string {
+    return __std_http_url_encode(value)
+}
+
+export fn http_build_query_1(key: string, value: string) -> string {
+    return http_url_encode(key) + "=" + http_url_encode(value)
+}
+
+export fn http_build_query_2(key_a: string, value_a: string, key_b: string, value_b: string) -> string {
+    return http_build_query_1(key_a, value_a) + "&" + http_build_query_1(key_b, value_b)
+}

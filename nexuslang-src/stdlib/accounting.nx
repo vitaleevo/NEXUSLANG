@@ -1,0 +1,21 @@
+// NexusLang Standard Library - Accounting Utilities
+
+export fn accounting_debit(amount: money) -> money {
+    return amount
+}
+
+export fn accounting_credit(amount: money) -> money {
+    return -amount
+}
+
+export fn accounting_net(debits: money, credits: money) -> money {
+    return debits - credits
+}
+
+export fn accounting_is_balanced(debits: money, credits: money) -> bool {
+    return debits == credits
+}
+
+export fn accounting_period_label(year: int, month: int) -> string {
+    return str(year) + "-" + str(month)
+}

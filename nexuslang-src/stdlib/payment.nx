@@ -1,0 +1,21 @@
+// NexusLang Standard Library - Payment Utilities
+
+import is_zero_money from "std/money"
+
+export fn payment_remaining(total: money, paid: money) -> money {
+    return total - paid
+}
+
+export fn payment_is_paid(balance: money) -> bool {
+    return is_zero_money(balance)
+}
+
+export fn payment_status(total: money, paid: money) -> string {
+    if paid >= total { return "paid" }
+    if is_zero_money(paid) { return "open" }
+    return "partial"
+}
+
+export fn payment_receipt_label(reference: string, status: string) -> string {
+    return "payment/" + reference + "/" + status
+}

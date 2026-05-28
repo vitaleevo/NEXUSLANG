@@ -33,6 +33,49 @@ impl SqliteStorage {
         Ok(())
     }
 
+    fn ensure_auth_table(&self) -> Result<(), String> {
+        self.conn
+            .execute(
+                "CREATE TABLE IF NOT EXISTS nexus_auth (key TEXT PRIMARY KEY, data TEXT NOT NULL)",
+                [],
+            )
+            .map_err(|e| format!("Erro ao criar tabela auth SQLite: {}", e))?;
+        Ok(())
+    }
+
+    pub(crate) fn read_auth_store_json(&self) -> Result<Option<String>, String> {
+        self.ensure_auth_table()?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT data FROM nexus_auth WHERE key = 'auth_store'")
+            .map_err(|e| format!("Erro ao ler auth SQLite: {}", e))?;
+        let mut rows = stmt
+            .query([])
+            .map_err(|e| format!("Erro ao ler auth SQLite: {}", e))?;
+        match rows
+            .next()
+            .map_err(|e| format!("Erro ao ler auth SQLite: {}", e))?
+        {
+            Some(row) => row
+                .get::<_, String>(0)
+                .map(Some)
+                .map_err(|e| format!("Erro ao ler auth SQLite: {}", e)),
+            None => Ok(None),
+        }
+    }
+
+    pub(crate) fn write_auth_store_json(&self, source: &str) -> Result<(), String> {
+        self.ensure_auth_table()?;
+        self.conn
+            .execute(
+                "INSERT INTO nexus_auth (key, data) VALUES ('auth_store', ?1) \
+                 ON CONFLICT(key) DO UPDATE SET data = excluded.data",
+                rusqlite::params![source],
+            )
+            .map_err(|e| format!("Erro ao gravar auth SQLite: {}", e))?;
+        Ok(())
+    }
+
     fn read_all_records_json(&self, model: &str) -> Result<Vec<(i64, String)>, String> {
         let table = Self::table_name(model);
         let mut stmt = self

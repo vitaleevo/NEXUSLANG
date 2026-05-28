@@ -110,8 +110,38 @@ and validated with:
 NEXUS_RELEASE_SIGNING_KEY="3237F7CC5CE2514FC9671BB93CB6808B55385273" ./scripts/release-dry-run-strict.sh
 ```
 
-After the GitHub Release is published, validate the public install path:
+The `0.2.0-rc.1` candidate was prepared from PR:
+
+```text
+https://github.com/vitaleevo/NEXUSLANG/pull/1
+```
+
+For this RC line, the branch was pushed, GitHub Actions `NexusLang Quality Gate`
+passed, and strict public-release dry-run passed with the maintained signing key
+above. The signed annotated tag `v0.2.0-rc.1` exists, and the GitHub Release is
+published as a public pre-release, not as the latest stable release.
+
+The public pre-release install path passed with:
 
 ```bash
-NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh
 ```
+
+Published RC assets include:
+
+- `nexuslang-v0.2.0-rc.1-local-release.tar.gz`
+- `nexuslang-v0.2.0-rc.1-local-release.tar.gz.sha256`
+- `nexuslang-v0.2.0-rc.1-local-release.tar.gz.asc`
+- `nexuslang-v0.2.0-rc.1-local-release.tar.gz.sha256.asc`
+- `nexuslang-release-public-key.asc`
+- `nexuslang-release-signing-key.fingerprint`
+
+The validated public archive SHA-256, rechecked against
+`dist/nexuslang-v0.2.0-rc.1-local-release.tar.gz` after publication, is:
+
+```text
+3d1f376e81aa855c69db3da70674811098169d3aaec8d19cbf50fc36bcbe91d5
+```
+
+Earlier local-only draft artifacts may have different checksums; the value
+above is the checksum for the published `v0.2.0-rc.1` pre-release asset.

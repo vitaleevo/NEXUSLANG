@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::fmt;
+use std::path::{Path, PathBuf};
 
 use crate::ast::*;
 
@@ -6,9 +7,63 @@ use super::json::JsonStorage;
 use super::sqlite::SqliteStorage;
 use super::storage::*;
 
+pub const NEXUS_DATA_DIR_ENV: &str = "NEXUS_DATA_DIR";
+
 pub enum Storage {
     Json(JsonStorage),
     Sqlite(SqliteStorage),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StorageDriver {
+    Json,
+    Sqlite,
+}
+
+impl StorageDriver {
+    pub const DEFAULT: StorageDriver = StorageDriver::Json;
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "json" => Some(StorageDriver::Json),
+            "sqlite" | "sqlite3" => Some(StorageDriver::Sqlite),
+            _ => None,
+        }
+    }
+
+    pub fn parse(name: &str) -> Result<Self, String> {
+        Self::from_name(name).ok_or_else(|| {
+            format!(
+                "Storage driver '{}' nao suportado. Drivers disponiveis: {}",
+                name,
+                Self::available_names()
+            )
+        })
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            StorageDriver::Json => "json",
+            StorageDriver::Sqlite => "sqlite",
+        }
+    }
+
+    pub fn available_names() -> &'static str {
+        "json, sqlite"
+    }
+
+    pub fn target_path(self, data_dir: &Path) -> PathBuf {
+        match self {
+            StorageDriver::Json => data_dir.to_path_buf(),
+            StorageDriver::Sqlite => data_dir.join("nexus.db"),
+        }
+    }
+}
+
+impl fmt::Display for StorageDriver {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
 }
 
 impl Storage {
@@ -18,6 +73,23 @@ impl Storage {
 
     pub fn new_sqlite(path: &Path) -> Result<Self, String> {
         Ok(Storage::Sqlite(SqliteStorage::new(path)?))
+    }
+
+    pub fn new_driver(driver: StorageDriver, data_dir: &Path) -> Result<Self, String> {
+        match driver {
+            StorageDriver::Json => Ok(Self::new_json(data_dir)),
+            StorageDriver::Sqlite => {
+                std::fs::create_dir_all(data_dir).map_err(|e| e.to_string())?;
+                Self::new_sqlite(&driver.target_path(data_dir))
+            }
+        }
+    }
+
+    pub fn driver(&self) -> StorageDriver {
+        match self {
+            Storage::Json(_) => StorageDriver::Json,
+            Storage::Sqlite(_) => StorageDriver::Sqlite,
+        }
     }
 
     pub fn ensure_storage(&self, program: &Program) -> Result<(), String> {
@@ -322,18 +394,28 @@ impl Storage {
         }
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn auth_file(&self) -> Result<std::path::PathBuf, String> {
+    pub(crate) fn read_auth_store_json(&self) -> Result<Option<String>, String> {
         match self {
-            Storage::Json(s) => Ok(s.auth_file()),
-            Storage::Sqlite(_) => {
-                Err("Auth nativo nesta fase usa o storage JSON padrao de nexus serve".to_string())
-            }
+            Storage::Json(s) => s.read_auth_store_json(),
+            Storage::Sqlite(s) => s.read_auth_store_json(),
+        }
+    }
+
+    pub(crate) fn write_auth_store_json(&self, source: &str) -> Result<(), String> {
+        match self {
+            Storage::Json(s) => s.write_auth_store_json(source),
+            Storage::Sqlite(s) => s.write_auth_store_json(source),
         }
     }
 }
 
 pub fn default_data_dir(file_path: &str) -> std::path::PathBuf {
+    if let Some(path) = crate::runtime_env::var_os(NEXUS_DATA_DIR_ENV) {
+        if !path.is_empty() {
+            return std::path::PathBuf::from(path);
+        }
+    }
+
     std::path::Path::new(file_path)
         .parent()
         .unwrap_or_else(|| std::path::Path::new("."))

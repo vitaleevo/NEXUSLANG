@@ -1,5 +1,16 @@
-use nexuslang::diagnostic::DiagnosticStage;
-use nexuslang::{check_source, parse_source_diagnostic, run_source};
+#![allow(deprecated)]
+
+use nexuslang::ast::Decl;
+use nexuslang::auth_ops::AuthStaticOperation;
+use nexuslang::diagnostic::{
+    checker_code_for_message, codes, parser_code_for_message, runtime_code_for_message,
+    DiagnosticLabel, DiagnosticSeverity, DiagnosticStage, DiagnosticSuggestion,
+};
+use nexuslang::model_ops::ModelStaticOperation;
+use nexuslang::route_hir::CheckedRouteExpr;
+use nexuslang::{
+    check_source, parse_checked_source, parse_source_diagnostic, run_source, run_source_captured,
+};
 use std::fs;
 
 #[test]
@@ -23,6 +34,339 @@ x = 2
 
     let err = check_source(source).unwrap_err();
     assert!(err.contains("Constante 'x'"));
+}
+
+#[test]
+fn print_call_arguments_are_type_checked() {
+    let err = check_source("print(missing)\n")
+        .expect_err("print call should validate arguments before returning void");
+    assert!(
+        err.contains("Variável 'missing' não definida"),
+        "err: {err}"
+    );
+}
+
+#[test]
+fn string_add_requires_two_strings() {
+    let err = check_source(r#"let message = "total: " + 1"#)
+        .expect_err("mixed string concatenation should be rejected");
+    assert!(err.contains("operação numérica inválida"), "err: {err}");
+}
+
+#[test]
+fn control_flow_body_bindings_do_not_leak() {
+    let err = check_source(
+        r#"
+fn value() -> int {
+    if true {
+        let local = 1
+    }
+    return local
+}
+"#,
+    )
+    .expect_err("if body local binding should not leak");
+    assert!(err.contains("Variável 'local' não definida"), "err: {err}");
+
+    let err = check_source(
+        r#"
+fn value() -> int {
+    let nums = [1]
+    for n in nums {
+        let inner = n
+    }
+    return inner
+}
+"#,
+    )
+    .expect_err("for body local binding should not leak");
+    assert!(err.contains("Variável 'inner' não definida"), "err: {err}");
+}
+
+#[test]
+fn diagnostic_code_and_severity_do_not_change_text_display() {
+    let diagnostic = nexuslang::diagnostic::Diagnostic::new(DiagnosticStage::Checker, "erro")
+        .with_code("NXL3999")
+        .with_severity(DiagnosticSeverity::Warning)
+        .with_label_at("origem do erro", 2, 4)
+        .with_label(DiagnosticLabel::new("contexto adicional"))
+        .with_note("nota para tooling")
+        .with_suggestion("verifique o tipo retornado")
+        .with_replacement_suggestion("troque o retorno", "return 1");
+
+    assert_eq!(diagnostic.code.as_deref(), Some("NXL3999"));
+    assert_eq!(diagnostic.severity, Some(DiagnosticSeverity::Warning));
+    assert_eq!(diagnostic.labels.len(), 2);
+    assert_eq!(diagnostic.labels[0].message, "origem do erro");
+    assert_eq!(diagnostic.labels[0].line, Some(2));
+    assert_eq!(diagnostic.labels[0].column, Some(4));
+    assert_eq!(diagnostic.notes, ["nota para tooling"]);
+    assert_eq!(diagnostic.suggestions.len(), 2);
+    assert_eq!(
+        diagnostic.suggestions[1],
+        DiagnosticSuggestion::with_replacement("troque o retorno", "return 1")
+    );
+    assert_eq!(diagnostic.to_string(), "erro");
+
+    let optional = diagnostic
+        .without_code()
+        .without_severity()
+        .without_labels()
+        .without_notes()
+        .without_suggestions();
+    assert_eq!(optional.code, None);
+    assert_eq!(optional.severity, None);
+    assert!(optional.labels.is_empty());
+    assert!(optional.notes.is_empty());
+    assert!(optional.suggestions.is_empty());
+    assert_eq!(optional.to_string(), "erro");
+}
+
+#[test]
+fn diagnostic_code_catalog_classifies_error_families() {
+    let parser_import =
+        nexuslang::diagnostic::Diagnostic::parser("import espera 'from' antes do caminho", 2, 1);
+    assert_eq!(parser_import.code.as_deref(), Some(codes::PARSER_IMPORT));
+
+    assert_eq!(
+        parser_code_for_message("expressão inválida: Eof"),
+        codes::PARSER_EXPRESSION
+    );
+    assert_eq!(
+        checker_code_for_message("Tipo de retorno inválido: esperado int"),
+        codes::CHECKER_TYPE
+    );
+    assert_eq!(
+        checker_code_for_message("Variável 'cliente' não definida"),
+        codes::CHECKER_SYMBOL
+    );
+    assert_eq!(
+        checker_code_for_message("Workflow 'cobranca' não encontrado"),
+        codes::CHECKER_WORKFLOW
+    );
+    assert_eq!(
+        runtime_code_for_message("Função 'calcular' não definida"),
+        codes::RUNTIME_UNDEFINED_FUNCTION
+    );
+    assert_eq!(
+        runtime_code_for_message("Divisão por zero"),
+        codes::RUNTIME_DIVISION_BY_ZERO
+    );
+    assert_eq!(
+        runtime_code_for_message("assert_eq falhou: esperado ok, recebido erro"),
+        codes::RUNTIME_ASSERTION
+    );
+    assert_eq!(
+        runtime_code_for_message("assert_contains falhou: esperado conter ativo"),
+        codes::RUNTIME_ASSERTION
+    );
+}
+
+#[test]
+fn native_assert_helpers_pass_and_fail_at_runtime() {
+    let output = run_source_captured(
+        r#"
+assert_true(2 > 1)
+assert_true(3 > 1, "comparacao verdadeira")
+assert_eq(1, 1.0)
+assert_eq("pedido aprovado", "pedido aprovado")
+assert_eq([1, 2, 3], [1, 2, 3])
+assert_eq([1, 2], [1.0, 2.0], "vetor numerico")
+assert_ne("ativo", "inativo", "status nao deve ser inativo")
+assert_contains("cliente ativo premium", "ativo", "texto de status")
+assert_contains([1, 2, 3], 2, "lista contem id")
+assert_contains([1.0, 2.0], 2, "lista numerica")
+print("ok")
+"#,
+    )
+    .expect("assert helpers should pass");
+    assert_eq!(output, ["ok".to_string()]);
+
+    let err = run_source_captured(
+        r#"
+print("antes")
+assert_eq("recebido", "esperado", "cliente ativo deve bater")
+"#,
+    )
+    .expect_err("assert_eq should fail the program");
+    assert!(err.contains("assert_eq falhou"), "err: {err}");
+    assert!(err.contains("cliente ativo deve bater"), "err: {err}");
+    assert!(err.contains("esperado esperado"), "err: {err}");
+    assert!(err.contains("recebido recebido"), "err: {err}");
+
+    let err = run_source_captured(r#"assert_ne("ativo", "ativo", "status deve mudar")"#)
+        .expect_err("assert_ne should fail when values are equal");
+    assert!(err.contains("assert_ne falhou"), "err: {err}");
+    assert!(err.contains("status deve mudar"), "err: {err}");
+    assert!(err.contains("valor nao deveria ser ativo"), "err: {err}");
+
+    let err = run_source_captured(
+        r#"assert_contains("cliente ativo", "inativo", "texto deve conter status")"#,
+    )
+    .expect_err("assert_contains should fail when value is absent");
+    assert!(err.contains("assert_contains falhou"), "err: {err}");
+    assert!(err.contains("texto deve conter status"), "err: {err}");
+    assert!(err.contains("esperado conter inativo"), "err: {err}");
+
+    let err = run_source_captured(r#"assert_true(false, "flag ativo")"#)
+        .expect_err("assert_true should include optional message");
+    assert!(err.contains("assert_true falhou"), "err: {err}");
+    assert!(err.contains("flag ativo"), "err: {err}");
+
+    let err = check_source(r#"assert_true("sim")"#).expect_err("assert_true expects bool");
+    assert!(err.contains("assert_true"), "err: {err}");
+    assert!(err.contains("bool"), "err: {err}");
+
+    let err =
+        check_source(r#"assert_eq("a", "a", false)"#).expect_err("assert_eq message is string");
+    assert!(err.contains("mensagem"), "err: {err}");
+    assert!(err.contains("string"), "err: {err}");
+
+    let err = check_source(r#"assert_contains(10, 1)"#)
+        .expect_err("assert_contains requires string or array container");
+    assert!(err.contains("assert_contains"), "err: {err}");
+    assert!(err.contains("string ou array"), "err: {err}");
+}
+
+#[test]
+fn parser_import_export_diagnostics_include_tooling_metadata() {
+    let import_err = parse_source_diagnostic(r#"import x "./lib.nx""#).unwrap_err();
+    assert_eq!(import_err.code.as_deref(), Some(codes::PARSER_IMPORT));
+    assert_eq!(import_err.labels[0].message, "sintaxe do import");
+    assert!(import_err
+        .notes
+        .iter()
+        .any(|note| note.contains("Imports usam a forma")));
+    assert!(import_err
+        .suggestions
+        .iter()
+        .any(|suggestion| suggestion.message.contains("import Nome")));
+    assert!(import_err.to_string().contains("import espera"));
+
+    let export_err = parse_source_diagnostic(r#"export import x from "./lib.nx""#).unwrap_err();
+    assert_eq!(export_err.code.as_deref(), Some(codes::PARSER_EXPORT));
+    assert_eq!(export_err.labels[0].message, "sintaxe do export");
+    assert!(export_err
+        .notes
+        .iter()
+        .any(|note| note.contains("Exports sao suportados")));
+    assert!(export_err
+        .suggestions
+        .iter()
+        .any(|suggestion| suggestion.message.contains("declaracao nomeada")));
+    assert!(export_err.to_string().contains("exportar"));
+}
+
+#[test]
+fn checker_additional_diagnostic_families_include_tooling_metadata() {
+    let symbol_err = nexuslang::parse_checked_source_diagnostic("print(cliente)").unwrap_err();
+    assert_eq!(symbol_err.code.as_deref(), Some(codes::CHECKER_SYMBOL));
+    assert_eq!(symbol_err.labels[0].message, "referencia de simbolo");
+    assert!(symbol_err
+        .notes
+        .iter()
+        .any(|note| note.contains("nao encontrou uma declaracao")));
+    assert!(symbol_err
+        .suggestions
+        .iter()
+        .any(|suggestion| suggestion.message.contains("Declare o simbolo")));
+    assert!(symbol_err.to_string().contains("Variável"));
+
+    let argument_err = nexuslang::parse_checked_source_diagnostic(
+        r#"
+fn dobrar(x: int) -> int {
+    return x
+}
+
+print(dobrar(1, 2))
+"#,
+    )
+    .unwrap_err();
+    assert_eq!(argument_err.code.as_deref(), Some(codes::CHECKER_ARGUMENT));
+    assert_eq!(
+        argument_err.labels[0].message,
+        "argumentos verificados aqui"
+    );
+    assert!(argument_err
+        .notes
+        .iter()
+        .any(|note| note.contains("argumentos incompat")));
+    assert!(argument_err
+        .suggestions
+        .iter()
+        .any(|suggestion| suggestion.message.contains("assinatura esperada")));
+    assert!(argument_err.to_string().contains("argumento"));
+
+    let model_err =
+        nexuslang::parse_checked_source_diagnostic("let clientes = Customer::all()").unwrap_err();
+    assert_eq!(model_err.code.as_deref(), Some(codes::CHECKER_MODEL));
+    assert_eq!(model_err.labels[0].message, "uso de model aqui");
+    assert!(model_err
+        .notes
+        .iter()
+        .any(|note| note.contains("model e seus campos")));
+    assert!(model_err
+        .suggestions
+        .iter()
+        .any(|suggestion| suggestion.message.contains("model esperado")));
+    assert!(model_err.to_string().contains("Model"));
+
+    let workflow_err =
+        nexuslang::parse_checked_source_diagnostic(r#"run_workflow("Cobranca")"#).unwrap_err();
+    assert_eq!(workflow_err.code.as_deref(), Some(codes::CHECKER_WORKFLOW));
+    assert_eq!(workflow_err.labels[0].message, "workflow verificado aqui");
+    assert!(workflow_err
+        .notes
+        .iter()
+        .any(|note| note.contains("Workflows chamados")));
+    assert!(workflow_err
+        .suggestions
+        .iter()
+        .any(|suggestion| suggestion.message.contains("workflow esperado")));
+    assert!(workflow_err.to_string().contains("Workflow"));
+}
+
+#[test]
+fn runtime_additional_diagnostic_families_include_tooling_metadata() {
+    let variable_err = nexuslang::MultiModuleDiagnostic::runtime("Variável 'cliente' não definida");
+    assert_eq!(
+        variable_err.diagnostic.code.as_deref(),
+        Some(codes::RUNTIME_UNDEFINED_VARIABLE)
+    );
+    assert_eq!(
+        variable_err.diagnostic.labels[0].message,
+        "variavel acessada em runtime"
+    );
+    assert!(variable_err
+        .diagnostic
+        .notes
+        .iter()
+        .any(|note| note.contains("escopo atual")));
+    assert!(variable_err
+        .diagnostic
+        .suggestions
+        .iter()
+        .any(|suggestion| suggestion.message.contains("Declare a variavel")));
+
+    let function_err = nexuslang::MultiModuleDiagnostic::runtime("Função 'calcular' não definida");
+    assert_eq!(
+        function_err.diagnostic.code.as_deref(),
+        Some(codes::RUNTIME_UNDEFINED_FUNCTION)
+    );
+    assert_eq!(
+        function_err.diagnostic.labels[0].message,
+        "funcao chamada em runtime"
+    );
+    assert!(function_err
+        .diagnostic
+        .notes
+        .iter()
+        .any(|note| note.contains("programa carregado")));
+    assert!(function_err
+        .diagnostic
+        .suggestions
+        .iter()
+        .any(|suggestion| suggestion.message.contains("Declare a funcao")));
 }
 
 #[test]
@@ -113,6 +457,78 @@ fn erp_example_checks_and_runs() {
 
     assert!(check_source(source).is_ok());
     assert!(run_source(source).is_ok());
+}
+
+// ---------------------------------------------------------------------------
+// F11.12 — Multi-module ERP example (erp_basico_multi/)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn erp_basico_multi_checks_and_runs() {
+    // Load the multi-module ERP example from examples/erp_basico_multi/
+    let result = nexuslang::load_and_run_with_graph(std::path::Path::new(
+        "examples/erp_basico_multi/main.nx",
+    ));
+    assert!(
+        result.is_ok(),
+        "multi-module ERP example should load, check, and run: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn erp_basico_multi_loads_and_checks_with_graph() {
+    let result = nexuslang::load_and_check_with_graph(std::path::Path::new(
+        "examples/erp_basico_multi/main.nx",
+    ));
+    assert!(
+        result.is_ok(),
+        "multi-module ERP example should load and check with graph: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn erp_basico_multi_runtime_output() {
+    let entry = std::path::Path::new("examples/erp_basico_multi/main.nx");
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect("check should succeed");
+
+    let mut interp = nexuslang::interpreter::Interpreter::new_captured();
+    interp.run(&program).expect("run should succeed");
+
+    let output = interp.output();
+    assert!(
+        output.contains(&"=== ERP Multi-Módulo ===".to_string()),
+        "output should contain header: {:?}",
+        output
+    );
+    assert!(
+        output.contains(&"Bem-vindo, Admin".to_string()),
+        "output should contain greeting: {:?}",
+        output
+    );
+    assert!(
+        output.contains(&"Salário acima da média".to_string()),
+        "output should contain conditional result: {:?}",
+        output
+    );
+    assert!(
+        output.contains(&"Processando mês:".to_string()),
+        "output should contain loop: {:?}",
+        output
+    );
+    assert!(
+        output.contains(&"Financeiro".to_string()),
+        "output should contain for-loop item: {:?}",
+        output
+    );
 }
 
 #[test]
@@ -1189,6 +1605,19 @@ route GET /health {
 }
 
 #[test]
+fn route_array_return_type_validates_inner_type() {
+    let source = r#"
+route GET /bad {
+    return [nil]
+}
+"#;
+
+    let err = check_source(source).unwrap_err();
+    assert!(err.contains("valor HTTP concreto"), "err: {err}");
+    assert!(err.contains("nil"), "err: {err}");
+}
+
+#[test]
 fn route_model_create_requires_post() {
     let source = r#"
 model Customer {
@@ -1202,6 +1631,68 @@ route GET /customers {
 
     let err = check_source(source).unwrap_err();
     assert!(err.contains("Customer::create() so pode ser usado em route POST"));
+}
+
+#[test]
+fn checked_route_hir_lifts_model_static_operation() {
+    let source = r#"
+model Customer {
+    name: string
+}
+
+route GET /customers/:name {
+    return Customer::find("name", name)
+}
+"#;
+
+    let program = parse_checked_source(source).unwrap();
+    let routes = nexuslang::route_hir::checked_routes(&program);
+
+    assert_eq!(routes.len(), 1);
+    match routes[0].return_expr {
+        Some(CheckedRouteExpr::ModelOperation(operation)) => {
+            assert_eq!(operation.model, "Customer");
+            assert_eq!(operation.operation, ModelStaticOperation::Find);
+            assert_eq!(operation.args.len(), 2);
+        }
+        other => panic!("route deveria retornar ModelOperation, encontrado {other:?}"),
+    }
+}
+
+#[test]
+fn checked_route_hir_lifts_auth_static_operation() {
+    let source = r#"
+model User {
+    email: string unique
+}
+
+auth UserAuth {
+    model: User
+    identity: email
+}
+
+route POST /auth/login {
+    return Auth::login(UserAuth)
+}
+"#;
+
+    let program = parse_checked_source(source).unwrap();
+    let routes = nexuslang::route_hir::checked_routes(&program);
+
+    assert_eq!(routes.len(), 1);
+    match routes[0].return_expr {
+        Some(CheckedRouteExpr::AuthOperation(operation)) => {
+            assert_eq!(operation.operation, AuthStaticOperation::Login);
+            assert_eq!(operation.args.len(), 1);
+            assert_eq!(
+                operation
+                    .checked_args
+                    .and_then(|args| args.auth_config_name()),
+                Some("UserAuth")
+            );
+        }
+        other => panic!("route deveria retornar AuthOperation, encontrado {other:?}"),
+    }
 }
 
 #[test]
@@ -1601,6 +2092,25 @@ route GET /customers/email_domain ?(term: string) {
     assert_eq!(
         response.body,
         r#"[{"name":"Ana Santos","email":"ana@sales.example.com"},{"name":"Dina Silva","email":"dina@example.com"}]"#
+    );
+}
+
+#[test]
+fn route_model_where_text_rejects_optional_value_for_required_field() {
+    let source = r#"
+model Customer {
+    name: string
+}
+
+route GET /customers/search ?(term: string?) {
+    return Customer::where_text("name", "contains", term)
+}
+"#;
+
+    let err = check_source(source).unwrap_err();
+    assert!(
+        err.contains("Customer::where_text() valor invalido para 'name'"),
+        "err: {err}"
     );
 }
 
@@ -3373,6 +3883,42 @@ route DELETE /customers/:name {
 }
 
 #[test]
+fn storage_driver_registry_parses_and_constructs_backends() {
+    let json_dir = temp_data_dir("storage_driver_registry_json");
+    let json_driver = nexuslang::server::StorageDriver::parse("json").unwrap();
+    let json_storage = nexuslang::server::Storage::new_driver(json_driver, &json_dir).unwrap();
+
+    assert_eq!(json_driver, nexuslang::server::StorageDriver::Json);
+    assert_eq!(
+        json_storage.driver(),
+        nexuslang::server::StorageDriver::Json
+    );
+    assert_eq!(
+        json_driver.target_path(&json_dir),
+        json_dir,
+        "JSON driver should target the data directory"
+    );
+
+    let sqlite_dir = temp_data_dir("storage_driver_registry_sqlite");
+    let sqlite_driver = nexuslang::server::StorageDriver::parse("sqlite3").unwrap();
+    let sqlite_storage =
+        nexuslang::server::Storage::new_driver(sqlite_driver, &sqlite_dir).unwrap();
+
+    assert_eq!(sqlite_driver, nexuslang::server::StorageDriver::Sqlite);
+    assert_eq!(
+        sqlite_storage.driver(),
+        nexuslang::server::StorageDriver::Sqlite
+    );
+    assert_eq!(
+        sqlite_driver.target_path(&sqlite_dir),
+        sqlite_dir.join("nexus.db")
+    );
+
+    let error = nexuslang::server::StorageDriver::parse("memory").unwrap_err();
+    assert!(error.contains("json, sqlite"), "error: {error}");
+}
+
+#[test]
 fn storage_schema_evolution_allows_additive_optional_and_defaulted_fields() {
     let v1_source = r#"
 model Customer {
@@ -5045,16 +5591,19 @@ fn native_auth_registers_with_argon2id_and_session_cookie() {
     assert_eq!(register.status, 201);
     assert!(register.body.contains(r#""email":"ana@example.com""#));
     let token = json_string_field(&register.body, "token");
+    let csrf = json_string_field(&register.body, "csrf_token");
     let cookie = set_cookie_header(&register);
     assert!(cookie.contains("__Host-nexus_session="));
     assert!(cookie.contains("HttpOnly"));
     assert!(cookie.contains("Secure"));
     assert!(cookie.contains("SameSite=Lax"));
+    assert!(!csrf.is_empty());
 
     let auth_store = fs::read_to_string(data_dir.join(".nexus-auth.json")).unwrap();
     assert!(auth_store.contains("$argon2id$"));
     assert!(!auth_store.contains(password));
     assert!(!auth_store.contains(&token));
+    assert!(!auth_store.contains(&csrf));
 
     let cookie_headers = vec![("Cookie".to_string(), cookie_pair(&cookie))];
     let me = nexuslang::server::handle_request_with_headers_and_body_for_test(
@@ -5084,11 +5633,42 @@ fn native_auth_registers_with_argon2id_and_session_cookie() {
     assert_eq!(admin.status, 200);
     assert!(admin.body.contains(r#""role":"admin""#));
 
-    let logout = nexuslang::server::handle_request_with_headers_and_body_for_test(
+    let logout_without_csrf = nexuslang::server::handle_request_with_headers_and_body_for_test(
         AUTH_SOURCE,
         "POST",
         "/auth/logout",
         &cookie_headers,
+        "",
+        &storage,
+    )
+    .unwrap();
+    assert_eq!(logout_without_csrf.status, 403);
+
+    let invalid_csrf_headers = vec![
+        ("Cookie".to_string(), cookie_pair(&cookie)),
+        ("X-Nexus-CSRF-Token".to_string(), "invalid".to_string()),
+    ];
+    let logout_with_invalid_csrf =
+        nexuslang::server::handle_request_with_headers_and_body_for_test(
+            AUTH_SOURCE,
+            "POST",
+            "/auth/logout",
+            &invalid_csrf_headers,
+            "",
+            &storage,
+        )
+        .unwrap();
+    assert_eq!(logout_with_invalid_csrf.status, 403);
+
+    let csrf_cookie_headers = vec![
+        ("Cookie".to_string(), cookie_pair(&cookie)),
+        ("X-Nexus-CSRF-Token".to_string(), csrf),
+    ];
+    let logout = nexuslang::server::handle_request_with_headers_and_body_for_test(
+        AUTH_SOURCE,
+        "POST",
+        "/auth/logout",
+        &csrf_cookie_headers,
         "",
         &storage,
     )
@@ -5186,6 +5766,115 @@ fn native_auth_supports_revocable_bearer_tokens_and_roles() {
 }
 
 #[test]
+fn native_auth_rate_limits_failed_login_attempts() {
+    let data_dir = temp_data_dir("native_auth_rate_limit");
+    fs::create_dir_all(&data_dir).unwrap();
+    let storage = nexuslang::server::Storage::new_json(&data_dir);
+
+    let register = nexuslang::server::handle_request_with_body_for_test(
+        AUTH_SOURCE,
+        "POST",
+        "/auth/register",
+        r#"{"email":"rate@example.com","name":"Rate","password":"strong-password-123"}"#,
+        &storage,
+    )
+    .unwrap();
+    assert_eq!(register.status, 201);
+
+    for _ in 0..5 {
+        let failed = nexuslang::server::handle_request_with_body_for_test(
+            AUTH_SOURCE,
+            "POST",
+            "/auth/login",
+            r#"{"email":"rate@example.com","password":"wrong-password-123"}"#,
+            &storage,
+        )
+        .unwrap();
+        assert_eq!(failed.status, 401);
+    }
+
+    let limited = nexuslang::server::handle_request_with_body_for_test(
+        AUTH_SOURCE,
+        "POST",
+        "/auth/login",
+        r#"{"email":"rate@example.com","password":"wrong-password-123"}"#,
+        &storage,
+    )
+    .unwrap();
+    assert_eq!(limited.status, 429);
+    assert!(limited.body.contains("Muitas requisicoes"));
+}
+
+#[test]
+fn native_auth_sqlite_store_matches_json_for_core_flow() {
+    for backend in [ParityBackend::Json, ParityBackend::Sqlite] {
+        let storage = parity_storage("native_auth_storage_parity", backend);
+        let register = nexuslang::server::handle_request_with_body_for_test(
+            AUTH_SOURCE,
+            "POST",
+            "/auth/register",
+            r#"{"email":"sql@example.com","name":"Sql","role":"admin","password":"strong-password-123"}"#,
+            &storage,
+        )
+        .unwrap();
+        assert_eq!(register.status, 201, "register on {}", backend.label());
+        let csrf = json_string_field(&register.body, "csrf_token");
+        let cookie = set_cookie_header(&register);
+
+        let cookie_headers = vec![("Cookie".to_string(), cookie_pair(&cookie))];
+        let me = nexuslang::server::handle_request_with_headers_and_body_for_test(
+            AUTH_SOURCE,
+            "GET",
+            "/me",
+            &cookie_headers,
+            "",
+            &storage,
+        )
+        .unwrap();
+        assert_eq!(me.status, 200, "cookie /me on {}", backend.label());
+        assert!(me.body.contains(r#""email":"sql@example.com""#));
+
+        let login = nexuslang::server::handle_request_with_body_for_test(
+            AUTH_SOURCE,
+            "POST",
+            "/auth/login",
+            r#"{"email":"sql@example.com","password":"strong-password-123"}"#,
+            &storage,
+        )
+        .unwrap();
+        assert_eq!(login.status, 200, "login on {}", backend.label());
+        let token = json_string_field(&login.body, "token");
+        let bearer_headers = vec![("Authorization".to_string(), format!("Bearer {}", token))];
+
+        let admin = nexuslang::server::handle_request_with_headers_and_body_for_test(
+            AUTH_SOURCE,
+            "GET",
+            "/admin/users",
+            &bearer_headers,
+            "",
+            &storage,
+        )
+        .unwrap();
+        assert_eq!(admin.status, 200, "bearer admin on {}", backend.label());
+
+        let logout_headers = vec![
+            ("Cookie".to_string(), cookie_pair(&cookie)),
+            ("X-Nexus-CSRF-Token".to_string(), csrf),
+        ];
+        let logout = nexuslang::server::handle_request_with_headers_and_body_for_test(
+            AUTH_SOURCE,
+            "POST",
+            "/auth/logout",
+            &logout_headers,
+            "",
+            &storage,
+        )
+        .unwrap();
+        assert_eq!(logout.status, 200, "logout on {}", backend.label());
+    }
+}
+
+#[test]
 fn native_auth_semantic_guards_are_checked() {
     let err = check_source(
         r#"
@@ -5234,9 +5923,14 @@ fn native_auth_openapi_exposes_security_contract() {
     assert!(response
         .body
         .contains(r#""security":[{"NexusSession":[]},{"NexusBearer":[]}"#));
+    assert!(response.body.contains(r#""csrf_token":{"type":"string"}"#));
+    assert!(response.body.contains(r#""X-Nexus-CSRF-Token""#));
     assert!(response
         .body
         .contains(r#""401":{"description":"Unauthorized""#));
+    assert!(response
+        .body
+        .contains(r#""429":{"description":"Too Many Requests""#));
     assert!(response
         .body
         .contains(r#""403":{"description":"Forbidden""#));
@@ -5382,4 +6076,4514 @@ fn assert_recorded_response_contains(
         body_fragment,
         response.body
     );
+}
+
+// ─── Fase 11.02: Import/Export Parser, HIR, and Formatter ─────────────
+
+#[test]
+fn parse_import_simple() {
+    let source = r#"import Customer from "./crm.nx""#;
+    let program = nexuslang::parse_source(source).unwrap();
+    match &program.decls[0] {
+        Decl::Import { import } => {
+            assert_eq!(import.name, "Customer");
+            assert!(import.alias.is_none());
+            assert_eq!(import.source, "./crm.nx");
+        }
+        other => panic!("expected Import, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_import_with_alias() {
+    let source = r#"import BuildInvoice as InvoiceFlow from "./billing.nx""#;
+    let program = nexuslang::parse_source(source).unwrap();
+    match &program.decls[0] {
+        Decl::Import { import } => {
+            assert_eq!(import.name, "BuildInvoice");
+            assert_eq!(import.alias.as_deref(), Some("InvoiceFlow"));
+            assert_eq!(import.source, "./billing.nx");
+        }
+        other => panic!("expected Import, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_export_model() {
+    let source = "export model Foo { name: string }";
+    let program = nexuslang::parse_source(source).unwrap();
+    match &program.decls[0] {
+        Decl::Export { decl, .. } => match decl.as_ref() {
+            Decl::Model { name, .. } => assert_eq!(name, "Foo"),
+            other => panic!("expected Model inside Export, got {:?}", other),
+        },
+        other => panic!("expected Export, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_export_function() {
+    let source = "export fn hello() -> string { return \"world\" }";
+    let program = nexuslang::parse_source(source).unwrap();
+    match &program.decls[0] {
+        Decl::Export { decl, .. } => match decl.as_ref() {
+            Decl::Function { name, .. } => assert_eq!(name, "hello"),
+            other => panic!("expected Function inside Export, got {:?}", other),
+        },
+        other => panic!("expected Export, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_export_workflow() {
+    let source = "export workflow Onboard { step start { print(\"ok\") } }";
+    let program = nexuslang::parse_source(source).unwrap();
+    match &program.decls[0] {
+        Decl::Export { decl, .. } => match decl.as_ref() {
+            Decl::Workflow { name, .. } => assert_eq!(name, "Onboard"),
+            other => panic!("expected Workflow inside Export, got {:?}", other),
+        },
+        other => panic!("expected Export, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_export_auth() {
+    let source = "export auth UserAuth { model: User identity: email }";
+    // This should parse: auth requires model/identity fields
+    let program = nexuslang::parse_source(source).unwrap();
+    match &program.decls[0] {
+        Decl::Export { decl, .. } => match decl.as_ref() {
+            Decl::Auth { config } => assert_eq!(config.name, "UserAuth"),
+            other => panic!("expected Auth inside Export, got {:?}", other),
+        },
+        other => panic!("expected Export, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_error_export_import_is_rejected() {
+    let source = "export import Customer from \"./crm.nx\"";
+    let err = nexuslang::parse_source(source).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("não é possível exportar um import") || msg.contains("export"),
+        "unexpected error: {}",
+        msg
+    );
+}
+
+#[test]
+fn parse_error_export_invoice_is_rejected() {
+    let source = "export invoice { customer: \"X\" currency: \"AOA\" total: 100 kz }";
+    let err = nexuslang::parse_source(source).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("não é possível exportar invoice") || msg.contains("export"),
+        "unexpected error: {}",
+        msg
+    );
+}
+
+#[test]
+fn parse_error_import_missing_from() {
+    let source = r#"import Customer "./crm.nx""#;
+    let err = nexuslang::parse_source(source).unwrap_err();
+    assert!(err.to_string().contains("from"));
+}
+
+#[test]
+fn parse_error_import_non_string_path() {
+    let source = "import Customer from 42";
+    let err = nexuslang::parse_source(source).unwrap_err();
+    assert!(err.to_string().contains("string literal"));
+}
+
+#[test]
+fn fmt_import_roundtrip() {
+    let source = r#"import Customer from "./crm.nx""#;
+    let formatted = nexuslang::fmt_source(source).unwrap();
+    assert!(formatted.contains("import"));
+    assert!(formatted.contains("Customer"));
+    assert!(formatted.contains("./crm.nx"));
+}
+
+#[test]
+fn fmt_import_with_alias_roundtrip() {
+    let source = r#"import BuildInvoice as InvoiceFlow from "./billing.nx""#;
+    let formatted = nexuslang::fmt_source(source).unwrap();
+    assert!(formatted.contains("BuildInvoice"));
+    assert!(formatted.contains("InvoiceFlow"));
+    assert!(formatted.contains("./billing.nx"));
+}
+
+#[test]
+fn fmt_export_roundtrip() {
+    let source = "export model Foo { name: string }";
+    let formatted = nexuslang::fmt_source(source).unwrap();
+    assert!(formatted.contains("export"));
+    assert!(formatted.contains("Foo"));
+}
+
+#[test]
+fn exported_model_is_checked_and_runnable() {
+    // An exported model should still be valid and runnable
+    let source = r#"
+export model Customer {
+    name: string
+    balance: money
+}
+
+let c = Customer { name: "Ana", balance: 1000 kz }
+print(c.name)
+"#;
+    let result = run_source(source);
+    assert!(
+        result.is_ok(),
+        "exported model should run: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn import_is_syntactically_valid_in_single_file_mode() {
+    // Single file: imports parse but don't resolve yet
+    let source = r#"
+import Customer from "./crm.nx"
+
+model Supplier {
+    name: string
+}
+
+print("single file with import")
+"#;
+    // Should parse and check (imports are accepted but not resolved)
+    let result = check_source(source);
+    assert!(
+        result.is_ok(),
+        "import should be accepted: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn hir_lower_import_creates_symbols_and_references() {
+    use nexuslang::hir;
+    let source = r#"import Customer as Cliente from "./crm.nx""#;
+    let program = nexuslang::parse_source(source).unwrap();
+    let hir_program = hir::lower_program(&program);
+
+    // Check the import decl was lowered
+    let import_decl = hir_program
+        .decls
+        .iter()
+        .find(|d| d.kind == hir::HirDeclKind::Import)
+        .expect("expected an Import HIR decl");
+
+    assert_eq!(import_decl.name, Some("Cliente"));
+
+    // Check references: ModulePath and ImportSymbol
+    let mod_path = hir_program
+        .references
+        .iter()
+        .find(|r| r.kind == hir::HirReferenceKind::ModulePath)
+        .expect("expected ModulePath reference");
+    assert_eq!(mod_path.name, "./crm.nx");
+
+    let import_sym = hir_program
+        .references
+        .iter()
+        .find(|r| r.kind == hir::HirReferenceKind::ImportSymbol)
+        .expect("expected ImportSymbol reference");
+    assert_eq!(import_sym.name, "Customer");
+
+    // Check the alias symbol
+    let imported_sym = hir_program
+        .symbols
+        .iter()
+        .find(|s| s.kind == hir::HirSymbolKind::ImportedSymbol)
+        .expect("expected ImportedSymbol");
+    assert_eq!(imported_sym.name, "Cliente");
+}
+
+#[test]
+fn export_wrapper_preserves_inner_declaration_spans() {
+    let source = "export model Bar { active: bool }";
+    let program = nexuslang::parse_source(source).unwrap();
+    match &program.decls[0] {
+        Decl::Export {
+            decl: inner,
+            export_span,
+            span,
+        } => {
+            assert!(export_span.line > 0, "export_span should be known");
+            assert_eq!(span.line, export_span.line);
+            // Inner declaration should have its own span
+            assert!(inner.span().line > 0);
+        }
+        other => panic!("expected Export, got {:?}", other),
+    }
+}
+
+// ─── Fase 11.03: Module Loader Integration Tests ───────────────────────
+
+use std::path::{Path, PathBuf};
+
+/// Helper: create a temporary .nx file and return its path.
+fn create_nx_file(dir: &Path, name: &str, source: &str) -> PathBuf {
+    let path = dir.join(name);
+    fs::write(&path, source).expect("failed to write temp file");
+    path
+}
+
+/// Helper: create a unique temp dir per test.
+fn temp_dir(label: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("nx_modtest_{}_{}", label, std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).expect("failed to create temp dir");
+    dir
+}
+
+#[test]
+fn module_loader_loads_and_merges_two_files() {
+    let dir = temp_dir("two_files");
+
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export model User {
+    name: string
+}
+"#,
+    );
+
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import User from "./lib.nx"
+
+let u = User { name: "Ana" }
+print(u.name)
+"#,
+    );
+
+    let result = nexuslang::load_and_run(&entry);
+    assert!(result.is_ok(), "two-file load+run: {:?}", result.err());
+}
+
+#[test]
+fn module_loader_rejects_missing_export() {
+    let dir = temp_dir("missing_export");
+
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export model User { name: string }
+"#,
+    );
+
+    let entry = create_nx_file(&dir, "main.nx", r#"import Post from "./lib.nx""#);
+
+    let result = nexuslang::load_program(&entry);
+    assert!(result.is_err(), "missing export should fail");
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("Post") || err.contains("não é"),
+        "error should mention symbol: {}",
+        err
+    );
+}
+
+#[test]
+fn module_loader_rejects_circular_dependency() {
+    let dir = temp_dir("circular");
+
+    create_nx_file(
+        &dir,
+        "a.nx",
+        r#"import B from "./b.nx" export fn A() -> string { return "a" } "#,
+    );
+    create_nx_file(
+        &dir,
+        "b.nx",
+        r#"import A from "./a.nx" export fn B() -> string { return "b" } "#,
+    );
+
+    let result = nexuslang::load_program(&dir.join("a.nx"));
+    assert!(result.is_err(), "circular dep should fail");
+}
+
+#[test]
+fn module_loader_rejects_non_relative_path() {
+    let dir = temp_dir("nonrel");
+
+    let entry = create_nx_file(&dir, "main.nx", r#"import Foo from "bar.nx""#);
+
+    let result = nexuslang::module_loader::load_program_full(&entry);
+    let error = result.expect_err("non-relative path should fail");
+    let diagnostic = error.to_diagnostic();
+    assert_eq!(diagnostic.code.as_deref(), Some(codes::MODULE_LOADER_PATH));
+    assert_eq!(diagnostic.labels[0].message, "caminho importado aqui");
+    assert!(diagnostic
+        .notes
+        .iter()
+        .any(|note| note.contains("Imports de arquivo")));
+    assert!(diagnostic
+        .suggestions
+        .iter()
+        .any(|suggestion| suggestion.message.contains("./modulo.nx")));
+    assert!(diagnostic.to_string().contains("Caminho nao relativo"));
+
+    match error {
+        nexuslang::module_loader::ModuleError::NonRelativePath { source, .. } => {
+            assert_eq!(source, "bar.nx");
+        }
+        other => panic!("expected NonRelativePath, got {:?}", other),
+    }
+}
+
+#[test]
+fn module_loader_three_level_deep_deps() {
+    let dir = temp_dir("deep");
+
+    create_nx_file(
+        &dir,
+        "base.nx",
+        r#"
+export fn greet(name: string) -> string {
+    return "Hi " + name
+}
+"#,
+    );
+
+    create_nx_file(
+        &dir,
+        "middle.nx",
+        r#"
+import greet from "./base.nx"
+
+export fn wrapped(name: string) -> string {
+    return greet(name)
+}
+"#,
+    );
+
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import wrapped from "./middle.nx"
+
+let msg = wrapped("Nexus")
+print(msg)
+"#,
+    );
+
+    let result = nexuslang::load_and_run(&entry);
+    assert!(result.is_ok(), "deep deps should run: {:?}", result.err());
+}
+
+#[test]
+fn module_loader_non_exported_symbol_is_rejected() {
+    let dir = temp_dir("non_exported");
+
+    create_nx_file(&dir, "lib.nx", r#"model Hidden { x: int }"#);
+
+    let entry = create_nx_file(&dir, "main.nx", r#"import Hidden from "./lib.nx""#);
+
+    let result = nexuslang::load_program(&entry);
+    assert!(result.is_err(), "non-exported should fail");
+}
+
+#[test]
+fn module_loader_exported_model_is_runnable_through_import() {
+    let dir = temp_dir("exported_run");
+
+    create_nx_file(
+        &dir,
+        "crm.nx",
+        r#"
+export model Customer {
+    name: string
+    balance: money
+}
+"#,
+    );
+
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import Customer from "./crm.nx"
+
+let c = Customer { name: "João", balance: 50000 kz }
+print(c.name)
+"#,
+    );
+
+    let result = nexuslang::load_and_run(&entry);
+    assert!(
+        result.is_ok(),
+        "exported model through import: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn module_loader_nx_extension_inference_works() {
+    let dir = temp_dir("ext_infer");
+
+    create_nx_file(
+        &dir,
+        "helper",
+        r#"
+export fn id(x: string) -> string { return x }
+"#,
+    );
+
+    let entry = create_nx_file(&dir, "main.nx", r#"import id from "./helper""#);
+
+    let result = nexuslang::load_program(&entry);
+    // Should either load (with extension inference) or give a clear error
+    match result {
+        Ok(_) => {} // extension inference worked
+        Err(e) => {
+            // If it failed, the error should mention the file
+            assert!(
+                e.contains("helper") || e.contains("caminho"),
+                "error: {}",
+                e
+            );
+        }
+    }
+}
+
+// ─── Fase 11.05: Multi-module checker with HirSymbolRef resolution ───────
+
+#[test]
+fn check_with_module_graph_resolves_imported_model_symbol() {
+    let dir = temp_dir("check_graph_model");
+
+    create_nx_file(
+        &dir,
+        "models.nx",
+        r#"
+export model User {
+    name: string
+}
+"#,
+    );
+
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import User from "./models.nx"
+
+let u = User { name: "Ana" }
+print(u.name)
+"#,
+    );
+
+    // load_and_check_with_graph should succeed (checker + cross-module resolution)
+    let result = nexuslang::load_and_check_with_graph(&entry);
+    assert!(
+        result.is_ok(),
+        "load_and_check_with_graph should succeed: {:?}",
+        result.err()
+    );
+
+    // Also verify the full run works end-to-end
+    let run_result = nexuslang::load_and_run(&entry);
+    assert!(
+        run_result.is_ok(),
+        "load_and_run should succeed: {:?}",
+        run_result.err()
+    );
+}
+
+#[test]
+fn check_with_module_graph_resolves_imported_function_symbol() {
+    let dir = temp_dir("check_graph_fn");
+
+    create_nx_file(
+        &dir,
+        "helpers.nx",
+        r#"
+export fn greet(name: string) -> string {
+    return "Hello, " + name
+}
+"#,
+    );
+
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import greet from "./helpers.nx"
+
+let msg = greet("World")
+print(msg)
+"#,
+    );
+
+    // load_and_check_with_graph should succeed
+    let result = nexuslang::load_and_check_with_graph(&entry);
+    assert!(
+        result.is_ok(),
+        "load_and_check_with_graph should succeed: {:?}",
+        result.err()
+    );
+
+    // Full run should work
+    let run_result = nexuslang::load_and_run(&entry);
+    assert!(
+        run_result.is_ok(),
+        "load_and_run should succeed: {:?}",
+        run_result.err()
+    );
+}
+
+#[test]
+fn check_with_module_graph_rejects_missing_export() {
+    let dir = temp_dir("check_graph_missing_export");
+
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export model User { name: string }
+"#,
+    );
+
+    let entry = create_nx_file(&dir, "main.nx", r#"import Post from "./lib.nx""#);
+
+    let result = nexuslang::module_loader::load_program_full(&entry);
+    assert!(result.is_err(), "missing export should fail");
+}
+
+// ─── Fase 11.06: Verify HirSymbolRef in checker HIR ─────────────────────
+
+#[test]
+fn check_with_module_graph_hir_symbol_ref_points_to_correct_symbol() {
+    let dir = temp_dir("check_hir_symbol_ref");
+
+    create_nx_file(
+        &dir,
+        "models.nx",
+        r#"
+export model User {
+    name: string
+}
+
+export fn greet(name: string) -> string {
+    return "Hello, " + name
+}
+"#,
+    );
+
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import User from "./models.nx"
+import greet from "./models.nx"
+
+let u = User { name: "Ana" }
+print(greet(u.name))
+"#,
+    );
+
+    // Load with full graph
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    // Check with module graph
+    let mut checker = nexuslang::checker::Checker::new();
+    checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect("check should succeed");
+
+    // Retrieve the import resolutions
+    let resolutions = checker.checked_import_resolutions();
+    assert_eq!(
+        resolutions.len(),
+        2,
+        "should have resolved 2 imports (User + greet)"
+    );
+
+    // Lower the program to HIR so we can look up symbol details
+    let hir = nexuslang::hir::lower_program(&program);
+
+    // Find the import decls in the HIR
+    let import_decls: Vec<&nexuslang::hir::HirDecl<'_>> = hir
+        .decls
+        .iter()
+        .filter(|d| d.kind == nexuslang::hir::HirDeclKind::Import)
+        .collect();
+    assert_eq!(import_decls.len(), 2, "should have 2 import decls in HIR");
+
+    for import_decl in &import_decls {
+        let decl_id = import_decl.id;
+        let sym_ref = resolutions
+            .get(&decl_id)
+            .expect("every import decl should have a resolution");
+
+        // Verify the module: models.nx is a dependency, so it's module 1
+        assert_eq!(
+            sym_ref.module.index(),
+            1,
+            "imported symbols come from models.nx (module 1)"
+        );
+
+        // Look up the resolved symbol in the HIR
+        let resolved_sym = hir
+            .symbols
+            .iter()
+            .find(|s| s.id == sym_ref.symbol)
+            .expect("resolved symbol should exist in HIR");
+
+        // The symbol should be either a Model or Function named User/greet
+        match resolved_sym.kind {
+            nexuslang::hir::HirSymbolKind::Model => {
+                assert_eq!(resolved_sym.name, "User");
+            }
+            nexuslang::hir::HirSymbolKind::Function => {
+                assert_eq!(resolved_sym.name, "greet");
+            }
+            other => panic!(
+                "resolved symbol should be Model or Function, got {:?}",
+                other
+            ),
+        }
+    }
+}
+
+#[test]
+fn resolve_hir_imports_uses_import_path_when_export_names_overlap() {
+    let dir = temp_dir("check_hir_import_path_overlap");
+
+    create_nx_file(
+        &dir,
+        "a.nx",
+        r#"
+export fn shared() -> string {
+    return "a"
+}
+"#,
+    );
+    create_nx_file(
+        &dir,
+        "b.nx",
+        r#"
+export fn shared() -> string {
+    return "b"
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import shared from "./b.nx"
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+    let hir = nexuslang::hir::lower_program(&program);
+    let resolutions =
+        nexuslang::module_loader::resolve_hir_imports(&hir, &module_graph, &decl_module_map);
+
+    let import_decl = hir
+        .decls
+        .iter()
+        .find(|decl| decl.kind == nexuslang::hir::HirDeclKind::Import)
+        .expect("should have one import decl");
+    let sym_ref = resolutions
+        .get(&import_decl.id)
+        .expect("import should be resolved");
+    let expected_module = module_graph
+        .entries
+        .iter()
+        .find(|entry| entry.path.file_name().and_then(|name| name.to_str()) == Some("b.nx"))
+        .expect("b.nx should be in graph")
+        .module_id;
+
+    assert_eq!(
+        sym_ref.module, expected_module,
+        "import should resolve through its source path, not the first matching export name"
+    );
+}
+
+#[test]
+fn module_graph_rejects_duplicate_import_aliases_in_one_module() {
+    let dir = temp_dir("duplicate_import_aliases");
+
+    create_nx_file(
+        &dir,
+        "a.nx",
+        r#"
+export fn one() -> string {
+    return "one"
+}
+"#,
+    );
+    create_nx_file(
+        &dir,
+        "b.nx",
+        r#"
+export fn two() -> string {
+    return "two"
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import one as duplicated from "./a.nx"
+import two as duplicated from "./b.nx"
+"#,
+    );
+
+    let result = nexuslang::module_loader::load_program_full(&entry);
+    let error = result.unwrap_err();
+    let diagnostic = error.to_diagnostic();
+    assert_eq!(
+        diagnostic.code.as_deref(),
+        Some(codes::MODULE_LOADER_DUPLICATE_ALIAS)
+    );
+    assert_eq!(diagnostic.labels[0].message, "alias duplicado aqui");
+    assert!(diagnostic
+        .notes
+        .iter()
+        .any(|note| note.contains("ja tinha sido usado")));
+    assert!(diagnostic
+        .suggestions
+        .iter()
+        .any(|suggestion| suggestion.message.contains("aliases locais diferentes")));
+    assert!(diagnostic.to_string().contains("Alias de import duplicado"));
+
+    match error {
+        nexuslang::module_loader::ModuleError::DuplicateImportAlias { alias, .. } => {
+            assert_eq!(alias, "duplicated");
+        }
+        other => panic!("expected DuplicateImportAlias, got {:?}", other),
+    }
+}
+
+#[test]
+fn module_graph_rejects_import_alias_collision_with_local_top_level() {
+    let dir = temp_dir("import_alias_collision");
+
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export fn helper() -> string {
+    return "dep"
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import helper as run from "./lib.nx"
+
+fn run() -> string {
+    return "local"
+}
+"#,
+    );
+
+    let result = nexuslang::module_loader::load_program_full(&entry);
+    let error = result.unwrap_err();
+    let diagnostic = error.to_diagnostic();
+    assert_eq!(
+        diagnostic.code.as_deref(),
+        Some(codes::MODULE_LOADER_ALIAS_COLLISION)
+    );
+    assert_eq!(diagnostic.labels[0].message, "alias importado aqui");
+    assert!(diagnostic
+        .notes
+        .iter()
+        .any(|note| note.contains("declaracao top-level local")));
+    assert!(diagnostic
+        .suggestions
+        .iter()
+        .any(|suggestion| suggestion.message.contains("Renomeie o alias")));
+    assert!(diagnostic.to_string().contains("colide com declaracao"));
+
+    match error {
+        nexuslang::module_loader::ModuleError::ImportAliasCollision { alias, .. } => {
+            assert_eq!(alias, "run");
+        }
+        other => panic!("expected ImportAliasCollision, got {:?}", other),
+    }
+}
+
+#[test]
+fn module_graph_rejects_duplicate_symbols_across_loaded_modules() {
+    let dir = temp_dir("duplicate_graph_symbols");
+
+    create_nx_file(
+        &dir,
+        "a.nx",
+        r#"
+export fn shared() -> string {
+    return "a"
+}
+"#,
+    );
+    create_nx_file(
+        &dir,
+        "b.nx",
+        r#"
+export fn shared() -> string {
+    return "b"
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import shared as from_a from "./a.nx"
+import shared as from_b from "./b.nx"
+"#,
+    );
+
+    let result = nexuslang::module_loader::load_program_full(&entry);
+    match result.unwrap_err() {
+        nexuslang::module_loader::ModuleError::DuplicateGraphSymbol { symbol, kind, .. } => {
+            assert_eq!(symbol, "shared");
+            assert_eq!(kind, "funcao");
+        }
+        other => panic!("expected DuplicateGraphSymbol, got {:?}", other),
+    }
+}
+
+#[test]
+fn module_graph_rejects_duplicate_symbols_from_path_dependencies() {
+    let workspace = temp_dir("duplicate_path_dep_symbols");
+    let dependency = workspace.join("crm_core");
+    let app = workspace.join("erp_app");
+    fs::create_dir_all(&dependency).expect("create dependency dir");
+    fs::create_dir_all(&app).expect("create app dir");
+
+    fs::write(
+        dependency.join("nexus.toml"),
+        r#"[package]
+name = "crm_core"
+version = "0.1.0"
+entry = "main.nx"
+
+[dependencies]
+"#,
+    )
+    .expect("write dependency manifest");
+    fs::write(
+        dependency.join("main.nx"),
+        r#"
+export fn shared() -> string {
+    return "dep"
+}
+"#,
+    )
+    .expect("write dependency entry");
+    fs::write(
+        app.join("nexus.toml"),
+        r#"[package]
+name = "erp_app"
+version = "0.1.0"
+entry = "main.nx"
+
+[dependencies]
+crm_core = "path:../crm_core"
+"#,
+    )
+    .expect("write app manifest");
+    fs::write(
+        app.join("local.nx"),
+        r#"
+export fn shared() -> string {
+    return "local"
+}
+"#,
+    )
+    .expect("write local module");
+    fs::write(
+        app.join("main.nx"),
+        r#"
+import shared as from_dep from "crm_core"
+import shared as from_local from "./local.nx"
+"#,
+    )
+    .expect("write app entry");
+
+    let result = nexuslang::module_loader::load_program_full(&app.join("main.nx"));
+    match result.unwrap_err() {
+        nexuslang::module_loader::ModuleError::DuplicateGraphSymbol { symbol, .. } => {
+            assert_eq!(symbol, "shared");
+        }
+        other => panic!("expected DuplicateGraphSymbol, got {:?}", other),
+    }
+}
+
+#[test]
+fn source_database_tracks_modules_sources_and_import_edges() {
+    let dir = temp_dir("source_database_relative_edges");
+
+    create_nx_file(
+        &dir,
+        "financeiro.nx",
+        r#"
+export fn total_vendas() -> int {
+    return 42
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import total_vendas as total from "./financeiro.nx"
+
+let valor = total()
+print(valor)
+"#,
+    );
+
+    let (_program, module_graph, source_database) =
+        nexuslang::load_and_check_with_source_database(&entry).expect("load should succeed");
+
+    assert_eq!(source_database.modules().len(), module_graph.entries.len());
+
+    let entry_module = source_database
+        .module(module_graph.entry_id)
+        .expect("entry module should be in source database");
+    assert!(entry_module.is_entry);
+    assert_eq!(entry_module.path, entry.canonicalize().unwrap());
+    assert!(entry_module.source.contains("import total_vendas"));
+
+    let edges: Vec<_> = source_database
+        .import_edges_from(module_graph.entry_id)
+        .collect();
+    assert_eq!(edges.len(), 1);
+
+    let edge = edges[0];
+    assert_eq!(edge.imported_name, "total_vendas");
+    assert_eq!(edge.alias.as_deref(), Some("total"));
+    assert_eq!(edge.source_path, "./financeiro.nx");
+    assert!(edge.import_span.is_known());
+    assert!(edge.name_span.is_known());
+    assert!(edge.source_span.is_known());
+
+    let target_module = source_database
+        .module(
+            edge.target_module
+                .expect("import should resolve to target module"),
+        )
+        .expect("target module should be in source database");
+    assert_eq!(
+        target_module
+            .path
+            .file_name()
+            .and_then(|name| name.to_str()),
+        Some("financeiro.nx")
+    );
+    assert!(target_module.source.contains("export fn total_vendas"));
+}
+
+#[test]
+fn source_database_tracks_path_dependency_import_edges() {
+    let workspace = temp_dir("source_database_path_dep_edges");
+    let dependency = workspace.join("crm_core");
+    let app = workspace.join("erp_app");
+    fs::create_dir_all(&dependency).expect("create dependency dir");
+    fs::create_dir_all(&app).expect("create app dir");
+
+    fs::write(
+        dependency.join("nexus.toml"),
+        r#"[package]
+name = "crm_core"
+version = "0.1.0"
+entry = "main.nx"
+
+[dependencies]
+"#,
+    )
+    .expect("write dependency manifest");
+    fs::write(
+        dependency.join("main.nx"),
+        r#"
+export fn dep_total() -> int {
+    return 7
+}
+"#,
+    )
+    .expect("write dependency entry");
+    fs::write(
+        app.join("nexus.toml"),
+        r#"[package]
+name = "erp_app"
+version = "0.1.0"
+entry = "main.nx"
+
+[dependencies]
+crm_core = "path:../crm_core"
+"#,
+    )
+    .expect("write app manifest");
+    fs::write(
+        app.join("main.nx"),
+        r#"
+import dep_total from "crm_core"
+
+let valor = dep_total()
+print(valor)
+"#,
+    )
+    .expect("write app entry");
+
+    let (_program, module_graph, source_database) =
+        nexuslang::load_and_check_with_source_database(&app.join("main.nx"))
+            .expect("load should succeed");
+
+    assert_eq!(source_database.modules().len(), module_graph.entries.len());
+
+    let edge = source_database
+        .import_edges()
+        .iter()
+        .find(|edge| edge.source_path == "crm_core")
+        .expect("path dependency import edge should be tracked");
+    assert_eq!(edge.imported_name, "dep_total");
+
+    let source_module = source_database
+        .module(edge.source_module)
+        .expect("source module should be tracked");
+    assert_eq!(
+        source_module.path,
+        app.join("main.nx").canonicalize().unwrap()
+    );
+
+    let target_module = source_database
+        .module(edge.target_module.expect("path dependency should resolve"))
+        .expect("target module should be tracked");
+    assert_eq!(
+        target_module.path,
+        dependency.join("main.nx").canonicalize().unwrap()
+    );
+    assert!(source_database
+        .module_by_path(&dependency.join("main.nx"))
+        .is_some());
+}
+
+#[test]
+fn source_database_attaches_diagnostics_to_modules() {
+    let dir = temp_dir("source_database_diagnostics");
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+print("ok")
+"#,
+    );
+
+    let (_program, module_graph, source_database) =
+        nexuslang::load_and_check_with_source_database(&entry).expect("load should succeed");
+    let diagnostic =
+        nexuslang::diagnostic::Diagnostic::new(DiagnosticStage::Checker, "erro simulado")
+            .with_location(2, 1);
+
+    let module_diagnostic = source_database
+        .attach_diagnostic(module_graph.entry_id, diagnostic.clone())
+        .expect("diagnostic should attach to entry module");
+    assert_eq!(module_diagnostic.module_id, module_graph.entry_id);
+    assert_eq!(module_diagnostic.path, entry.canonicalize().unwrap());
+    assert_eq!(module_diagnostic.diagnostic, diagnostic);
+
+    let path_diagnostic = source_database
+        .attach_diagnostic_to_path(&entry, diagnostic)
+        .expect("diagnostic should attach by path");
+    assert_eq!(path_diagnostic.module_id, module_graph.entry_id);
+}
+
+#[test]
+fn source_database_records_decl_source_ranges() {
+    let dir = temp_dir("source_database_decl_ranges");
+
+    let lib = create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export fn total() -> int {
+    return 1
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import total from "./lib.nx"
+"#,
+    );
+
+    let (_program, module_graph, _decl_module_map, source_database) =
+        nexuslang::module_loader::load_program_full_with_source_database(&entry)
+            .expect("load should succeed");
+    let lib_path = lib.canonicalize().unwrap();
+    let lib_module_id = module_graph
+        .entries
+        .iter()
+        .find(|entry| entry.path == lib_path)
+        .expect("lib module should be in graph")
+        .module_id;
+
+    let range = source_database
+        .decl_ranges()
+        .iter()
+        .find(|range| range.module_id == lib_module_id)
+        .expect("lib declaration should have a source range")
+        .range;
+
+    assert_eq!(range.start.line, 2);
+    assert_eq!(range.end.line, 4);
+    assert!(range.contains(3, Some(5)));
+    assert!(!range.contains(5, None));
+    assert_eq!(
+        source_database.source_range_for_module_location(lib_module_id, 3, Some(5)),
+        Some(range)
+    );
+}
+
+#[test]
+fn source_database_maps_checker_diagnostic_to_imported_module() {
+    let dir = temp_dir("source_database_checker_diagnostic_module");
+
+    let lib = create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export fn broken() -> int {
+    return "erro"
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import broken from "./lib.nx"
+"#,
+    );
+
+    let (program, module_graph, decl_module_map, source_database) =
+        nexuslang::module_loader::load_program_full_with_source_database(&entry)
+            .expect("load should succeed");
+
+    let module_diagnostic = nexuslang::check_with_source_database(
+        &program,
+        &module_graph,
+        &decl_module_map,
+        &source_database,
+    )
+    .expect_err("checker should reject imported module body");
+
+    assert_eq!(module_diagnostic.path, lib.canonicalize().unwrap());
+    assert_eq!(module_diagnostic.diagnostic.stage, DiagnosticStage::Checker);
+    assert!(module_diagnostic
+        .diagnostic
+        .message
+        .contains("Tipo de retorno inválido"));
+    assert_eq!(module_diagnostic.diagnostic.line, Some(3));
+}
+
+#[test]
+fn source_database_ranges_disambiguate_blank_entry_lines_from_imported_errors() {
+    let dir = temp_dir("source_database_checker_diagnostic_overlapping_lines");
+
+    let lib = create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export fn broken() -> int {
+    return "erro"
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import broken from "./lib.nx"
+
+
+"#,
+    );
+
+    let (program, module_graph, decl_module_map, source_database) =
+        nexuslang::module_loader::load_program_full_with_source_database(&entry)
+            .expect("load should succeed");
+
+    let module_diagnostic = nexuslang::check_with_source_database(
+        &program,
+        &module_graph,
+        &decl_module_map,
+        &source_database,
+    )
+    .expect_err("checker should reject imported module body");
+
+    assert_eq!(module_diagnostic.path, lib.canonicalize().unwrap());
+    assert_eq!(module_diagnostic.diagnostic.line, Some(3));
+    assert_eq!(
+        module_diagnostic
+            .source_range
+            .expect("diagnostic should carry the imported declaration range")
+            .end
+            .line,
+        4
+    );
+}
+
+#[test]
+fn source_database_prefers_checker_diagnostic_owner_over_identical_ranges() {
+    let dir = temp_dir("source_database_checker_diagnostic_owner");
+
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export fn ok() -> int {
+    return 1
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+fn broken() -> int {
+    return "erro"
+}
+
+import ok from "./lib.nx"
+"#,
+    );
+
+    let (program, module_graph, decl_module_map, source_database) =
+        nexuslang::module_loader::load_program_full_with_source_database(&entry)
+            .expect("load should succeed");
+    let mut checker = nexuslang::checker::Checker::new();
+
+    let diagnostic = checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect_err("checker should reject entry module body");
+    let owner = diagnostic
+        .owner
+        .expect("checker diagnostic should carry declaration owner");
+    assert_eq!(owner.module_id, Some(module_graph.entry_id.0));
+    assert_eq!(
+        decl_module_map.get(owner.decl_index).copied(),
+        Some(module_graph.entry_id)
+    );
+
+    let module_diagnostic = source_database
+        .attach_program_diagnostic(&program, &decl_module_map, diagnostic)
+        .expect("diagnostic should attach through owner");
+
+    assert_eq!(module_diagnostic.path, entry.canonicalize().unwrap());
+    assert_eq!(module_diagnostic.module_id, module_graph.entry_id);
+    let source_range = module_diagnostic
+        .source_range
+        .expect("owner should preserve declaration source range");
+    assert_eq!(source_range.start.line, 2);
+    assert_eq!(source_range.end.line, 4);
+}
+
+#[test]
+fn load_and_check_with_source_database_formats_imported_module_diagnostic_path() {
+    let dir = temp_dir("source_database_checker_diagnostic_string");
+
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export fn broken() -> int {
+    return "erro"
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import broken from "./lib.nx"
+"#,
+    );
+
+    let err = nexuslang::load_and_check_with_source_database(&entry).unwrap_err();
+    assert!(err.contains("lib.nx"), "err: {err}");
+    assert!(err.contains("Tipo de retorno inválido"), "err: {err}");
+    assert!(err.contains(":3:"), "err: {err}");
+}
+
+#[test]
+fn load_and_check_with_source_database_diagnostic_exposes_structured_error() {
+    let dir = temp_dir("source_database_public_structured_diagnostic");
+
+    let lib = create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export fn broken() -> int {
+    return "erro"
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import broken from "./lib.nx"
+"#,
+    );
+
+    let err = nexuslang::load_and_check_with_source_database_diagnostic(&entry)
+        .expect_err("checker should reject imported module body");
+    let owner = err
+        .diagnostic
+        .owner
+        .expect("structured diagnostic should expose checker owner");
+    let module_id = err
+        .module_id
+        .expect("structured diagnostic should expose module id");
+    let source_range = err
+        .source_range
+        .expect("structured diagnostic should expose source range");
+
+    assert_eq!(err.path, Some(lib.canonicalize().unwrap()));
+    assert_eq!(owner.module_id, Some(module_id.0));
+    assert_eq!(err.diagnostic.line, Some(3));
+    assert_eq!(err.diagnostic.labels[0].message, "origem do erro de tipo");
+    assert!(err
+        .diagnostic
+        .notes
+        .iter()
+        .any(|note| note.contains("O checker compara")));
+    assert!(err
+        .diagnostic
+        .suggestions
+        .iter()
+        .any(|suggestion| suggestion.message.contains("Ajuste a anotacao")));
+    assert_eq!(source_range.start.line, 2);
+    assert_eq!(source_range.end.line, 4);
+    assert!(err.to_string().contains("lib.nx"));
+    assert!(err.to_string().contains("Tipo de retorno inválido"));
+}
+
+#[test]
+fn multi_module_diagnostic_json_covers_runtime_stage() {
+    let dir = temp_dir("multi_module_runtime_diagnostic_json");
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+print(10 / 0)
+"#,
+    );
+
+    let err = nexuslang::load_and_run_with_source_database_diagnostic(&entry)
+        .expect_err("runtime should reject division by zero");
+    assert_eq!(err.diagnostic.stage, DiagnosticStage::Runtime);
+    assert_eq!(err.diagnostic.code.as_deref(), Some("NXL5001"));
+    assert_eq!(err.diagnostic.severity, Some(DiagnosticSeverity::Error));
+    assert!(err.diagnostic.message.contains("Divisão por zero"));
+    assert_eq!(err.path, Some(entry.canonicalize().unwrap()));
+    assert_eq!(err.module_id.map(|id| id.index()), Some(0));
+    assert_eq!(err.source_range, None);
+    assert_eq!(
+        err.diagnostic.labels[0].message,
+        "operacao aritmetica em runtime"
+    );
+    assert!(err
+        .diagnostic
+        .notes
+        .iter()
+        .any(|note| note.contains("dividir ou calcular modulo por zero")));
+    assert!(err
+        .diagnostic
+        .suggestions
+        .iter()
+        .any(|suggestion| suggestion
+            .message
+            .contains("divisor seja diferente de zero")));
+
+    let json = nexuslang::multi_module_diagnostic_json("run", &err);
+    assert!(json.contains(r#""ok":false"#), "json: {json}");
+    assert!(json.contains(r#""schema_version":1"#), "json: {json}");
+    assert!(json.contains(r#""command":"run""#), "json: {json}");
+    assert!(json.contains(r#""code":"NXL5001""#), "json: {json}");
+    assert!(json.contains(r#""severity":"error""#), "json: {json}");
+    assert!(json.contains(r#""stage":"runtime""#), "json: {json}");
+    assert!(json.contains(r#""path":"#), "json: {json}");
+    assert!(json.contains("main.nx"), "json: {json}");
+    assert!(json.contains(r#""module_id":0"#), "json: {json}");
+    assert!(json.contains(r#""owner":null"#), "json: {json}");
+    assert!(json.contains(r#""source_range":null"#), "json: {json}");
+    assert!(
+        json.contains("operacao aritmetica em runtime"),
+        "json: {json}"
+    );
+    assert!(json.contains("A execucao tentou dividir"), "json: {json}");
+    assert!(
+        json.contains("Garanta que o divisor seja diferente de zero"),
+        "json: {json}"
+    );
+    assert!(json.contains("Divisão por zero"), "json: {json}");
+}
+
+#[test]
+fn multi_module_diagnostic_json_includes_labels_notes_and_suggestions() {
+    let diagnostic = nexuslang::diagnostic::Diagnostic::new(
+        DiagnosticStage::Checker,
+        "Tipo de retorno inválido: esperado int",
+    )
+    .with_code(codes::CHECKER_TYPE)
+    .with_label_at("retorno incompatível", 3, 5)
+    .with_note("A assinatura da função declara retorno int.")
+    .with_replacement_suggestion("retorne um inteiro", "return 1");
+    let error = nexuslang::MultiModuleDiagnostic {
+        path: None,
+        module_id: None,
+        diagnostic,
+        source_range: None,
+    };
+
+    assert_eq!(error.to_string(), "Tipo de retorno inválido: esperado int");
+
+    let json = nexuslang::multi_module_diagnostic_json("check", &error);
+    assert!(
+        json.contains(r#""labels":[{"message":"retorno incompatível","line":3,"column":5}]"#),
+        "json: {json}"
+    );
+    assert!(
+        json.contains(r#""notes":["A assinatura da função declara retorno int."]"#),
+        "json: {json}"
+    );
+    assert!(
+        json.contains(
+            r#""suggestions":[{"message":"retorne um inteiro","replacement":"return 1"}]"#
+        ),
+        "json: {json}"
+    );
+    assert!(
+        json.contains(r#""text":"Tipo de retorno inválido: esperado int""#),
+        "json: {json}"
+    );
+}
+
+#[test]
+fn multi_module_diagnostic_report_groups_by_path_and_module() {
+    let lib_path = std::path::PathBuf::from("/tmp/nexus/lib.nx");
+    let first = nexuslang::MultiModuleDiagnostic {
+        path: Some(lib_path.clone()),
+        module_id: Some(nexuslang::hir::HirModuleId(1)),
+        diagnostic: nexuslang::diagnostic::Diagnostic::new(
+            DiagnosticStage::Checker,
+            "Variável 'cliente' não definida",
+        )
+        .with_code(codes::CHECKER_SYMBOL)
+        .with_location(2, 5),
+        source_range: None,
+    };
+    let second = nexuslang::MultiModuleDiagnostic {
+        path: Some(lib_path.clone()),
+        module_id: Some(nexuslang::hir::HirModuleId(1)),
+        diagnostic: nexuslang::diagnostic::Diagnostic::new(
+            DiagnosticStage::Checker,
+            "Função 'total' espera 1 argumento(s), recebeu 2",
+        )
+        .with_code(codes::CHECKER_ARGUMENT)
+        .with_location(3, 9),
+        source_range: None,
+    };
+    let runtime = nexuslang::MultiModuleDiagnostic::runtime("Função 'calcular' não definida");
+    let report = nexuslang::MultiModuleDiagnosticReport::new(vec![first.clone(), second, runtime]);
+
+    assert_eq!(report.len(), 3);
+    assert_eq!(report.first(), Some(&first));
+
+    let groups = report.groups_by_path_and_module();
+    assert_eq!(groups.len(), 2);
+    assert_eq!(groups[0].path.as_deref(), Some(lib_path.as_path()));
+    assert_eq!(groups[0].module_id, Some(nexuslang::hir::HirModuleId(1)));
+    assert_eq!(groups[0].diagnostic_indexes, [0, 1]);
+    assert_eq!(groups[1].path, None);
+    assert_eq!(groups[1].module_id, None);
+    assert_eq!(groups[1].diagnostic_indexes, [2]);
+
+    let report_json = nexuslang::multi_module_diagnostic_report_json("check", &report);
+    assert!(report_json.contains(r#""ok":false"#), "json: {report_json}");
+    assert!(
+        report_json.contains(r#""diagnostic":{"code":"NXL3002""#),
+        "json: {report_json}"
+    );
+    assert!(
+        report_json.contains(r#""diagnostics":[{"code":"NXL3002""#),
+        "json: {report_json}"
+    );
+    assert!(
+        report_json.contains(r#""diagnostic_indexes":[0,1]"#),
+        "json: {report_json}"
+    );
+    assert!(
+        report_json.contains(r#""diagnostic_indexes":[2]"#),
+        "json: {report_json}"
+    );
+
+    let first_error_json =
+        nexuslang::multi_module_diagnostic_json("check", report.first().unwrap());
+    assert!(
+        first_error_json.contains(r#""diagnostic":{"code":"NXL3002""#),
+        "json: {first_error_json}"
+    );
+    assert!(
+        !first_error_json.contains(r#""diagnostics":"#),
+        "first-error JSON must stay collection-free: {first_error_json}"
+    );
+}
+
+#[test]
+fn multi_module_diagnostic_report_tooling_helpers_filter_without_changing_json() {
+    let lib_path = std::path::PathBuf::from("/tmp/nexus/helpers/lib.nx");
+    let other_path = std::path::PathBuf::from("/tmp/nexus/helpers/other.nx");
+    let lib_module = nexuslang::hir::HirModuleId(1);
+    let other_module = nexuslang::hir::HirModuleId(2);
+
+    let first = nexuslang::MultiModuleDiagnostic {
+        path: Some(lib_path.clone()),
+        module_id: Some(lib_module),
+        diagnostic: nexuslang::diagnostic::Diagnostic::new(
+            DiagnosticStage::Checker,
+            "Variável 'cliente' não definida",
+        )
+        .with_code(codes::CHECKER_SYMBOL)
+        .with_location(2, 5),
+        source_range: None,
+    };
+    let second = nexuslang::MultiModuleDiagnostic {
+        path: Some(lib_path.clone()),
+        module_id: Some(lib_module),
+        diagnostic: nexuslang::diagnostic::Diagnostic::new(
+            DiagnosticStage::Checker,
+            "Função 'total' espera 1 argumento(s), recebeu 2",
+        )
+        .with_code(codes::CHECKER_ARGUMENT)
+        .with_location(3, 9),
+        source_range: None,
+    };
+    let parser = nexuslang::MultiModuleDiagnostic {
+        path: Some(other_path.clone()),
+        module_id: Some(other_module),
+        diagnostic: nexuslang::diagnostic::Diagnostic::parser(
+            "import espera 'from' antes do caminho",
+            1,
+            1,
+        ),
+        source_range: None,
+    };
+    let runtime = nexuslang::MultiModuleDiagnostic::runtime("Divisão por zero");
+    let report = nexuslang::MultiModuleDiagnosticReport::new(vec![first, second, parser, runtime]);
+
+    assert_eq!(report.diagnostics_for_path(&lib_path).len(), 2);
+    assert_eq!(report.diagnostics_for_path(&other_path).len(), 1);
+    assert_eq!(report.diagnostics_for_module_id(lib_module).len(), 2);
+    assert_eq!(report.diagnostics_for_module_id(other_module).len(), 1);
+    assert_eq!(
+        report
+            .diagnostics_for_path_and_module(Some(lib_path.as_path()), Some(lib_module))
+            .len(),
+        2
+    );
+    assert_eq!(
+        report
+            .diagnostics_for_path_and_module(Some(lib_path.as_path()), Some(other_module))
+            .len(),
+        0
+    );
+    assert_eq!(
+        report.diagnostics_for_stage(DiagnosticStage::Checker).len(),
+        2
+    );
+    assert_eq!(
+        report.diagnostics_for_stage(DiagnosticStage::Parser).len(),
+        1
+    );
+    assert_eq!(
+        report.diagnostics_for_stage(DiagnosticStage::Runtime).len(),
+        1
+    );
+    assert_eq!(
+        report
+            .diagnostics_for_severity(DiagnosticSeverity::Error)
+            .len(),
+        4
+    );
+
+    let groups = report.groups_by_path_and_module();
+    assert_eq!(groups.len(), 3);
+    assert_eq!(report.diagnostics_for_group(&groups[0]).len(), 2);
+    assert_eq!(
+        report
+            .first_diagnostic_for_group(&groups[0])
+            .map(|diagnostic| diagnostic.diagnostic.message.as_str()),
+        Some("Variável 'cliente' não definida")
+    );
+    let stale_group = nexuslang::MultiModuleDiagnosticGroup {
+        path: Some(lib_path.clone()),
+        module_id: Some(lib_module),
+        diagnostic_indexes: vec![usize::MAX],
+    };
+    assert!(report.diagnostics_for_group(&stale_group).is_empty());
+    assert!(report.first_diagnostic_for_group(&stale_group).is_none());
+
+    let json = nexuslang::multi_module_diagnostic_report_json("check", &report);
+    assert!(
+        json.contains(r#""diagnostic_indexes":[0,1]"#),
+        "json: {json}"
+    );
+    assert!(
+        !json.contains("diagnostics_for_path"),
+        "helpers must not change JSON v1 shape: {json}"
+    );
+}
+
+#[test]
+fn multi_module_diagnostic_report_summary_counts_tooling_dimensions_without_changing_json() {
+    let lib_path = std::path::PathBuf::from("/tmp/nexus/summary/lib.nx");
+    let other_path = std::path::PathBuf::from("/tmp/nexus/summary/other.nx");
+    let lib_module = nexuslang::hir::HirModuleId(1);
+    let other_module = nexuslang::hir::HirModuleId(2);
+
+    let first = nexuslang::MultiModuleDiagnostic {
+        path: Some(lib_path.clone()),
+        module_id: Some(lib_module),
+        diagnostic: nexuslang::diagnostic::Diagnostic::new(
+            DiagnosticStage::Checker,
+            "Variável 'cliente' não definida",
+        )
+        .with_code(codes::CHECKER_SYMBOL),
+        source_range: None,
+    };
+    let second = nexuslang::MultiModuleDiagnostic {
+        path: Some(lib_path.clone()),
+        module_id: Some(lib_module),
+        diagnostic: nexuslang::diagnostic::Diagnostic::new(
+            DiagnosticStage::Checker,
+            "Função 'total' espera 1 argumento(s), recebeu 2",
+        )
+        .with_code(codes::CHECKER_ARGUMENT),
+        source_range: None,
+    };
+    let parser = nexuslang::MultiModuleDiagnostic {
+        path: Some(other_path.clone()),
+        module_id: Some(other_module),
+        diagnostic: nexuslang::diagnostic::Diagnostic::parser(
+            "import espera 'from' antes do caminho",
+            1,
+            1,
+        ),
+        source_range: None,
+    };
+    let warning = nexuslang::MultiModuleDiagnostic {
+        path: Some(lib_path.clone()),
+        module_id: Some(lib_module),
+        diagnostic: nexuslang::diagnostic::Diagnostic::new(
+            DiagnosticStage::Checker,
+            "Aviso para tooling",
+        )
+        .with_code(codes::CHECKER_GENERIC)
+        .with_severity(DiagnosticSeverity::Warning),
+        source_range: None,
+    };
+    let no_severity = nexuslang::MultiModuleDiagnostic {
+        path: None,
+        module_id: None,
+        diagnostic: nexuslang::diagnostic::Diagnostic::new(
+            DiagnosticStage::Runtime,
+            "Runtime sem severidade",
+        )
+        .without_severity(),
+        source_range: None,
+    };
+    let report = nexuslang::MultiModuleDiagnosticReport::new(vec![
+        first,
+        second,
+        parser,
+        warning,
+        no_severity,
+    ]);
+
+    let summary = report.summary();
+    assert_eq!(summary.total, 5);
+    assert!(summary.has_diagnostics);
+    assert!(summary.has_errors);
+    assert!(summary.has_warnings);
+    assert_eq!(
+        summary.stages,
+        vec![
+            nexuslang::MultiModuleDiagnosticStageCount {
+                stage: DiagnosticStage::Checker,
+                count: 3,
+            },
+            nexuslang::MultiModuleDiagnosticStageCount {
+                stage: DiagnosticStage::Parser,
+                count: 1,
+            },
+            nexuslang::MultiModuleDiagnosticStageCount {
+                stage: DiagnosticStage::Runtime,
+                count: 1,
+            },
+        ]
+    );
+    assert_eq!(
+        summary.severities,
+        vec![
+            nexuslang::MultiModuleDiagnosticSeverityCount {
+                severity: Some(DiagnosticSeverity::Error),
+                count: 3,
+            },
+            nexuslang::MultiModuleDiagnosticSeverityCount {
+                severity: Some(DiagnosticSeverity::Warning),
+                count: 1,
+            },
+            nexuslang::MultiModuleDiagnosticSeverityCount {
+                severity: None,
+                count: 1,
+            },
+        ]
+    );
+    assert_eq!(summary.paths, vec![lib_path, other_path]);
+    assert_eq!(summary.module_ids, vec![lib_module, other_module]);
+
+    let empty_summary = nexuslang::MultiModuleDiagnosticReport::empty().summary();
+    assert_eq!(empty_summary.total, 0);
+    assert!(!empty_summary.has_diagnostics);
+    assert!(!empty_summary.has_errors);
+    assert!(!empty_summary.has_warnings);
+    assert!(empty_summary.stages.is_empty());
+    assert!(empty_summary.severities.is_empty());
+    assert!(empty_summary.paths.is_empty());
+    assert!(empty_summary.module_ids.is_empty());
+
+    let empty_view = nexuslang::MultiModuleDiagnosticReport::empty().tooling_view();
+    assert_eq!(empty_view.summary, empty_summary);
+    assert!(empty_view.groups.is_empty());
+    assert!(empty_view.items.is_empty());
+    let empty_source_view =
+        nexuslang::MultiModuleDiagnosticReport::empty().tooling_view_with_source_context(None);
+    assert_eq!(empty_source_view.summary, empty_summary);
+    assert!(empty_source_view.groups.is_empty());
+    assert!(empty_source_view.items.is_empty());
+
+    let json = nexuslang::multi_module_diagnostic_report_json("check", &report);
+    assert!(json.contains(r#""diagnostics":[{"code":"NXL3002""#));
+    assert!(!json.contains(r#""summary""#), "json: {json}");
+    assert!(!json.contains(r#""has_errors""#), "json: {json}");
+    assert!(!json.contains(r#""stages":"#), "json: {json}");
+    assert!(!json.contains(r#""severities":"#), "json: {json}");
+    assert!(!json.contains(r#""module_ids":"#), "json: {json}");
+}
+
+#[derive(Debug)]
+struct DiagnosticReportToolingSnapshot {
+    total: usize,
+    has_errors: bool,
+    checker_count: usize,
+    module_loader_count: usize,
+    runtime_count: usize,
+    error_count: usize,
+    affected_paths: Vec<PathBuf>,
+    affected_modules: Vec<nexuslang::hir::HirModuleId>,
+    group_sizes: Vec<usize>,
+    output_lines: usize,
+}
+
+#[derive(Debug)]
+struct DiagnosticReportFixture {
+    entry: PathBuf,
+    primary_path: Option<PathBuf>,
+    source_database: Option<nexuslang::module_loader::SourceDatabase>,
+    report: nexuslang::MultiModuleDiagnosticReport,
+    output: Vec<String>,
+}
+
+fn diagnostic_report_tooling_snapshot(
+    report: &nexuslang::MultiModuleDiagnosticReport,
+    output: &[String],
+) -> DiagnosticReportToolingSnapshot {
+    let view = report.tooling_view();
+    DiagnosticReportToolingSnapshot {
+        total: view.summary.total,
+        has_errors: view.summary.has_errors,
+        checker_count: report.diagnostics_for_stage(DiagnosticStage::Checker).len(),
+        module_loader_count: report
+            .diagnostics_for_stage(DiagnosticStage::ModuleLoader)
+            .len(),
+        runtime_count: report.diagnostics_for_stage(DiagnosticStage::Runtime).len(),
+        error_count: report
+            .diagnostics_for_severity(DiagnosticSeverity::Error)
+            .len(),
+        affected_paths: view.summary.paths,
+        affected_modules: view.summary.module_ids,
+        group_sizes: view
+            .groups
+            .iter()
+            .map(|group| report.diagnostics_for_group(group).len())
+            .collect(),
+        output_lines: output.len(),
+    }
+}
+
+fn checker_report_tooling_fixture() -> DiagnosticReportFixture {
+    let dir = temp_dir("tooling_report_checker_fixture");
+    let lib = create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export fn broken_text() -> int {
+    return "erro"
+}
+
+export fn broken_number() -> bool {
+    return 1
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import broken_text from "./lib.nx"
+import broken_number from "./lib.nx"
+"#,
+    );
+
+    let (_, _, _, source_database) =
+        nexuslang::module_loader::load_program_full_with_source_database(&entry)
+            .expect("checker fixture should load source database before checking");
+    let report = nexuslang::load_and_check_with_source_database_diagnostic_report(&entry)
+        .expect_err("checker fixture should produce a diagnostic report");
+    DiagnosticReportFixture {
+        entry,
+        primary_path: Some(lib.canonicalize().unwrap()),
+        source_database: Some(source_database),
+        report,
+        output: Vec::new(),
+    }
+}
+
+fn module_loader_report_tooling_fixture() -> DiagnosticReportFixture {
+    let dir = temp_dir("tooling_report_loader_fixture");
+    let lib = create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export fn available() -> int {
+    return 1
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import missing from "./lib.nx"
+"#,
+    );
+
+    let report = nexuslang::load_and_check_with_source_database_diagnostic_report(&entry)
+        .expect_err("module-loader fixture should produce a diagnostic report");
+    DiagnosticReportFixture {
+        entry,
+        primary_path: Some(lib.canonicalize().unwrap()),
+        source_database: None,
+        report,
+        output: Vec::new(),
+    }
+}
+
+fn runtime_report_tooling_fixture() -> DiagnosticReportFixture {
+    let dir = temp_dir("tooling_report_runtime_fixture");
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+print("antes")
+print(10 / 0)
+"#,
+    );
+
+    let (_, _, _, source_database) =
+        nexuslang::module_loader::load_program_full_with_source_database(&entry)
+            .expect("runtime fixture should load source database before running");
+    let run_report =
+        nexuslang::load_and_run_with_source_database_captured_diagnostic_report(&entry)
+            .expect_err("runtime fixture should produce a diagnostic report");
+    DiagnosticReportFixture {
+        primary_path: Some(entry.canonicalize().unwrap()),
+        entry,
+        source_database: Some(source_database),
+        report: run_report.report,
+        output: run_report.output,
+    }
+}
+
+#[test]
+fn diagnostic_report_tooling_example_consumes_checker_fixture() {
+    let fixture = checker_report_tooling_fixture();
+    let snapshot = diagnostic_report_tooling_snapshot(&fixture.report, &fixture.output);
+    let primary_path = fixture
+        .primary_path
+        .as_ref()
+        .expect("checker fixture should have a primary source path");
+
+    assert_eq!(snapshot.total, 2);
+    assert!(snapshot.has_errors);
+    assert_eq!(snapshot.checker_count, 2);
+    assert_eq!(snapshot.module_loader_count, 0);
+    assert_eq!(snapshot.runtime_count, 0);
+    assert_eq!(snapshot.error_count, 2);
+    assert_eq!(snapshot.affected_paths, vec![primary_path.clone()]);
+    assert_eq!(snapshot.group_sizes, vec![2]);
+    assert_eq!(snapshot.output_lines, 0);
+    assert_eq!(fixture.report.diagnostics_for_path(primary_path).len(), 2);
+
+    let view = fixture.report.tooling_view();
+    assert_eq!(view.summary.total, 2);
+    assert_eq!(view.groups.len(), 1);
+    assert_eq!(view.groups[0].diagnostic_indexes, [0, 1]);
+    assert_eq!(fixture.report.tooling_items(), view.items);
+    assert_eq!(view.items.len(), 2);
+    assert_eq!(view.items[0].diagnostic_index, 0);
+    assert_eq!(view.items[0].group_index, 0);
+    assert_eq!(view.items[0].path.as_deref(), Some(primary_path.as_path()));
+    assert_eq!(view.items[0].module_id, view.groups[0].module_id);
+    assert_eq!(view.items[0].stage, DiagnosticStage::Checker);
+    assert_eq!(view.items[0].severity, Some(DiagnosticSeverity::Error));
+    assert_eq!(view.items[0].code.as_deref(), Some(codes::CHECKER_TYPE));
+    assert!(view.items[0].message.contains("Tipo de retorno inválido"));
+    assert_eq!(
+        view.items[0].source_range.map(|range| range.start.line),
+        Some(2)
+    );
+    assert_eq!(view.items[1].diagnostic_index, 1);
+    assert_eq!(view.items[1].group_index, 0);
+    assert_eq!(
+        view.items[1].source_range.map(|range| range.start.line),
+        Some(6)
+    );
+
+    let source_database = fixture
+        .source_database
+        .as_ref()
+        .expect("checker fixture should carry source database");
+    let source_view = fixture
+        .report
+        .tooling_view_with_source_context(Some(source_database));
+    assert_eq!(source_view.summary, view.summary);
+    assert_eq!(source_view.groups, view.groups);
+    assert_eq!(
+        fixture
+            .report
+            .tooling_items_with_source_context(Some(source_database)),
+        source_view.items
+    );
+    assert_eq!(source_view.items.len(), 2);
+    assert_eq!(source_view.items[0].item, view.items[0]);
+    let first_context = source_view.items[0]
+        .source_context
+        .as_ref()
+        .expect("checker item should have source context");
+    assert_eq!(first_context.path.as_path(), primary_path.as_path());
+    assert_eq!(first_context.module_id, view.items[0].module_id.unwrap());
+    assert_eq!(first_context.line, view.items[0].line.unwrap());
+    assert_eq!(first_context.column, view.items[0].column);
+    assert!(first_context.line_text.contains(r#"return "erro""#));
+    assert_eq!(
+        first_context.source_range.map(|range| range.start.line),
+        Some(2)
+    );
+    assert!(first_context.highlight_start_column.is_some());
+    assert!(
+        first_context.highlight_end_column.unwrap() > first_context.highlight_start_column.unwrap()
+    );
+    assert!(source_view.items[1].source_context.is_some());
+
+    let groups = fixture.report.groups_by_path_and_module();
+    let first_message = fixture
+        .report
+        .first_diagnostic_for_group(&groups[0])
+        .map(|diagnostic| diagnostic.diagnostic.message.as_str());
+    assert!(
+        first_message
+            .unwrap_or_default()
+            .contains("Tipo de retorno inválido"),
+        "first diagnostic: {:?}",
+        first_message
+    );
+
+    let first_error_string = nexuslang::load_and_check_with_graph(&fixture.entry)
+        .expect_err("legacy String checker wrapper should still fail");
+    assert!(first_error_string.contains("Tipo de retorno inválido"));
+
+    let json = nexuslang::multi_module_diagnostic_report_json("check", &fixture.report);
+    assert!(
+        json.contains(r#""diagnostic_indexes":[0,1]"#),
+        "json: {json}"
+    );
+    assert!(!json.contains(r#""summary""#), "json: {json}");
+    assert!(!json.contains(r#""group_index""#), "json: {json}");
+    assert!(!json.contains(r#""diagnostic_index""#), "json: {json}");
+    assert!(!json.contains(r#""line_text""#), "json: {json}");
+    assert!(
+        !json.contains(r#""highlight_start_column""#),
+        "json: {json}"
+    );
+}
+
+#[test]
+fn diagnostic_report_tooling_example_consumes_module_loader_fixture() {
+    let fixture = module_loader_report_tooling_fixture();
+    let snapshot = diagnostic_report_tooling_snapshot(&fixture.report, &fixture.output);
+    let primary_path = fixture
+        .primary_path
+        .as_ref()
+        .expect("loader fixture should have a primary source path");
+
+    assert_eq!(snapshot.total, 1);
+    assert!(snapshot.has_errors);
+    assert_eq!(snapshot.checker_count, 0);
+    assert_eq!(snapshot.module_loader_count, 1);
+    assert_eq!(snapshot.runtime_count, 0);
+    assert_eq!(snapshot.error_count, 1);
+    assert_eq!(snapshot.affected_paths, vec![primary_path.clone()]);
+    assert!(snapshot.affected_modules.is_empty());
+    assert_eq!(snapshot.group_sizes, vec![1]);
+
+    let view = fixture.report.tooling_view();
+    assert_eq!(view.summary.total, 1);
+    assert_eq!(view.groups.len(), 1);
+    assert_eq!(fixture.report.tooling_items(), view.items);
+    assert_eq!(view.items.len(), 1);
+    assert_eq!(view.items[0].diagnostic_index, 0);
+    assert_eq!(view.items[0].group_index, 0);
+    assert_eq!(view.items[0].path.as_deref(), Some(primary_path.as_path()));
+    assert_eq!(view.items[0].module_id, None);
+    assert_eq!(view.items[0].stage, DiagnosticStage::ModuleLoader);
+    assert_eq!(view.items[0].severity, Some(DiagnosticSeverity::Error));
+    assert_eq!(
+        view.items[0].code.as_deref(),
+        Some(codes::MODULE_LOADER_SYMBOL_NOT_EXPORTED)
+    );
+    assert!(view.items[0].message.contains("missing"));
+    assert!(view.items[0].source_range.is_none());
+    let source_view = fixture
+        .report
+        .tooling_view_with_source_context(fixture.source_database.as_ref());
+    assert_eq!(source_view.summary, view.summary);
+    assert_eq!(source_view.groups, view.groups);
+    assert_eq!(source_view.items.len(), 1);
+    assert_eq!(source_view.items[0].item, view.items[0]);
+    assert!(
+        source_view.items[0].source_context.is_none(),
+        "module-loader fixture has no SourceDatabase after loader failure"
+    );
+    assert_eq!(
+        fixture.report.tooling_items_with_source_context(None),
+        source_view.items
+    );
+
+    let diagnostic = fixture.report.first().expect("fixture report should fail");
+    assert_eq!(diagnostic.diagnostic.stage, DiagnosticStage::ModuleLoader);
+    assert_eq!(
+        diagnostic.diagnostic.code.as_deref(),
+        Some(codes::MODULE_LOADER_SYMBOL_NOT_EXPORTED)
+    );
+    assert_eq!(fixture.report.diagnostics_for_path(primary_path).len(), 1);
+
+    let legacy_string = nexuslang::load_program(&fixture.entry)
+        .expect_err("legacy String loader wrapper should still fail");
+    assert!(legacy_string.contains("missing"));
+
+    let json = nexuslang::multi_module_diagnostic_report_json("check", &fixture.report);
+    assert!(json.contains(r#""stage":"module_loader""#), "json: {json}");
+    assert!(!json.contains(r#""summary""#), "json: {json}");
+    assert!(!json.contains(r#""group_index""#), "json: {json}");
+    assert!(!json.contains(r#""line_text""#), "json: {json}");
+}
+
+#[test]
+fn diagnostic_report_tooling_example_consumes_runtime_fixture() {
+    let fixture = runtime_report_tooling_fixture();
+    let snapshot = diagnostic_report_tooling_snapshot(&fixture.report, &fixture.output);
+
+    assert_eq!(snapshot.total, 1);
+    assert!(snapshot.has_errors);
+    assert_eq!(snapshot.checker_count, 0);
+    assert_eq!(snapshot.module_loader_count, 0);
+    assert_eq!(snapshot.runtime_count, 1);
+    assert_eq!(snapshot.error_count, 1);
+    let primary_path = fixture
+        .primary_path
+        .as_ref()
+        .expect("runtime fixture should have a primary source path");
+    assert_eq!(snapshot.affected_paths, vec![primary_path.clone()]);
+    assert_eq!(snapshot.affected_modules.len(), 1);
+    assert_eq!(snapshot.group_sizes, vec![1]);
+    assert_eq!(snapshot.output_lines, 1);
+    assert_eq!(fixture.output, ["antes".to_string()]);
+
+    let view = fixture.report.tooling_view();
+    assert_eq!(view.summary.total, 1);
+    assert_eq!(view.summary.paths, vec![primary_path.clone()]);
+    assert_eq!(view.summary.module_ids.len(), 1);
+    assert_eq!(view.groups.len(), 1);
+    assert_eq!(fixture.report.tooling_items(), view.items);
+    assert_eq!(view.items.len(), 1);
+    assert_eq!(view.items[0].diagnostic_index, 0);
+    assert_eq!(view.items[0].group_index, 0);
+    assert_eq!(view.items[0].path.as_ref(), Some(primary_path));
+    assert!(view.items[0].module_id.is_some());
+    assert_eq!(view.items[0].stage, DiagnosticStage::Runtime);
+    assert_eq!(view.items[0].severity, Some(DiagnosticSeverity::Error));
+    assert_eq!(
+        view.items[0].code.as_deref(),
+        Some(codes::RUNTIME_DIVISION_BY_ZERO)
+    );
+    assert!(view.items[0].message.contains("Divisão por zero"));
+    assert!(view.items[0].source_range.is_none());
+    let source_view = fixture
+        .report
+        .tooling_view_with_source_context(fixture.source_database.as_ref());
+    assert_eq!(source_view.summary, view.summary);
+    assert_eq!(source_view.groups, view.groups);
+    assert_eq!(source_view.items.len(), 1);
+    assert_eq!(source_view.items[0].item, view.items[0]);
+    assert!(source_view.items[0].source_context.is_none());
+
+    let diagnostic = fixture.report.first().expect("fixture report should fail");
+    assert_eq!(diagnostic.diagnostic.stage, DiagnosticStage::Runtime);
+    assert_eq!(
+        diagnostic.diagnostic.code.as_deref(),
+        Some(codes::RUNTIME_DIVISION_BY_ZERO)
+    );
+    assert!(diagnostic.to_string().contains("Divisão por zero"));
+
+    let json = nexuslang::multi_module_diagnostic_report_output_json(
+        "run",
+        &fixture.report,
+        &fixture.output,
+    );
+    assert!(json.contains(r#""stage":"runtime""#), "json: {json}");
+    assert!(json.contains(r#""output":["antes"]"#), "json: {json}");
+    assert!(!json.contains(r#""summary""#), "json: {json}");
+    assert!(!json.contains(r#""group_index""#), "json: {json}");
+    assert!(!json.contains(r#""line_text""#), "json: {json}");
+}
+
+#[test]
+fn multi_module_diagnostic_report_tooling_api_contract_matrix_is_stable() {
+    let fixture = checker_report_tooling_fixture();
+    let primary_path = fixture
+        .primary_path
+        .as_ref()
+        .expect("checker fixture should have a primary source path");
+    let source_database = fixture
+        .source_database
+        .as_ref()
+        .expect("checker fixture should carry source database");
+    let report = &fixture.report;
+    let diagnostics = report.diagnostics();
+    let summary = report.summary();
+    let view = report.tooling_view();
+    let source_view = report.tooling_view_with_source_context(Some(source_database));
+    let no_source_view = report.tooling_view_with_source_context(None);
+
+    assert_eq!(report.len(), diagnostics.len());
+    assert_eq!(report.first(), diagnostics.first());
+    assert_eq!(report.clone().into_diagnostics(), diagnostics.to_vec());
+
+    assert_eq!(summary.total, 2);
+    assert!(summary.has_diagnostics);
+    assert!(summary.has_errors);
+    assert!(!summary.has_warnings);
+    assert_eq!(
+        summary.stages,
+        vec![nexuslang::MultiModuleDiagnosticStageCount {
+            stage: DiagnosticStage::Checker,
+            count: 2,
+        }]
+    );
+    assert_eq!(
+        summary.severities,
+        vec![nexuslang::MultiModuleDiagnosticSeverityCount {
+            severity: Some(DiagnosticSeverity::Error),
+            count: 2,
+        }]
+    );
+    assert_eq!(summary.paths, vec![primary_path.clone()]);
+    assert_eq!(summary.module_ids.len(), 1);
+
+    let module_id = summary.module_ids[0];
+    assert_eq!(report.diagnostics_for_path(primary_path).len(), 2);
+    assert_eq!(report.diagnostics_for_module_id(module_id).len(), 2);
+    assert_eq!(
+        report
+            .diagnostics_for_path_and_module(Some(primary_path.as_path()), Some(module_id))
+            .len(),
+        2
+    );
+    assert_eq!(
+        report.diagnostics_for_stage(DiagnosticStage::Checker).len(),
+        2
+    );
+    assert_eq!(
+        report
+            .diagnostics_for_severity(DiagnosticSeverity::Error)
+            .len(),
+        2
+    );
+
+    assert_eq!(view.summary, summary);
+    assert_eq!(view.groups.len(), 1);
+    assert_eq!(view.groups[0].path.as_deref(), Some(primary_path.as_path()));
+    assert_eq!(view.groups[0].module_id, Some(module_id));
+    assert_eq!(view.groups[0].diagnostic_indexes, [0, 1]);
+    assert_eq!(report.diagnostics_for_group(&view.groups[0]).len(), 2);
+    assert_eq!(
+        report.first_diagnostic_for_group(&view.groups[0]),
+        diagnostics.first()
+    );
+    assert_eq!(report.tooling_items(), view.items);
+    assert_eq!(view.items.len(), diagnostics.len());
+
+    for item in &view.items {
+        let diagnostic = &diagnostics[item.diagnostic_index];
+        let group = &view.groups[item.group_index];
+        assert!(
+            group.diagnostic_indexes.contains(&item.diagnostic_index),
+            "item should point at a group containing its diagnostic index"
+        );
+        assert_eq!(item.path, diagnostic.path);
+        assert_eq!(item.module_id, diagnostic.module_id);
+        assert_eq!(item.stage, diagnostic.diagnostic.stage);
+        assert_eq!(item.severity, diagnostic.diagnostic.severity);
+        assert_eq!(item.code, diagnostic.diagnostic.code);
+        assert_eq!(item.message, diagnostic.diagnostic.message);
+        assert_eq!(item.line, diagnostic.diagnostic.line);
+        assert_eq!(item.column, diagnostic.diagnostic.column);
+        assert_eq!(item.source_range, diagnostic.source_range);
+    }
+
+    assert_eq!(source_view.summary, summary);
+    assert_eq!(source_view.groups, view.groups);
+    assert_eq!(source_view.items.len(), view.items.len());
+    assert_eq!(
+        report.tooling_items_with_source_context(Some(source_database)),
+        source_view.items
+    );
+    assert_eq!(no_source_view.summary, summary);
+    assert_eq!(no_source_view.groups, view.groups);
+    assert_eq!(no_source_view.items.len(), view.items.len());
+
+    for (index, item_with_context) in source_view.items.iter().enumerate() {
+        assert_eq!(item_with_context.item, view.items[index]);
+        let context = item_with_context
+            .source_context
+            .as_ref()
+            .expect("checker diagnostics should resolve source context");
+        assert_eq!(context.module_id, module_id);
+        assert_eq!(context.path.as_path(), primary_path.as_path());
+        assert_eq!(context.line, item_with_context.item.line.unwrap());
+        assert_eq!(context.column, item_with_context.item.column);
+        assert_eq!(context.source_range, item_with_context.item.source_range);
+        assert!(!context.line_text.trim().is_empty());
+        assert!(context.highlight_start_column.is_some());
+        assert!(context.highlight_end_column.is_some());
+    }
+
+    for (index, item_with_context) in no_source_view.items.iter().enumerate() {
+        assert_eq!(item_with_context.item, view.items[index]);
+        assert!(item_with_context.source_context.is_none());
+    }
+
+    let report_json = nexuslang::multi_module_diagnostic_report_json("check", report);
+    let first_error_json =
+        nexuslang::multi_module_diagnostic_json("check", report.first().unwrap());
+    for forbidden in [
+        r#""summary""#,
+        r#""items""#,
+        r#""diagnostic_index""#,
+        r#""group_index""#,
+        r#""source_context""#,
+        r#""line_text""#,
+        r#""highlight_start_column""#,
+        r#""highlight_end_column""#,
+        r#""uri""#,
+        r#""byte_range""#,
+    ] {
+        assert!(
+            !report_json.contains(forbidden),
+            "JSON v1 report must not serialize in-memory tooling field {forbidden}: {report_json}"
+        );
+        assert!(
+            !first_error_json.contains(forbidden),
+            "first-error JSON must not serialize in-memory tooling field {forbidden}: {first_error_json}"
+        );
+    }
+    assert!(
+        !first_error_json.contains(r#""diagnostics""#),
+        "first-error JSON must remain collection-free: {first_error_json}"
+    );
+    assert!(
+        !first_error_json.contains(r#""groups""#),
+        "first-error JSON must remain group-free: {first_error_json}"
+    );
+}
+
+#[test]
+fn load_and_check_with_source_database_diagnostic_report_wraps_first_error() {
+    let dir = temp_dir("source_database_diagnostic_report");
+
+    let lib = create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export fn broken() -> int {
+    return "erro"
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import broken from "./lib.nx"
+"#,
+    );
+
+    let report = nexuslang::load_and_check_with_source_database_diagnostic_report(&entry)
+        .expect_err("checker should return a diagnostic report");
+
+    assert_eq!(report.len(), 1);
+    let diagnostic = report.first().expect("report should contain first error");
+    assert_eq!(diagnostic.path, Some(lib.canonicalize().unwrap()));
+    assert_eq!(diagnostic.diagnostic.stage, DiagnosticStage::Checker);
+    assert!(diagnostic
+        .diagnostic
+        .message
+        .contains("Tipo de retorno inválido"));
+
+    let groups = report.groups_by_path_and_module();
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].diagnostic_indexes, [0]);
+
+    let json = nexuslang::multi_module_diagnostic_report_json("check", &report);
+    assert!(
+        json.contains(r#""diagnostic":{"code":"NXL3001""#),
+        "json: {json}"
+    );
+    assert!(
+        json.contains(r#""diagnostics":[{"code":"NXL3001""#),
+        "json: {json}"
+    );
+    assert!(json.contains(r#""groups":[{"path":"#), "json: {json}");
+}
+
+#[test]
+fn load_and_check_with_source_database_diagnostic_report_collects_independent_checker_diagnostics()
+{
+    let dir = temp_dir("source_database_diagnostic_report_collects_checker");
+
+    let lib = create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export fn broken_text() -> int {
+    return "erro"
+}
+
+export fn broken_number() -> bool {
+    return 1
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import broken_text from "./lib.nx"
+import broken_number from "./lib.nx"
+"#,
+    );
+
+    let first_error = nexuslang::load_and_check_with_source_database_diagnostic(&entry)
+        .expect_err("first-error checker path should still fail");
+    assert_eq!(first_error.path, Some(lib.canonicalize().unwrap()));
+    assert!(
+        first_error
+            .diagnostic
+            .message
+            .contains("Tipo de retorno inválido"),
+        "diagnostic: {:?}",
+        first_error
+    );
+
+    let report = nexuslang::load_and_check_with_source_database_diagnostic_report(&entry)
+        .expect_err("report checker path should collect declaration diagnostics");
+
+    assert_eq!(report.len(), 2);
+    let diagnostics = report.diagnostics();
+    assert_eq!(diagnostics[0].path, Some(lib.canonicalize().unwrap()));
+    assert_eq!(diagnostics[1].path, Some(lib.canonicalize().unwrap()));
+    assert_eq!(diagnostics[0].diagnostic.stage, DiagnosticStage::Checker);
+    assert_eq!(diagnostics[1].diagnostic.stage, DiagnosticStage::Checker);
+    assert!(diagnostics[0]
+        .diagnostic
+        .message
+        .contains("Tipo de retorno inválido"));
+    assert!(diagnostics[1]
+        .diagnostic
+        .message
+        .contains("Tipo de retorno inválido"));
+    assert_eq!(
+        diagnostics[0].source_range.map(|range| range.start.line),
+        Some(2)
+    );
+    assert_eq!(
+        diagnostics[1].source_range.map(|range| range.start.line),
+        Some(6)
+    );
+
+    let groups = report.groups_by_path_and_module();
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].diagnostic_indexes, [0, 1]);
+
+    let json = nexuslang::multi_module_diagnostic_report_json("check", &report);
+    assert!(
+        json.contains(r#""diagnostic":{"code":"NXL3001""#),
+        "json: {json}"
+    );
+    assert!(
+        json.contains(r#""diagnostic_indexes":[0,1]"#),
+        "json: {json}"
+    );
+}
+
+#[test]
+fn checker_diagnostic_report_covers_declaration_family_matrix() {
+    let dir = temp_dir("checker_report_declaration_family_matrix");
+
+    let lib = create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export model MatrixAnchor {
+    name: string
+}
+
+fn broken_text() -> int {
+    return "erro"
+}
+
+route GET /broken-endpoint {
+    print("sem retorno direto")
+}
+
+workflow BrokenWorkflow {
+    step preparar {
+        let total: int = "erro"
+    }
+}
+
+invoice {
+    customer: "Empresa SARL"
+    currency: "AOA"
+    item "Consultoria" qty 1 price 150
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import MatrixAnchor from "./lib.nx"
+"#,
+    );
+
+    let report = nexuslang::load_and_check_with_source_database_diagnostic_report(&entry)
+        .expect_err("checker report should collect independent declaration diagnostics");
+
+    assert_eq!(report.len(), 4, "report: {:?}", report);
+    let lib_path = lib.canonicalize().unwrap();
+    let diagnostics = report.diagnostics();
+    assert!(diagnostics
+        .iter()
+        .all(|diagnostic| diagnostic.path == Some(lib_path.clone())));
+    assert!(diagnostics
+        .iter()
+        .all(|diagnostic| diagnostic.diagnostic.stage == DiagnosticStage::Checker));
+
+    let messages: Vec<&str> = diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.diagnostic.message.as_str())
+        .collect();
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains("Tipo de retorno inválido")),
+        "messages: {:?}",
+        messages
+    );
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains("Route '/broken-endpoint' deve conter")),
+        "messages: {:?}",
+        messages
+    );
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains("Tipo inválido para 'total'")),
+        "messages: {:?}",
+        messages
+    );
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains("Invoice item price")),
+        "messages: {:?}",
+        messages
+    );
+
+    let start_lines: Vec<Option<usize>> = diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.source_range.map(|range| range.start.line))
+        .collect();
+    assert_eq!(start_lines, [Some(6), Some(10), Some(14), Some(20)]);
+
+    let groups = report.groups_by_path_and_module();
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].diagnostic_indexes, [0, 1, 2, 3]);
+}
+
+#[test]
+fn checker_diagnostic_report_keeps_global_setup_errors_first_error() {
+    let dir = temp_dir("checker_report_global_setup_first_error");
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+fn duplicated() -> int {
+    return 1
+}
+
+fn duplicated() -> int {
+    return 2
+}
+
+fn later_broken() -> bool {
+    return 1
+}
+"#,
+    );
+
+    let report = nexuslang::load_and_check_with_source_database_diagnostic_report(&entry)
+        .expect_err("global checker setup failure should produce a one-item report");
+
+    assert_eq!(report.len(), 1);
+    let diagnostic = report.first().expect("report should contain setup error");
+    assert!(diagnostic
+        .diagnostic
+        .message
+        .contains("Função 'duplicated' declarada mais de uma vez"));
+    assert!(
+        !diagnostic
+            .diagnostic
+            .message
+            .contains("Tipo de retorno inválido"),
+        "setup errors should stop before declaration body collection"
+    );
+
+    let json = nexuslang::multi_module_diagnostic_report_json("check", &report);
+    assert!(json.contains(r#""diagnostic_indexes":[0]"#), "json: {json}");
+    assert!(
+        !json.contains(r#""diagnostic_indexes":[0,1]"#),
+        "setup errors should stay first-error: {json}"
+    );
+}
+
+#[test]
+fn checker_diagnostic_report_keeps_top_level_statements_first_error() {
+    let dir = temp_dir("checker_report_top_level_first_error");
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+print(missing_one)
+print(missing_two)
+
+fn later_broken() -> int {
+    return "erro"
+}
+"#,
+    );
+
+    let report = nexuslang::load_and_check_with_source_database_diagnostic_report(&entry)
+        .expect_err("top-level statement failure should produce a one-item report");
+
+    assert_eq!(report.len(), 1);
+    let diagnostic = report
+        .first()
+        .expect("report should contain statement error");
+    assert!(diagnostic.diagnostic.message.contains("missing_one"));
+    assert!(
+        !diagnostic.diagnostic.message.contains("missing_two"),
+        "top-level statement checking should stop at the first dependent error"
+    );
+
+    let json = nexuslang::multi_module_diagnostic_report_json("check", &report);
+    assert!(json.contains("missing_one"), "json: {json}");
+    assert!(!json.contains("missing_two"), "json: {json}");
+    assert!(
+        !json.contains("Tipo de retorno inválido"),
+        "declaration body collection should not run after a top-level failure: {json}"
+    );
+}
+
+#[test]
+fn multi_module_diagnostic_report_output_json_includes_captured_output() {
+    let success_report = nexuslang::MultiModuleDiagnosticReport::empty();
+    let success_output = vec!["primeira".to_string(), "2".to_string()];
+    let success_json = nexuslang::multi_module_diagnostic_report_output_json(
+        "run",
+        &success_report,
+        &success_output,
+    );
+
+    assert!(
+        success_json.contains(r#""ok":true"#),
+        "json: {success_json}"
+    );
+    assert!(
+        success_json.contains(r#""diagnostic":null"#),
+        "json: {success_json}"
+    );
+    assert!(
+        success_json.contains(r#""diagnostics":[]"#),
+        "json: {success_json}"
+    );
+    assert!(
+        success_json.contains(r#""groups":[]"#),
+        "json: {success_json}"
+    );
+    assert!(
+        success_json.contains(r#""output":["primeira","2"]"#),
+        "json: {success_json}"
+    );
+
+    let diagnostic = nexuslang::MultiModuleDiagnostic::runtime("Divisão por zero");
+    let error_report = nexuslang::MultiModuleDiagnosticReport::from_diagnostic(diagnostic);
+    let error_output = vec!["antes".to_string()];
+    let error_json =
+        nexuslang::multi_module_diagnostic_report_output_json("run", &error_report, &error_output);
+
+    assert!(error_json.contains(r#""ok":false"#), "json: {error_json}");
+    assert!(
+        error_json.contains(r#""diagnostic":{"code":"NXL5001""#),
+        "json: {error_json}"
+    );
+    assert!(
+        error_json.contains(r#""diagnostics":[{"code":"NXL5001""#),
+        "json: {error_json}"
+    );
+    assert!(
+        error_json.contains(r#""diagnostic_indexes":[0]"#),
+        "json: {error_json}"
+    );
+    assert!(
+        error_json.contains(r#""output":["antes"]"#),
+        "json: {error_json}"
+    );
+}
+
+#[test]
+fn captured_multi_module_run_preserves_output_on_success_and_runtime_error() {
+    let success_dir = temp_dir("captured_multi_module_run_success");
+    let success_entry = create_nx_file(
+        &success_dir,
+        "main.nx",
+        r#"
+print("ok")
+print(42)
+"#,
+    );
+
+    let output = nexuslang::load_and_run_with_source_database_captured_diagnostic(&success_entry)
+        .expect("captured run should succeed");
+    assert_eq!(output, ["ok".to_string(), "42".to_string()]);
+
+    let error_dir = temp_dir("captured_multi_module_run_runtime_error");
+    let error_entry = create_nx_file(
+        &error_dir,
+        "main.nx",
+        r#"
+print("antes")
+print(10 / 0)
+"#,
+    );
+
+    let err = nexuslang::load_and_run_with_source_database_captured_diagnostic(&error_entry)
+        .expect_err("captured run should preserve partial output on runtime error");
+    assert_eq!(err.output, ["antes".to_string()]);
+    assert_eq!(err.diagnostic.diagnostic.stage, DiagnosticStage::Runtime);
+    assert_eq!(err.diagnostic.diagnostic.code.as_deref(), Some("NXL5001"));
+    assert_eq!(
+        err.diagnostic.diagnostic.severity,
+        Some(DiagnosticSeverity::Error)
+    );
+    assert!(err
+        .diagnostic
+        .diagnostic
+        .message
+        .contains("Divisão por zero"));
+}
+
+#[test]
+fn check_with_module_graph_hir_symbol_ref_three_modules() {
+    let dir = temp_dir("check_hir_three_mods");
+
+    // Create a chain: entry → lib → helpers
+    create_nx_file(
+        &dir,
+        "helpers.nx",
+        r#"
+export fn helper() -> string {
+    return "ok"
+}
+"#,
+    );
+
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+import helper from "./helpers.nx"
+export fn lib_fn() -> string {
+    return helper()
+}
+"#,
+    );
+
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import lib_fn from "./lib.nx"
+
+let result = lib_fn()
+print(result)
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect("check should succeed");
+
+    let resolutions = checker.checked_import_resolutions();
+
+    // main.nx has 1 import (lib_fn from lib.nx).
+    // lib.nx has 1 import (helper from helpers.nx).
+    // Dependency imports stay in the merged program so dependency aliases and
+    // symbol references can still resolve after lowering.
+    assert_eq!(
+        resolutions.len(),
+        2,
+        "entry and dependency imports should be resolved in the merged program"
+    );
+
+    let hir = nexuslang::hir::lower_program(&program);
+
+    let import_decls: Vec<&nexuslang::hir::HirDecl<'_>> = hir
+        .decls
+        .iter()
+        .filter(|d| d.kind == nexuslang::hir::HirDeclKind::Import)
+        .collect();
+    assert_eq!(
+        import_decls.len(),
+        2,
+        "merged HIR should include entry and dependency imports"
+    );
+
+    // Sorted dep order: helpers.nx → module 1, lib.nx → module 2
+    let lib_import = import_decls
+        .iter()
+        .find(|d| d.name == Some("lib_fn"))
+        .expect("main import should be present");
+    let lib_sym_ref = resolutions
+        .get(&lib_import.id)
+        .expect("main import should be resolved");
+    assert_eq!(
+        lib_sym_ref.module.index(),
+        2,
+        "lib_fn is in lib.nx (module 2)"
+    );
+
+    let resolved_lib_sym = hir
+        .symbols
+        .iter()
+        .find(|s| s.id == lib_sym_ref.symbol)
+        .expect("resolved lib symbol should exist");
+    assert_eq!(
+        resolved_lib_sym.kind,
+        nexuslang::hir::HirSymbolKind::Function
+    );
+    assert_eq!(resolved_lib_sym.name, "lib_fn");
+
+    let helper_import = import_decls
+        .iter()
+        .find(|d| d.name == Some("helper"))
+        .expect("dependency import should be present");
+    let helper_sym_ref = resolutions
+        .get(&helper_import.id)
+        .expect("dependency import should be resolved");
+    assert_eq!(
+        helper_sym_ref.module.index(),
+        1,
+        "helper is in helpers.nx (module 1)"
+    );
+
+    let resolved_helper_sym = hir
+        .symbols
+        .iter()
+        .find(|s| s.id == helper_sym_ref.symbol)
+        .expect("resolved helper symbol should exist");
+    assert_eq!(
+        resolved_helper_sym.kind,
+        nexuslang::hir::HirSymbolKind::Function
+    );
+    assert_eq!(resolved_helper_sym.name, "helper");
+}
+
+#[test]
+fn check_with_module_graph_import_model_with_alias() {
+    let dir = temp_dir("check_model_alias");
+    create_nx_file(
+        &dir,
+        "models.nx",
+        r#"
+export model User {
+    name: string
+    age: int
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import User as Usuario from "./models.nx"
+
+let u = Usuario { name: "Ana", age: 30 }
+print(u.name)
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    let result = checker.check_with_module_graph(&program, &module_graph, &decl_module_map);
+
+    assert!(
+        result.is_ok(),
+        "alias-imported model should pass checker: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn check_with_module_graph_import_function_with_alias() {
+    let dir = temp_dir("check_fn_alias");
+    create_nx_file(
+        &dir,
+        "utils.nx",
+        r#"
+export fn greet(name: string) -> string {
+    return "Hello, " + name
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import greet as saudar from "./utils.nx"
+
+let msg = saudar("Ana")
+print(msg)
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    let result = checker.check_with_module_graph(&program, &module_graph, &decl_module_map);
+
+    assert!(
+        result.is_ok(),
+        "alias-imported function should pass checker: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn dependency_module_import_alias_is_preserved_during_merge() {
+    let dir = temp_dir("dependency_alias_preserved");
+    create_nx_file(
+        &dir,
+        "base.nx",
+        r#"
+export fn helper() -> string {
+    return "ok"
+}
+"#,
+    );
+    create_nx_file(
+        &dir,
+        "dep.nx",
+        r#"
+import helper as h from "./base.nx"
+
+export fn call_helper() -> string {
+    return h()
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import call_helper from "./dep.nx"
+
+print(call_helper())
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let import_decl_count = program
+        .decls
+        .iter()
+        .filter(|decl| matches!(decl, nexuslang::ast::Decl::Import { .. }))
+        .count();
+    assert_eq!(
+        import_decl_count, 2,
+        "merged program should retain entry and dependency imports"
+    );
+
+    let mut checker = nexuslang::checker::Checker::new();
+    checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect("dependency alias should resolve during checking");
+
+    let mut interp = nexuslang::interpreter::Interpreter::new_captured();
+    interp
+        .run(&program)
+        .expect("dependency alias should resolve at runtime");
+
+    assert!(
+        interp.output().contains(&"ok".to_string()),
+        "runtime output should include dependency alias result: {:?}",
+        interp.output()
+    );
+}
+
+#[test]
+fn check_with_module_graph_import_alias_hir_symbol_ref() {
+    let dir = temp_dir("check_alias_hir_ref");
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export model User {
+    name: string
+}
+
+export fn helper() -> string {
+    return "ok"
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import User as Usuario from "./lib.nx"
+import helper as ajuda from "./lib.nx"
+
+let u = Usuario { name: "Ana" }
+print(ajuda())
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect("check should succeed");
+
+    let resolutions = checker.checked_import_resolutions();
+    assert_eq!(
+        resolutions.len(),
+        2,
+        "should have resolved 2 alias imports (Usuario + ajuda)"
+    );
+
+    let hir = nexuslang::hir::lower_program(&program);
+
+    // Find alias import decls
+    let import_decls: Vec<&nexuslang::hir::HirDecl<'_>> = hir
+        .decls
+        .iter()
+        .filter(|d| d.kind == nexuslang::hir::HirDeclKind::Import)
+        .collect();
+    assert_eq!(import_decls.len(), 2, "should have 2 import decls in HIR");
+
+    // Check that the alias decls have their names set correctly
+    let alias_names: Vec<Option<&str>> = import_decls.iter().map(|d| d.name).collect();
+    assert!(
+        alias_names.contains(&Some("Usuario")),
+        "one alias should be named Usuario"
+    );
+    assert!(
+        alias_names.contains(&Some("ajuda")),
+        "one alias should be named ajuda"
+    );
+
+    for import_decl in &import_decls {
+        let decl_id = import_decl.id;
+        let sym_ref = resolutions
+            .get(&decl_id)
+            .expect("every import decl should have a resolution");
+
+        // The dependency module is module 1 (entry is module 0)
+        assert_eq!(
+            sym_ref.module.index(),
+            1,
+            "imported symbols come from lib.nx (module 1)"
+        );
+
+        let resolved_sym = hir
+            .symbols
+            .iter()
+            .find(|s| s.id == sym_ref.symbol)
+            .expect("resolved symbol should exist in HIR");
+
+        // The resolved symbol should have the ORIGINAL name ("User" / "helper"),
+        // not the alias ("Usuario" / "ajuda")
+        match resolved_sym.kind {
+            nexuslang::hir::HirSymbolKind::Model => {
+                assert_eq!(resolved_sym.name, "User");
+            }
+            nexuslang::hir::HirSymbolKind::Function => {
+                assert_eq!(resolved_sym.name, "helper");
+            }
+            other => panic!("expected Model or Function, got {:?}", other),
+        }
+    }
+}
+
+#[test]
+fn load_and_check_with_graph_import_alias_works() {
+    let dir = temp_dir("load_check_alias");
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export model User {
+    name: string
+    age: int
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import User as Usuario from "./lib.nx"
+
+let u = Usuario { name: "Ana", age: 30 }
+print(u)
+"#,
+    );
+
+    let result = nexuslang::load_and_check_with_graph(&entry);
+    assert!(
+        result.is_ok(),
+        "load_and_check_with_graph for alias should succeed: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_alias() {
+    let dir = temp_dir("load_run_alias");
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export model User {
+    name: string
+    age: int
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import User as Usuario from "./lib.nx"
+
+let u = Usuario { name: "Ana", age: 30 }
+print(u.name)
+"#,
+    );
+
+    let result = nexuslang::load_and_run_with_graph(&entry);
+    assert!(
+        result.is_ok(),
+        "load_and_run_with_graph for alias should succeed: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_alias_runtime_output() {
+    let dir = temp_dir("load_run_alias_out");
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export model User {
+    name: string
+    age: int
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import User as Usuario from "./lib.nx"
+
+let u = Usuario { name: "Ana", age: 30 }
+print(u.name)
+print(u.age)
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect("check should succeed");
+
+    let mut interp = nexuslang::interpreter::Interpreter::new_captured();
+    interp.run(&program).expect("run should succeed");
+
+    let output = interp.output();
+    assert!(
+        output.contains(&"Ana".to_string()),
+        "output should contain 'Ana': {:?}",
+        output
+    );
+    assert!(
+        output.contains(&"30".to_string()),
+        "output should contain '30': {:?}",
+        output
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_alias_function() {
+    let dir = temp_dir("load_run_fn_alias");
+    create_nx_file(
+        &dir,
+        "utils.nx",
+        r#"
+export fn greet(name: string) -> string {
+    return "Hello, " + name
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import greet as saudar from "./utils.nx"
+
+let msg = saudar("Ana")
+print(msg)
+"#,
+    );
+
+    let result = nexuslang::load_and_run_with_graph(&entry);
+    assert!(
+        result.is_ok(),
+        "load_and_run_with_graph for function alias should succeed: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_alias_runtime_function_output() {
+    let dir = temp_dir("load_run_fn_alias_out");
+    create_nx_file(
+        &dir,
+        "utils.nx",
+        r#"
+export fn greet(name: string) -> string {
+    return "Hello, " + name
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import greet as saudar from "./utils.nx"
+
+let msg = saudar("Ana")
+print(msg)
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect("check should succeed");
+
+    let mut interp = nexuslang::interpreter::Interpreter::new_captured();
+    interp.run(&program).expect("run should succeed");
+
+    let output = interp.output();
+    assert!(
+        output.contains(&"Hello, Ana".to_string()),
+        "output should contain 'Hello, Ana': {:?}",
+        output
+    );
+}
+
+#[test]
+fn check_with_module_graph_import_alias_with_model_default_omitted() {
+    let dir = temp_dir("check_alias_default");
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export model User {
+    name: string
+    age: int = 18
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import User as Usuario from "./lib.nx"
+
+let u = Usuario { name: "Ana" }
+print(u.age)
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    let result = checker.check_with_module_graph(&program, &module_graph, &decl_module_map);
+    assert!(
+        result.is_ok(),
+        "alias with omitted default field should pass checker: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_alias_with_model_default() {
+    let dir = temp_dir("run_alias_default");
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export model User {
+    name: string
+    age: int = 18
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import User as Usuario from "./lib.nx"
+
+let u = Usuario { name: "Ana" }
+print(u.name)
+print(u.age)
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect("check should succeed");
+
+    let mut interp = nexuslang::interpreter::Interpreter::new_captured();
+    interp.run(&program).expect("run should succeed");
+
+    let output = interp.output();
+    assert!(
+        output.contains(&"Ana".to_string()),
+        "output should contain 'Ana': {:?}",
+        output
+    );
+    assert!(
+        output.contains(&"18".to_string()),
+        "default age=18 should be filled at runtime, got: {:?}",
+        output
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_alias_with_model_default_overridden() {
+    let dir = temp_dir("run_alias_default_override");
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export model User {
+    name: string
+    age: int = 18
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import User as Usuario from "./lib.nx"
+
+let u = Usuario { name: "Ana", age: 25 }
+print(u.name)
+print(u.age)
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect("check should succeed");
+
+    let mut interp = nexuslang::interpreter::Interpreter::new_captured();
+    interp.run(&program).expect("run should succeed");
+
+    let output = interp.output();
+    assert!(
+        output.contains(&"Ana".to_string()),
+        "output should contain 'Ana': {:?}",
+        output
+    );
+    assert!(
+        output.contains(&"25".to_string()),
+        "explicit age=25 should override default, got: {:?}",
+        output
+    );
+    assert!(
+        !output.contains(&"18".to_string()),
+        "default age=18 should NOT appear when overridden, got: {:?}",
+        output
+    );
+}
+
+// ---------------------------------------------------------------------------
+// F11.10 — Static model operations with alias
+// ---------------------------------------------------------------------------
+
+#[test]
+fn load_and_run_with_graph_import_alias_static_call() {
+    let dir = temp_dir("run_alias_static_call");
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export model User {
+    name: string
+    age: int
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import User as Usuario from "./lib.nx"
+
+let result = Usuario::all()
+print("done")
+"#,
+    );
+
+    let result = nexuslang::load_and_run_with_graph(&entry);
+    assert!(
+        result.is_ok(),
+        "load_and_run_with_graph with alias static call should succeed: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_alias_static_call_output() {
+    let dir = temp_dir("run_alias_static_call_out");
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export model User {
+    name: string
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import User as Usuario from "./lib.nx"
+
+let result = Usuario::all()
+print(result)
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect("check should succeed");
+
+    let mut interp = nexuslang::interpreter::Interpreter::new_captured();
+    interp.run(&program).expect("run should succeed");
+
+    let output = interp.output();
+    assert!(
+        output.contains(&"[Usuario.all() → lista de registos]".to_string()),
+        "output should contain static call mock message: {:?}",
+        output
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_alias_static_call_twice() {
+    let dir = temp_dir("run_alias_static_call2");
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export model User {
+    name: string
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import User as Usuario from "./lib.nx"
+
+let a = Usuario::all()
+let b = Usuario::all()
+print(a)
+"#,
+    );
+
+    let result = nexuslang::load_and_run_with_graph(&entry);
+    assert!(
+        result.is_ok(),
+        "load_and_run_with_graph with two alias static calls should succeed: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn check_with_module_graph_import_alias_static_call_all() {
+    let dir = temp_dir("check_alias_static_all");
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export model User {
+    name: string
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import User as Usuario from "./lib.nx"
+
+let result = Usuario::all()
+print(result)
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    let result = checker.check_with_module_graph(&program, &module_graph, &decl_module_map);
+
+    assert!(
+        result.is_ok(),
+        "alias static call should pass checker: {:?}",
+        result.err()
+    );
+}
+
+// ---------------------------------------------------------------------------
+// F11.11 — Workflow alias at runtime (run_workflow via alias)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn load_and_run_with_graph_import_workflow() {
+    let dir = temp_dir("run_import_workflow");
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export workflow Onboard {
+    step start { print("onboarding") }
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import Onboard from "./lib.nx"
+run_workflow("Onboard")
+print("done")
+"#,
+    );
+
+    let result = nexuslang::load_and_run_with_graph(&entry);
+    assert!(
+        result.is_ok(),
+        "imported workflow should run: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_workflow_with_alias() {
+    let dir = temp_dir("run_import_wf_alias");
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export workflow BillingWorkflow {
+    step bill { print("billing") }
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import BillingWorkflow as Billing from "./lib.nx"
+run_workflow("Billing")
+print("done")
+"#,
+    );
+
+    let result = nexuslang::load_and_run_with_graph(&entry);
+    assert!(
+        result.is_ok(),
+        "aliased workflow should run: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_workflow_alias_output() {
+    let dir = temp_dir("run_wf_alias_out");
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export workflow HelloWorkflow {
+    step greet { print("hello from alias") }
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import HelloWorkflow as Hello from "./lib.nx"
+run_workflow("Hello")
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect("check should succeed");
+
+    let mut interp = nexuslang::interpreter::Interpreter::new_captured();
+    interp.run(&program).expect("run should succeed");
+
+    let output = interp.output();
+    assert!(
+        output.contains(&"hello from alias".to_string()),
+        "workflow via alias should execute and print: {:?}",
+        output
+    );
+}
+
+#[test]
+fn check_with_module_graph_import_workflow_alias() {
+    let dir = temp_dir("check_wf_alias");
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export workflow ReportWorkflow {
+    step gen { print("report") }
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import ReportWorkflow as Report from "./lib.nx"
+run_workflow("Report")
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    let result = checker.check_with_module_graph(&program, &module_graph, &decl_module_map);
+
+    assert!(
+        result.is_ok(),
+        "aliased workflow should pass checker: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_workflow_alias_original_name_still_works() {
+    // The original workflow name remains registered because the dependency's
+    // declaration is part of the merged program. The alias is an ADDITIONAL
+    // binding — it does NOT replace the original.
+    let dir = temp_dir("run_wf_alias_orig");
+    create_nx_file(
+        &dir,
+        "lib.nx",
+        r#"
+export workflow SecretWorkflow {
+    step run { print("secret") }
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import SecretWorkflow as Secret from "./lib.nx"
+run_workflow("SecretWorkflow")
+print("done")
+"#,
+    );
+
+    let result = nexuslang::load_and_run_with_graph(&entry);
+    assert!(
+        result.is_ok(),
+        "original workflow name should still be accessible after alias import: {:?}",
+        result.err()
+    );
+}
+
+// ---------------------------------------------------------------------------
+// F11.13 — Standard Library (stdlib) — Phase 1: Infrastructure
+// ---------------------------------------------------------------------------
+
+#[test]
+fn load_program_full_import_stdlib_math_abs() {
+    let dir = temp_dir("stdlib_math_abs");
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import abs from "std/math"
+
+let result = abs(-5)
+print(result)
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry)
+            .expect("load with stdlib should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect("check with stdlib should succeed");
+
+    let mut interp = nexuslang::interpreter::Interpreter::new_captured();
+    interp
+        .run(&program)
+        .expect("run with stdlib should succeed");
+
+    let output = interp.output();
+    assert!(
+        output.contains(&"5".to_string()),
+        "stdlib abs(-5) should return 5, got: {:?}",
+        output
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_stdlib_math_clamp() {
+    let dir = temp_dir("stdlib_math_clamp");
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import clamp from "std/math"
+
+let result = clamp(50, 0, 100)
+print(result)
+"#,
+    );
+
+    let result = nexuslang::load_and_run_with_graph(&entry);
+    assert!(
+        result.is_ok(),
+        "load_and_run_with_graph with stdlib clamp should succeed: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_stdlib_math_clamp_output() {
+    let dir = temp_dir("stdlib_math_clamp_out");
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import clamp from "std/math"
+
+let result = clamp(50, 0, 100)
+print(result)
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect("check should succeed");
+
+    let mut interp = nexuslang::interpreter::Interpreter::new_captured();
+    interp.run(&program).expect("run should succeed");
+
+    let output = interp.output();
+    assert!(
+        output.contains(&"50".to_string()),
+        "clamp(50, 0, 100) should return 50, got: {:?}",
+        output
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_stdlib_math_max_output() {
+    let dir = temp_dir("stdlib_math_max_out");
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import max from "std/math"
+
+let result = max(10, 20)
+print(result)
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect("check should succeed");
+
+    let mut interp = nexuslang::interpreter::Interpreter::new_captured();
+    interp.run(&program).expect("run should succeed");
+
+    let output = interp.output();
+    assert!(
+        output.contains(&"20".to_string()),
+        "max(10, 20) should return 20, got: {:?}",
+        output
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_stdlib_math_min_output() {
+    let dir = temp_dir("stdlib_math_min_out");
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import min from "std/math"
+
+let result = min(10, 20)
+print(result)
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect("check should succeed");
+
+    let mut interp = nexuslang::interpreter::Interpreter::new_captured();
+    interp.run(&program).expect("run should succeed");
+
+    let output = interp.output();
+    assert!(
+        output.contains(&"10".to_string()),
+        "min(10, 20) should return 10, got: {:?}",
+        output
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_stdlib_math_min_underflow() {
+    let dir = temp_dir("stdlib_math_min_under");
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import clamp from "std/math"
+
+let result = clamp(-5, 0, 100)
+print(result)
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect("check should succeed");
+
+    let mut interp = nexuslang::interpreter::Interpreter::new_captured();
+    interp.run(&program).expect("run should succeed");
+
+    let output = interp.output();
+    assert!(
+        output.contains(&"0".to_string()),
+        "clamp(-5, 0, 100) should return 0, got: {:?}",
+        output
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_stdlib_math_clamp_overflow() {
+    let dir = temp_dir("stdlib_math_clamp_over");
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import clamp from "std/math"
+
+let result = clamp(150, 0, 100)
+print(result)
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect("check should succeed");
+
+    let mut interp = nexuslang::interpreter::Interpreter::new_captured();
+    interp.run(&program).expect("run should succeed");
+
+    let output = interp.output();
+    assert!(
+        output.contains(&"100".to_string()),
+        "clamp(150, 0, 100) should return 100, got: {:?}",
+        output
+    );
+}
+
+#[test]
+fn load_program_full_import_nonexistent_stdlib_module_fails() {
+    let dir = temp_dir("stdlib_not_found");
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import foo from "std/nonexistent"
+print("ok")
+"#,
+    );
+
+    let result = nexuslang::module_loader::load_program_full(&entry);
+    assert!(
+        result.is_err(),
+        "importing non-existent stdlib module should fail"
+    );
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        err_msg.contains("nonexistent"),
+        "error should mention the module name: {}",
+        err_msg
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_stdlib_core_modules_output() {
+    let dir = temp_dir("stdlib_core_modules");
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import contains from "std/string"
+import starts_with from "std/string"
+import ends_with from "std/string"
+import to_upper from "std/string"
+import to_lower from "std/string"
+import trim from "std/string"
+import length from "std/string"
+import is_empty from "std/string"
+import is_blank from "std/validation"
+import between_len from "std/validation"
+import is_email from "std/validation"
+import is_iso_date from "std/date"
+import year from "std/date"
+import month from "std/date"
+import day from "std/date"
+import format_money from "std/money"
+import is_positive_money from "std/money"
+import is_zero_money from "std/money"
+import same_currency from "std/money"
+
+print(contains("NexusLang", "Lang"))
+print(starts_with("NexusLang", "Nexus"))
+print(ends_with("NexusLang", "Lang"))
+print(to_upper("nexus"))
+print(to_lower("NEXUS"))
+print(trim("  crm  "))
+print(length("Luanda"))
+print(is_empty(""))
+print(is_blank("   "))
+print(between_len("cliente", 3, 10))
+print(is_email("ana@example.com"))
+print(is_iso_date("2026-02-28"))
+print(is_iso_date("2026-02-30"))
+print(year("2026-05-27"))
+print(month("2026-05-27"))
+print(day("2026-05-27"))
+print(format_money(1000 kz))
+print(is_positive_money(1000 kz))
+print(is_zero_money(0 kz))
+print(same_currency(100 kz, 50 kz))
+"#,
+    );
+
+    assert_stdlib_output(
+        &entry,
+        &[
+            "true",
+            "true",
+            "true",
+            "NEXUS",
+            "nexus",
+            "crm",
+            "6",
+            "true",
+            "true",
+            "true",
+            "true",
+            "true",
+            "false",
+            "2026",
+            "5",
+            "27",
+            "1000.00 KZ",
+            "true",
+            "true",
+            "true",
+        ],
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_stdlib_collections_output() {
+    let dir = temp_dir("stdlib_collections");
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import contains_int from "std/collections"
+import contains_string from "std/collections"
+import first_int from "std/collections"
+import first_string from "std/collections"
+import last_int from "std/collections"
+import last_string from "std/collections"
+import reverse_int from "std/collections"
+import reverse_string from "std/collections"
+import len_int from "std/collections"
+import is_empty_string from "std/collections"
+
+print(contains_int([2, 5, 8], 5))
+print(contains_int([2, 5, 8], 9))
+print(first_int([2, 5, 8]))
+print(last_int([2, 5, 8]))
+print(reverse_int([2, 5, 8]))
+print(len_int([2, 5, 8]))
+print(contains_string(["ana", "bia"], "bia"))
+print(first_string(["ana", "bia"]))
+print(last_string(["ana", "bia"]))
+print(reverse_string(["ana", "bia"]))
+print(is_empty_string([]))
+"#,
+    );
+
+    assert_stdlib_output(
+        &entry,
+        &[
+            "true",
+            "false",
+            "2",
+            "8",
+            "[8, 5, 2]",
+            "3",
+            "true",
+            "ana",
+            "bia",
+            "[bia, ana]",
+            "true",
+        ],
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_stdlib_erp_modules_output() {
+    let dir = temp_dir("stdlib_erp_modules");
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import number_is_even from "std/number"
+import number_is_odd from "std/number"
+import number_sign from "std/number"
+import number_between from "std/number"
+import inventory_can_fulfill from "std/inventory"
+import inventory_remaining_after_sale from "std/inventory"
+import inventory_backorder_qty from "std/inventory"
+import inventory_needs_reorder from "std/inventory"
+import inventory_reorder_qty from "std/inventory"
+import inventory_stock_status from "std/inventory"
+import crm_display_name from "std/crm"
+import crm_normalize_status from "std/crm"
+import crm_is_active_status from "std/crm"
+import crm_is_valid_email from "std/crm"
+import crm_contact_label from "std/crm"
+import invoice_line_total from "std/invoice"
+import invoice_subtotal_2 from "std/invoice"
+import invoice_apply_discount from "std/invoice"
+import invoice_tax_amount from "std/invoice"
+import invoice_grand_total from "std/invoice"
+import invoice_is_paid from "std/invoice"
+
+print(number_is_even(8))
+print(number_is_odd(7))
+print(number_sign(-9))
+print(number_between(7, 1, 10))
+print(inventory_can_fulfill(10, 3))
+print(inventory_remaining_after_sale(10, 3))
+print(inventory_backorder_qty(2, 5))
+print(inventory_needs_reorder(4, 5))
+print(inventory_reorder_qty(4, 20))
+print(inventory_stock_status(0, 5))
+print(inventory_stock_status(4, 5))
+print(inventory_stock_status(10, 5))
+print(crm_display_name("Ana", "Silva"))
+print(crm_normalize_status(" ACTIVE "))
+print(crm_is_active_status(" active "))
+print(crm_is_valid_email("ana@example.com"))
+print(crm_contact_label("Ana Silva", "ana@example.com"))
+print(invoice_line_total(3, 100 kz))
+print(invoice_subtotal_2(300 kz, 200 kz))
+print(invoice_apply_discount(500 kz, 50 kz))
+print(invoice_tax_amount(500 kz, 0.1))
+print(invoice_grand_total(500 kz, 50 kz, 25 kz))
+print(invoice_is_paid(0 kz))
+"#,
+    );
+
+    assert_stdlib_output(
+        &entry,
+        &[
+            "true",
+            "true",
+            "-1",
+            "true",
+            "true",
+            "7",
+            "3",
+            "true",
+            "16",
+            "out_of_stock",
+            "reorder",
+            "ok",
+            "Ana Silva",
+            "active",
+            "true",
+            "true",
+            "Ana Silva <ana@example.com>",
+            "300.00 KZ",
+            "500.00 KZ",
+            "450.00 KZ",
+            "50.00 KZ",
+            "525.00 KZ",
+            "true",
+        ],
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_stdlib_data_protocol_modules_output() {
+    let dir = temp_dir("stdlib_data_protocol_modules");
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import json_string from "std/json"
+import json_int from "std/json"
+import json_bool from "std/json"
+import json_pair from "std/json"
+import json_object_2 from "std/json"
+import json_array_2 from "std/json"
+import json_is_object from "std/json"
+import json_is_array from "std/json"
+import csv_row_3 from "std/csv"
+import csv_header_2 from "std/csv"
+import csv_needs_quotes from "std/csv"
+import http_status_text from "std/http"
+import http_is_success from "std/http"
+import http_is_redirect from "std/http"
+import http_is_client_error from "std/http"
+import http_is_server_error from "std/http"
+import http_method_allows_body from "std/http"
+import http_build_query_2 from "std/http"
+import crypto_sha256_hex from "std/crypto"
+import crypto_constant_time_eq from "std/crypto"
+import crypto_is_sha256_hex from "std/crypto"
+import crypto_verify_sha256_hex from "std/crypto"
+
+print(json_object_2(json_pair("name", json_string("Ana")), json_pair("active", json_bool(true))))
+print(json_array_2(json_int(7), json_string("stock")))
+print(json_is_object("{x}"))
+print(json_is_array("[x]"))
+print(csv_row_3("Ana", "Luanda, Angola", "VIP"))
+print(csv_needs_quotes("Luanda, Angola"))
+print(csv_header_2("name", "email"))
+print(http_status_text(404))
+print(http_is_success(201))
+print(http_is_redirect(302))
+print(http_is_client_error(404))
+print(http_is_server_error(503))
+print(http_method_allows_body("post"))
+print(http_build_query_2("q", "Nexus Lang", "city", "Luanda"))
+print(crypto_sha256_hex("nexus"))
+print(crypto_constant_time_eq("abc", "abc"))
+print(crypto_is_sha256_hex("f5cfcb570b7edac2ed16e1a025d50155d6148de7397f4068790cdfc142300070"))
+print(crypto_verify_sha256_hex("nexus", "f5cfcb570b7edac2ed16e1a025d50155d6148de7397f4068790cdfc142300070"))
+"#,
+    );
+
+    assert_stdlib_output(
+        &entry,
+        &[
+            r#"{"name":"Ana","active":true}"#,
+            r#"[7,"stock"]"#,
+            "true",
+            "true",
+            r#"Ana,"Luanda, Angola",VIP"#,
+            "true",
+            "name,email",
+            "Not Found",
+            "true",
+            "true",
+            "true",
+            "true",
+            "true",
+            "q=Nexus%20Lang&city=Luanda",
+            "f5cfcb570b7edac2ed16e1a025d50155d6148de7397f4068790cdfc142300070",
+            "true",
+            "true",
+            "true",
+        ],
+    );
+}
+
+#[test]
+fn load_and_run_with_graph_import_stdlib_operational_modules_output() {
+    std::env::set_var("NEXUS_STDLIB_ENV_TEST", "yes");
+
+    let dir = temp_dir("stdlib_operational_modules");
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import time_runtime_clock_available from "std/time"
+import time_unix_seconds from "std/time"
+import time_seconds_between from "std/time"
+import time_minutes_between from "std/time"
+import time_hours_between from "std/time"
+import time_days_between from "std/time"
+import time_is_before from "std/time"
+import time_is_after from "std/time"
+import env_runtime_available from "std/env"
+import env_get from "std/env"
+import env_has from "std/env"
+import env_get_or from "std/env"
+import env_is_true from "std/env"
+import log_info from "std/log"
+import log_warn from "std/log"
+import log_with_context from "std/log"
+import path_join from "std/path"
+import path_basename from "std/path"
+import path_dirname from "std/path"
+import path_extension from "std/path"
+import path_stem from "std/path"
+import path_normalize from "std/path"
+import path_is_absolute from "std/path"
+
+print(time_runtime_clock_available())
+print(time_unix_seconds() > 0)
+print(time_seconds_between(10, 25))
+print(time_minutes_between(0, 120))
+print(time_hours_between(0, 7200))
+print(time_days_between(0, 172800))
+print(time_is_before(10, 20))
+print(time_is_after(20, 10))
+print(env_runtime_available())
+print(env_has("NEXUS_STDLIB_ENV_TEST"))
+print(env_get("NEXUS_STDLIB_ENV_TEST"))
+print(env_get_or("NEXUS_STDLIB_ENV_MISSING", "fallback"))
+print(env_is_true("NEXUS_STDLIB_ENV_TEST"))
+print(log_info("pedido recebido"))
+print(log_warn("stock baixo"))
+print(log_with_context("ERROR", "invoice", "falha no total"))
+print(path_join("/var//erp", "./reports/../invoice.csv"))
+print(path_basename("/var/erp/invoice.csv"))
+print(path_dirname("/var/erp/invoice.csv"))
+print(path_extension("/var/erp/invoice.csv"))
+print(path_stem("/var/erp/invoice.csv"))
+print(path_normalize("/var//erp/./reports/../invoice.csv"))
+print(path_is_absolute("/var/erp"))
+"#,
+    );
+
+    assert_stdlib_output(
+        &entry,
+        &[
+            "true",
+            "true",
+            "15",
+            "2.00",
+            "2.00",
+            "2.00",
+            "true",
+            "true",
+            "true",
+            "true",
+            "yes",
+            "fallback",
+            "true",
+            "[INFO] pedido recebido",
+            "[WARN] stock baixo",
+            "[ERROR] invoice: falha no total",
+            "/var/erp/invoice.csv",
+            "invoice.csv",
+            "/var/erp",
+            "csv",
+            "invoice",
+            "/var/erp/invoice.csv",
+            "true",
+        ],
+    );
+
+    std::env::remove_var("NEXUS_STDLIB_ENV_TEST");
+}
+
+#[test]
+fn load_and_run_with_graph_import_stdlib_business_batch_modules_output() {
+    let dir = temp_dir("stdlib_business_batch_modules");
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import sales_line_total from "std/sales"
+import tax_amount from "std/tax"
+import discount_final_percent from "std/discount"
+import payment_status from "std/payment"
+import banking_is_debit from "std/banking"
+import accounting_is_balanced from "std/accounting"
+import ledger_side from "std/ledger"
+import shipping_status from "std/shipping"
+import warehouse_utilization_percent from "std/warehouse"
+import procurement_status from "std/procurement"
+import supplier_is_active_status from "std/supplier"
+import customer_balance_status from "std/customer"
+import project_progress_percent from "std/project"
+import task_priority_label from "std/task"
+import kpi_percent from "std/kpi"
+import report_money_line from "std/report"
+import pagination_offset from "std/pagination"
+import security_is_https from "std/security"
+import config_flag_enabled from "std/config"
+import commerce_cart_total_3 from "std/commerce"
+
+print(sales_line_total(2, 100 kz))
+print(tax_amount(1000 kz, 0.1))
+print(discount_final_percent(1000 kz, 0.1))
+print(payment_status(100 kz, 40 kz))
+print(banking_is_debit(-10 kz))
+print(accounting_is_balanced(100 kz, 100 kz))
+print(ledger_side(-5 kz))
+print(shipping_status(3, 5))
+print(warehouse_utilization_percent(100, 25))
+print(procurement_status(3, 5))
+print(supplier_is_active_status(" ACTIVE "))
+print(customer_balance_status(0 kz))
+print(project_progress_percent(2, 4))
+print(task_priority_label(1))
+print(kpi_percent(3, 4))
+print(report_money_line("total", 99 kz))
+print(pagination_offset(3, 20))
+print(security_is_https("https://nexus.local"))
+print(config_flag_enabled(" YES "))
+print(commerce_cart_total_3(10 kz, 20 kz, 30 kz))
+"#,
+    );
+
+    assert_stdlib_output(
+        &entry,
+        &[
+            "200.00 KZ",
+            "100.00 KZ",
+            "900.00 KZ",
+            "partial",
+            "true",
+            "true",
+            "credit",
+            "partial",
+            "25.00",
+            "partial",
+            "true",
+            "settled",
+            "50.00",
+            "high",
+            "75.00",
+            "total: 99.00 KZ",
+            "40",
+            "true",
+            "true",
+            "60.00 KZ",
+        ],
+    );
+}
+
+fn assert_stdlib_output(entry: &std::path::Path, expected: &[&str]) {
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(entry).expect("load should succeed");
+
+    let mut checker = nexuslang::checker::Checker::new();
+    checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect("check should succeed");
+
+    let mut interp = nexuslang::interpreter::Interpreter::new_captured();
+    interp.run(&program).expect("run should succeed");
+
+    let actual: Vec<&str> = interp.output().iter().map(String::as_str).collect();
+    assert_eq!(actual, expected);
 }

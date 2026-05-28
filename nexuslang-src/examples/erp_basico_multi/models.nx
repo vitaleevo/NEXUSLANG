@@ -1,0 +1,12 @@
+// models.nx — Modelos de negócio (exportados para uso noutros módulos)
+
+export model Employee {
+    name: string
+    salary: money
+    department: string
+}
+
+export model Department {
+    name: string
+    budget: money
+}

@@ -26,6 +26,24 @@ impl JsonStorage {
         self.data_dir.join(".nexus-auth.json")
     }
 
+    pub(crate) fn read_auth_store_json(&self) -> Result<Option<String>, String> {
+        let path = self.auth_file();
+        if !path.exists() {
+            return Ok(None);
+        }
+        fs::read_to_string(path)
+            .map(Some)
+            .map_err(|e| e.to_string())
+    }
+
+    pub(crate) fn write_auth_store_json(&self, source: &str) -> Result<(), String> {
+        let path = self.auth_file();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        fs::write(path, source).map_err(|e| e.to_string())
+    }
+
     fn read_model_json(&self, model: &str) -> Result<String, String> {
         let path = self.model_file(model);
         if !path.exists() {

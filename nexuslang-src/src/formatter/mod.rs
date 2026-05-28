@@ -146,6 +146,21 @@ fn format_decl(decl: &Decl, indent: usize, out: &mut String) {
             write_indent(indent, out);
             out.push('}');
         }
+        Decl::Import { import } => {
+            write_indent(indent, out);
+            out.push_str(&format!("import {}", import.name));
+            if let Some(alias) = &import.alias {
+                out.push_str(&format!(" as {}", alias));
+            }
+            out.push_str(&format!(" from {:?}", import.source));
+        }
+        Decl::Export { decl: inner, .. } => {
+            write_indent(indent, out);
+            out.push_str("export ");
+            let mut inner_str = String::new();
+            format_decl(inner, indent, &mut inner_str);
+            out.push_str(inner_str.trim());
+        }
         Decl::Statement(stmt) => format_stmt(stmt, indent, out),
     }
 }
@@ -220,7 +235,7 @@ fn format_stmt(stmt: &Stmt, indent: usize, out: &mut String) {
     }
 }
 
-fn format_expr(expr: &Expr) -> String {
+pub(crate) fn format_expr(expr: &Expr) -> String {
     match expr {
         Expr::Integer { value, .. } => value.to_string(),
         Expr::Float { value, .. } => trim_float(*value),
@@ -274,7 +289,7 @@ fn format_expr(expr: &Expr) -> String {
     }
 }
 
-fn format_type(ty: &Type) -> String {
+pub(crate) fn format_type(ty: &Type) -> String {
     match ty {
         Type::String => "string".to_string(),
         Type::Int => "int".to_string(),
@@ -299,7 +314,7 @@ fn format_query_param(param: &QueryParam) -> String {
     out
 }
 
-fn format_method(method: &HttpMethod) -> &'static str {
+pub(crate) fn format_method(method: &HttpMethod) -> &'static str {
     match method {
         HttpMethod::Get => "GET",
         HttpMethod::Post => "POST",

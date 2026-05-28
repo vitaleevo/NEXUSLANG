@@ -1,0 +1,20 @@
+// NexusLang Standard Library - Warehouse Utilities
+
+import max from "std/math"
+
+export fn warehouse_capacity_left(capacity: int, used: int) -> int {
+    return max(0, capacity - used)
+}
+
+export fn warehouse_is_full(capacity: int, used: int) -> bool {
+    return used >= capacity
+}
+
+export fn warehouse_utilization_percent(capacity: int, used: int) -> float {
+    if capacity <= 0 { return 0.0 }
+    return used / (capacity * 1.0) * 100.0
+}
+
+export fn warehouse_zone_label(warehouse: string, zone: string) -> string {
+    return warehouse + "/" + zone
+}

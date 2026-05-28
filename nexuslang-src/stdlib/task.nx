@@ -1,0 +1,23 @@
+// NexusLang Standard Library - Task Utilities
+
+import max from "std/math"
+
+export fn task_is_overdue(due_day: int, current_day: int) -> bool {
+    return current_day > due_day
+}
+
+export fn task_priority_label(priority: int) -> string {
+    if priority <= 1 { return "high" }
+    if priority <= 3 { return "medium" }
+    return "low"
+}
+
+export fn task_remaining(done: int, total: int) -> int {
+    return max(0, total - done)
+}
+
+export fn task_status(done: int, total: int) -> string {
+    if total > 0 && done >= total { return "done" }
+    if done <= 0 { return "open" }
+    return "doing"
+}

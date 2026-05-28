@@ -1,0 +1,29 @@
+// NexusLang Standard Library - Inventory Utilities
+
+import max from "std/math"
+
+export fn inventory_can_fulfill(stock: int, requested: int) -> bool {
+    return stock >= requested
+}
+
+export fn inventory_remaining_after_sale(stock: int, requested: int) -> int {
+    return max(0, stock - requested)
+}
+
+export fn inventory_backorder_qty(stock: int, requested: int) -> int {
+    return max(0, requested - stock)
+}
+
+export fn inventory_needs_reorder(stock: int, reorder_point: int) -> bool {
+    return stock <= reorder_point
+}
+
+export fn inventory_reorder_qty(stock: int, target_stock: int) -> int {
+    return max(0, target_stock - stock)
+}
+
+export fn inventory_stock_status(stock: int, reorder_point: int) -> string {
+    if stock <= 0 { return "out_of_stock" }
+    if stock <= reorder_point { return "reorder" }
+    return "ok"
+}

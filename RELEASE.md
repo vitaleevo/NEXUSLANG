@@ -5,6 +5,11 @@ It is intentionally small: the source of truth is still the automated gate.
 
 ## Current readiness
 
+- Local RC target: `0.2.0-rc.1`.
+- Current RC status: public pre-release `v0.2.0-rc.1` published and public
+  install validation passed. Do not promote to stable `0.2.0` until PR review,
+  feedback resolution, merge/pos-merge validation, and an explicit stable
+  release decision are complete.
 - Language/core: 78/100
 - Playground: 84/100
 - OpenAPI/runtime: 66/100
@@ -13,6 +18,7 @@ It is intentionally small: the source of truth is still the automated gate.
   published and post-release install validated
 - Overall project score after the latest completed release phase: 100/100
 - Public GitHub Release v0.1.1: published and post-release install validated
+- Public GitHub pre-release v0.2.0-rc.1: published and public install validated
 - Previous public GitHub Release v0.1.0: published and post-release install
   validated
 
@@ -111,7 +117,7 @@ Validate the already published GitHub Release from a clean temporary directory:
 ./scripts/validate-public-release-install.sh
 ```
 
-This downloads the `v0.1.1` release assets from GitHub, verifies the published
+This downloads the selected release assets from GitHub, verifies the published
 fingerprint, imports the public key into an isolated `GNUPGHOME`, verifies the
 detached signatures, checks the SHA-256 checksum, extracts the package under
 `/tmp`, runs the packaged smoke test, and fetches playground HTML/JS/WASM over
@@ -121,6 +127,12 @@ Validate `v0.1.1` explicitly when checking the published release:
 
 ```bash
 NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh
+```
+
+Validate the `v0.2.0-rc.1` public pre-release explicitly when checking the RC:
+
+```bash
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh
 ```
 
 ## Release 1.0 checklist
@@ -161,10 +173,13 @@ NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh
   `3237F7CC5CE2514FC9671BB93CB6808B55385273`.
 - [x] Strict release dry-run passed with maintained-key signing and remote CI
   observation.
+- [x] `v0.2.0-rc.1` pre-release was published with signed archive, checksum,
+  signatures, public key, and fingerprint.
+- [x] Public GitHub pre-release install validation passes for `v0.2.0-rc.1`.
 
 ### Published release
 
-- [x] `v0.1.1` source tag is the latest published release target.
+- [x] `v0.1.1` source tag is the latest stable published release target.
 - [x] GitHub Release `v0.1.1` is published with signed archive, checksum,
   signatures, public key, and fingerprint.
 - [x] Public GitHub Release install validation passes for `v0.1.1`.

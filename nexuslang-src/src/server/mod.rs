@@ -7,9 +7,9 @@ pub mod sqlite;
 pub mod storage;
 pub mod storage_backend;
 
-pub use http::{serve_file, HttpResponse};
+pub use http::{serve_file, serve_file_with_storage_driver, HttpResponse};
 pub use openapi::generate_openapi;
-pub use storage_backend::{default_data_dir, Storage};
+pub use storage_backend::{default_data_dir, Storage, StorageDriver, NEXUS_DATA_DIR_ENV};
 
 pub fn handle_request_for_test(
     source: &str,
@@ -50,14 +50,18 @@ pub fn handle_request_with_headers_and_body_for_test(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    use std::{collections::HashSet, fs, path::PathBuf};
 
     use crate::ast::*;
+    use crate::auth_ops::AuthStaticOperation;
+    use crate::model_ops::ModelStaticOperation;
     use crate::parse_checked_source;
+    use crate::route_hir::{checked_routes, CheckedRouteExpr, CheckedRouteView};
 
     use super::http::method_name;
     use super::openapi::*;
     use super::storage::*;
+    use super::storage_backend::Storage;
 
     type OpenApiValidation = (&'static str, fn(&JsonValue));
 
@@ -91,6 +95,916 @@ route GET /customers/page ?(status: string?, limit: int = 10, offset: int = 0) {
     return Customer::where_optional_page("status", status, "name", "asc", limit, offset)
 }
 "#;
+
+    const MODEL_OPERATION_MATRIX_SOURCE: &str = r#"
+model Customer {
+    name: string unique
+    status: string = "active" index
+    tenant: string
+    balance: float
+}
+
+route GET /contract/all {
+    return Customer::all()
+}
+
+route GET /contract/page ?(limit: int = 2, offset: int = 1) {
+    return Customer::page("name", "asc", limit, offset)
+}
+
+route POST /contract/create {
+    return Customer::create()
+}
+
+route GET /contract/find/:name {
+    return Customer::find("name", name)
+}
+
+route GET /contract/where ?(status: string) {
+    return Customer::where("status", status)
+}
+
+route GET /contract/where-page ?(status: string, limit: int = 1, offset: int = 1) {
+    return Customer::where_page("status", status, "name", "asc", limit, offset)
+}
+
+route GET /contract/where-not ?(status: string) {
+    return Customer::where_not("status", status)
+}
+
+route GET /contract/where-not-page ?(status: string, limit: int = 1, offset: int = 1) {
+    return Customer::where_not_page("status", status, "name", "asc", limit, offset)
+}
+
+route GET /contract/where-not-in ?(statuses: [string]) {
+    return Customer::where_not_in("status", statuses)
+}
+
+route GET /contract/where-not-in-page ?(statuses: [string], limit: int = 1, offset: int = 0) {
+    return Customer::where_not_in_page("status", statuses, "name", "asc", limit, offset)
+}
+
+route GET /contract/where-not-in-optional ?(statuses: [string]?) {
+    return Customer::where_not_in_optional("status", statuses)
+}
+
+route GET /contract/where-not-in-optional-page ?(statuses: [string]?, limit: int = 1, offset: int = 0) {
+    return Customer::where_not_in_optional_page("status", statuses, "name", "asc", limit, offset)
+}
+
+route GET /contract/where-optional ?(status: string?) {
+    return Customer::where_optional("status", status)
+}
+
+route GET /contract/where-optional-page ?(status: string?, limit: int = 1, offset: int = 0) {
+    return Customer::where_optional_page("status", status, "name", "asc", limit, offset)
+}
+
+route GET /contract/where-in ?(statuses: [string]) {
+    return Customer::where_in("status", statuses)
+}
+
+route GET /contract/where-in-page ?(statuses: [string], limit: int = 2, offset: int = 1) {
+    return Customer::where_in_page("status", statuses, "name", "asc", limit, offset)
+}
+
+route GET /contract/where-in-optional ?(statuses: [string]?) {
+    return Customer::where_in_optional("status", statuses)
+}
+
+route GET /contract/where-in-optional-page ?(statuses: [string]?, limit: int = 2, offset: int = 1) {
+    return Customer::where_in_optional_page("status", statuses, "name", "asc", limit, offset)
+}
+
+route GET /contract/where-compare ?(min: float) {
+    return Customer::where_compare("balance", ">=", min)
+}
+
+route GET /contract/where-compare-page ?(min: float, limit: int = 1, offset: int = 1) {
+    return Customer::where_compare_page("balance", ">=", min, "name", "asc", limit, offset)
+}
+
+route GET /contract/where-text ?(term: string) {
+    return Customer::where_text("name", "contains", term)
+}
+
+route GET /contract/where-text-page ?(term: string, limit: int = 1, offset: int = 1) {
+    return Customer::where_text_page("name", "contains", term, "name", "asc", limit, offset)
+}
+
+route GET /contract/where-between ?(min: float, max: float) {
+    return Customer::where_between("balance", min, max)
+}
+
+route GET /contract/where-between-page ?(min: float, max: float, limit: int = 1, offset: int = 1) {
+    return Customer::where_between_page("balance", min, max, "name", "asc", limit, offset)
+}
+
+route GET /contract/where-all ?(status: string, tenant: string) {
+    return Customer::where_all("status", status, "tenant", tenant)
+}
+
+route GET /contract/where-all-page ?(status: string, tenant: string, limit: int = 1, offset: int = 0) {
+    return Customer::where_all_page("status", status, "tenant", tenant, "name", "asc", limit, offset)
+}
+
+route GET /contract/where-any ?(status: string, tenant: string) {
+    return Customer::where_any("status", status, "tenant", tenant)
+}
+
+route GET /contract/where-any-page ?(status: string, tenant: string, limit: int = 1, offset: int = 1) {
+    return Customer::where_any_page("status", status, "tenant", tenant, "name", "asc", limit, offset)
+}
+
+route PUT /contract/update/:name {
+    return Customer::update("name", name)
+}
+
+route DELETE /contract/delete/:name {
+    return Customer::delete("name", name)
+}
+"#;
+
+    const AUTH_OPERATION_MATRIX_SOURCE: &str = r#"
+model ContractUser {
+    email: string unique
+    name: string
+    role: string = "user" index
+}
+
+auth ContractAuth {
+    model: ContractUser
+    identity: email
+    role: role
+    password_min: 15
+    session_ttl_minutes: 60
+    idle_ttl_minutes: 10
+}
+
+route POST /contract/auth/register {
+    return Auth::register(ContractAuth)
+}
+
+route POST /contract/auth/login {
+    return Auth::login(ContractAuth)
+}
+
+route POST /contract/auth/logout auth(ContractAuth) {
+    return Auth::logout()
+}
+
+route GET /contract/auth/user auth(ContractAuth) {
+    return Auth::user()
+}
+"#;
+
+    const MODEL_OPERATION_MATRIX_RECORDS: &str = r#"[{"name":"Ana","status":"active","tenant":"north","balance":120},{"name":"Bia","status":"active","tenant":"south","balance":80},{"name":"Cris","status":"blocked","tenant":"north","balance":220},{"name":"Dina","status":"prospect","tenant":"west","balance":40}]"#;
+    const MODEL_OPERATION_OPENAPI_FLAGS: [&str; 11] = [
+        "x-nexus-pagination",
+        "x-nexus-total-count",
+        "x-nexus-ordering",
+        "x-nexus-composite-filters",
+        "x-nexus-or-filters",
+        "x-nexus-exclusion-filters",
+        "x-nexus-optional-filters",
+        "x-nexus-in-filters",
+        "x-nexus-comparison-filters",
+        "x-nexus-text-filters",
+        "x-nexus-range-filters",
+    ];
+
+    struct ModelOperationContractCase {
+        operation: ModelStaticOperation,
+        label: &'static str,
+        method: &'static str,
+        route_path: &'static str,
+        openapi_path: &'static str,
+        http_path: &'static str,
+        body: Option<&'static str>,
+        expected_status: u16,
+        expected_body: &'static str,
+        success_status: &'static str,
+        response_component: &'static str,
+        request_body: bool,
+        bad_request: bool,
+        not_found: bool,
+        conflict: bool,
+        openapi_flags: &'static [&'static str],
+    }
+
+    struct AuthOperationContractCase {
+        operation: AuthStaticOperation,
+        label: &'static str,
+        method: &'static str,
+        route_path: &'static str,
+        openapi_path: &'static str,
+        http_path: &'static str,
+        success_status: &'static str,
+        auth_config: Option<&'static str>,
+        request_body: bool,
+        requires_auth: bool,
+        csrf_header: bool,
+        bad_request: bool,
+        rate_limit: bool,
+        forbidden: bool,
+        expected_http_status: u16,
+        expected_body_fragment: &'static str,
+    }
+
+    fn model_operation_contract_cases() -> [ModelOperationContractCase; 30] {
+        [
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::All,
+                label: "all",
+                method: "GET",
+                route_path: "/contract/all",
+                openapi_path: "/contract/all",
+                http_path: "/contract/all",
+                body: None,
+                expected_status: 200,
+                expected_body: MODEL_OPERATION_MATRIX_RECORDS,
+                success_status: "200",
+                response_component: "NexusList_Customer",
+                request_body: false,
+                bad_request: false,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &[],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::Page,
+                label: "page",
+                method: "GET",
+                route_path: "/contract/page",
+                openapi_path: "/contract/page",
+                http_path: "/contract/page?limit=2&offset=1",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"{"total":4,"items":[{"name":"Bia","status":"active","tenant":"south","balance":80},{"name":"Cris","status":"blocked","tenant":"north","balance":220}]}"#,
+                success_status: "200",
+                response_component: "NexusPage_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &[
+                    "x-nexus-pagination",
+                    "x-nexus-total-count",
+                    "x-nexus-ordering",
+                ],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::Create,
+                label: "create",
+                method: "POST",
+                route_path: "/contract/create",
+                openapi_path: "/contract/create",
+                http_path: "/contract/create",
+                body: Some(r#"{"name":"Eva","tenant":"north","balance":160}"#),
+                expected_status: 201,
+                expected_body: r#"{"name":"Eva","status":"active","tenant":"north","balance":160}"#,
+                success_status: "201",
+                response_component: "Customer",
+                request_body: true,
+                bad_request: true,
+                not_found: false,
+                conflict: true,
+                openapi_flags: &[],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::Find,
+                label: "find",
+                method: "GET",
+                route_path: "/contract/find/:name",
+                openapi_path: "/contract/find/{name}",
+                http_path: "/contract/find/Ana",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"{"name":"Ana","status":"active","tenant":"north","balance":120}"#,
+                success_status: "200",
+                response_component: "Customer",
+                request_body: false,
+                bad_request: false,
+                not_found: true,
+                conflict: false,
+                openapi_flags: &[],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::Where,
+                label: "where",
+                method: "GET",
+                route_path: "/contract/where",
+                openapi_path: "/contract/where",
+                http_path: "/contract/where?status=active",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"[{"name":"Ana","status":"active","tenant":"north","balance":120},{"name":"Bia","status":"active","tenant":"south","balance":80}]"#,
+                success_status: "200",
+                response_component: "NexusList_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &[],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WherePage,
+                label: "where_page",
+                method: "GET",
+                route_path: "/contract/where-page",
+                openapi_path: "/contract/where-page",
+                http_path: "/contract/where-page?status=active&limit=1&offset=1",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"{"total":2,"items":[{"name":"Bia","status":"active","tenant":"south","balance":80}]}"#,
+                success_status: "200",
+                response_component: "NexusPage_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &[
+                    "x-nexus-pagination",
+                    "x-nexus-total-count",
+                    "x-nexus-ordering",
+                ],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereNot,
+                label: "where_not",
+                method: "GET",
+                route_path: "/contract/where-not",
+                openapi_path: "/contract/where-not",
+                http_path: "/contract/where-not?status=active",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"[{"name":"Cris","status":"blocked","tenant":"north","balance":220},{"name":"Dina","status":"prospect","tenant":"west","balance":40}]"#,
+                success_status: "200",
+                response_component: "NexusList_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &["x-nexus-exclusion-filters"],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereNotPage,
+                label: "where_not_page",
+                method: "GET",
+                route_path: "/contract/where-not-page",
+                openapi_path: "/contract/where-not-page",
+                http_path: "/contract/where-not-page?status=active&limit=1&offset=1",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"{"total":2,"items":[{"name":"Dina","status":"prospect","tenant":"west","balance":40}]}"#,
+                success_status: "200",
+                response_component: "NexusPage_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &[
+                    "x-nexus-pagination",
+                    "x-nexus-total-count",
+                    "x-nexus-ordering",
+                    "x-nexus-exclusion-filters",
+                ],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereNotIn,
+                label: "where_not_in",
+                method: "GET",
+                route_path: "/contract/where-not-in",
+                openapi_path: "/contract/where-not-in",
+                http_path: "/contract/where-not-in?statuses=active,blocked",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"[{"name":"Dina","status":"prospect","tenant":"west","balance":40}]"#,
+                success_status: "200",
+                response_component: "NexusList_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &["x-nexus-exclusion-filters", "x-nexus-in-filters"],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereNotInPage,
+                label: "where_not_in_page",
+                method: "GET",
+                route_path: "/contract/where-not-in-page",
+                openapi_path: "/contract/where-not-in-page",
+                http_path: "/contract/where-not-in-page?statuses=active,blocked&limit=1&offset=0",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"{"total":1,"items":[{"name":"Dina","status":"prospect","tenant":"west","balance":40}]}"#,
+                success_status: "200",
+                response_component: "NexusPage_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &[
+                    "x-nexus-pagination",
+                    "x-nexus-total-count",
+                    "x-nexus-ordering",
+                    "x-nexus-exclusion-filters",
+                    "x-nexus-in-filters",
+                ],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereNotInOptional,
+                label: "where_not_in_optional",
+                method: "GET",
+                route_path: "/contract/where-not-in-optional",
+                openapi_path: "/contract/where-not-in-optional",
+                http_path: "/contract/where-not-in-optional?statuses=active,blocked",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"[{"name":"Dina","status":"prospect","tenant":"west","balance":40}]"#,
+                success_status: "200",
+                response_component: "NexusList_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &[
+                    "x-nexus-exclusion-filters",
+                    "x-nexus-optional-filters",
+                    "x-nexus-in-filters",
+                ],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereNotInOptionalPage,
+                label: "where_not_in_optional_page",
+                method: "GET",
+                route_path: "/contract/where-not-in-optional-page",
+                openapi_path: "/contract/where-not-in-optional-page",
+                http_path:
+                    "/contract/where-not-in-optional-page?statuses=active,blocked&limit=1&offset=0",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"{"total":1,"items":[{"name":"Dina","status":"prospect","tenant":"west","balance":40}]}"#,
+                success_status: "200",
+                response_component: "NexusPage_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &[
+                    "x-nexus-pagination",
+                    "x-nexus-total-count",
+                    "x-nexus-ordering",
+                    "x-nexus-exclusion-filters",
+                    "x-nexus-optional-filters",
+                    "x-nexus-in-filters",
+                ],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereOptional,
+                label: "where_optional",
+                method: "GET",
+                route_path: "/contract/where-optional",
+                openapi_path: "/contract/where-optional",
+                http_path: "/contract/where-optional?status=active",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"[{"name":"Ana","status":"active","tenant":"north","balance":120},{"name":"Bia","status":"active","tenant":"south","balance":80}]"#,
+                success_status: "200",
+                response_component: "NexusList_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &["x-nexus-optional-filters"],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereOptionalPage,
+                label: "where_optional_page",
+                method: "GET",
+                route_path: "/contract/where-optional-page",
+                openapi_path: "/contract/where-optional-page",
+                http_path: "/contract/where-optional-page?status=active&limit=1&offset=0",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"{"total":2,"items":[{"name":"Ana","status":"active","tenant":"north","balance":120}]}"#,
+                success_status: "200",
+                response_component: "NexusPage_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &[
+                    "x-nexus-pagination",
+                    "x-nexus-total-count",
+                    "x-nexus-ordering",
+                    "x-nexus-optional-filters",
+                ],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereIn,
+                label: "where_in",
+                method: "GET",
+                route_path: "/contract/where-in",
+                openapi_path: "/contract/where-in",
+                http_path: "/contract/where-in?statuses=active,blocked",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"[{"name":"Ana","status":"active","tenant":"north","balance":120},{"name":"Bia","status":"active","tenant":"south","balance":80},{"name":"Cris","status":"blocked","tenant":"north","balance":220}]"#,
+                success_status: "200",
+                response_component: "NexusList_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &["x-nexus-in-filters"],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereInPage,
+                label: "where_in_page",
+                method: "GET",
+                route_path: "/contract/where-in-page",
+                openapi_path: "/contract/where-in-page",
+                http_path: "/contract/where-in-page?statuses=active,blocked&limit=2&offset=1",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"{"total":3,"items":[{"name":"Bia","status":"active","tenant":"south","balance":80},{"name":"Cris","status":"blocked","tenant":"north","balance":220}]}"#,
+                success_status: "200",
+                response_component: "NexusPage_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &[
+                    "x-nexus-pagination",
+                    "x-nexus-total-count",
+                    "x-nexus-ordering",
+                    "x-nexus-in-filters",
+                ],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereInOptional,
+                label: "where_in_optional",
+                method: "GET",
+                route_path: "/contract/where-in-optional",
+                openapi_path: "/contract/where-in-optional",
+                http_path: "/contract/where-in-optional?statuses=active,blocked",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"[{"name":"Ana","status":"active","tenant":"north","balance":120},{"name":"Bia","status":"active","tenant":"south","balance":80},{"name":"Cris","status":"blocked","tenant":"north","balance":220}]"#,
+                success_status: "200",
+                response_component: "NexusList_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &["x-nexus-optional-filters", "x-nexus-in-filters"],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereInOptionalPage,
+                label: "where_in_optional_page",
+                method: "GET",
+                route_path: "/contract/where-in-optional-page",
+                openapi_path: "/contract/where-in-optional-page",
+                http_path:
+                    "/contract/where-in-optional-page?statuses=active,blocked&limit=2&offset=1",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"{"total":3,"items":[{"name":"Bia","status":"active","tenant":"south","balance":80},{"name":"Cris","status":"blocked","tenant":"north","balance":220}]}"#,
+                success_status: "200",
+                response_component: "NexusPage_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &[
+                    "x-nexus-pagination",
+                    "x-nexus-total-count",
+                    "x-nexus-ordering",
+                    "x-nexus-optional-filters",
+                    "x-nexus-in-filters",
+                ],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereCompare,
+                label: "where_compare",
+                method: "GET",
+                route_path: "/contract/where-compare",
+                openapi_path: "/contract/where-compare",
+                http_path: "/contract/where-compare?min=100",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"[{"name":"Ana","status":"active","tenant":"north","balance":120},{"name":"Cris","status":"blocked","tenant":"north","balance":220}]"#,
+                success_status: "200",
+                response_component: "NexusList_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &["x-nexus-comparison-filters"],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereComparePage,
+                label: "where_compare_page",
+                method: "GET",
+                route_path: "/contract/where-compare-page",
+                openapi_path: "/contract/where-compare-page",
+                http_path: "/contract/where-compare-page?min=50&limit=1&offset=1",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"{"total":3,"items":[{"name":"Bia","status":"active","tenant":"south","balance":80}]}"#,
+                success_status: "200",
+                response_component: "NexusPage_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &[
+                    "x-nexus-pagination",
+                    "x-nexus-total-count",
+                    "x-nexus-ordering",
+                    "x-nexus-comparison-filters",
+                ],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereText,
+                label: "where_text",
+                method: "GET",
+                route_path: "/contract/where-text",
+                openapi_path: "/contract/where-text",
+                http_path: "/contract/where-text?term=i",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"[{"name":"Bia","status":"active","tenant":"south","balance":80},{"name":"Cris","status":"blocked","tenant":"north","balance":220},{"name":"Dina","status":"prospect","tenant":"west","balance":40}]"#,
+                success_status: "200",
+                response_component: "NexusList_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &["x-nexus-text-filters"],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereTextPage,
+                label: "where_text_page",
+                method: "GET",
+                route_path: "/contract/where-text-page",
+                openapi_path: "/contract/where-text-page",
+                http_path: "/contract/where-text-page?term=i&limit=1&offset=1",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"{"total":3,"items":[{"name":"Cris","status":"blocked","tenant":"north","balance":220}]}"#,
+                success_status: "200",
+                response_component: "NexusPage_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &[
+                    "x-nexus-pagination",
+                    "x-nexus-total-count",
+                    "x-nexus-ordering",
+                    "x-nexus-text-filters",
+                ],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereBetween,
+                label: "where_between",
+                method: "GET",
+                route_path: "/contract/where-between",
+                openapi_path: "/contract/where-between",
+                http_path: "/contract/where-between?min=50&max=150",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"[{"name":"Ana","status":"active","tenant":"north","balance":120},{"name":"Bia","status":"active","tenant":"south","balance":80}]"#,
+                success_status: "200",
+                response_component: "NexusList_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &["x-nexus-range-filters"],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereBetweenPage,
+                label: "where_between_page",
+                method: "GET",
+                route_path: "/contract/where-between-page",
+                openapi_path: "/contract/where-between-page",
+                http_path: "/contract/where-between-page?min=50&max=150&limit=1&offset=1",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"{"total":2,"items":[{"name":"Bia","status":"active","tenant":"south","balance":80}]}"#,
+                success_status: "200",
+                response_component: "NexusPage_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &[
+                    "x-nexus-pagination",
+                    "x-nexus-total-count",
+                    "x-nexus-ordering",
+                    "x-nexus-range-filters",
+                ],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereAll,
+                label: "where_all",
+                method: "GET",
+                route_path: "/contract/where-all",
+                openapi_path: "/contract/where-all",
+                http_path: "/contract/where-all?status=active&tenant=north",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"[{"name":"Ana","status":"active","tenant":"north","balance":120}]"#,
+                success_status: "200",
+                response_component: "NexusList_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &["x-nexus-composite-filters"],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereAllPage,
+                label: "where_all_page",
+                method: "GET",
+                route_path: "/contract/where-all-page",
+                openapi_path: "/contract/where-all-page",
+                http_path: "/contract/where-all-page?status=active&tenant=south&limit=1&offset=0",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"{"total":1,"items":[{"name":"Bia","status":"active","tenant":"south","balance":80}]}"#,
+                success_status: "200",
+                response_component: "NexusPage_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &[
+                    "x-nexus-pagination",
+                    "x-nexus-total-count",
+                    "x-nexus-ordering",
+                    "x-nexus-composite-filters",
+                ],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereAny,
+                label: "where_any",
+                method: "GET",
+                route_path: "/contract/where-any",
+                openapi_path: "/contract/where-any",
+                http_path: "/contract/where-any?status=blocked&tenant=south",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"[{"name":"Bia","status":"active","tenant":"south","balance":80},{"name":"Cris","status":"blocked","tenant":"north","balance":220}]"#,
+                success_status: "200",
+                response_component: "NexusList_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &["x-nexus-or-filters"],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::WhereAnyPage,
+                label: "where_any_page",
+                method: "GET",
+                route_path: "/contract/where-any-page",
+                openapi_path: "/contract/where-any-page",
+                http_path: "/contract/where-any-page?status=active&tenant=north&limit=1&offset=1",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"{"total":3,"items":[{"name":"Bia","status":"active","tenant":"south","balance":80}]}"#,
+                success_status: "200",
+                response_component: "NexusPage_Customer",
+                request_body: false,
+                bad_request: true,
+                not_found: false,
+                conflict: false,
+                openapi_flags: &[
+                    "x-nexus-pagination",
+                    "x-nexus-total-count",
+                    "x-nexus-ordering",
+                    "x-nexus-or-filters",
+                ],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::Update,
+                label: "update",
+                method: "PUT",
+                route_path: "/contract/update/:name",
+                openapi_path: "/contract/update/{name}",
+                http_path: "/contract/update/Bia",
+                body: Some(r#"{"name":"Bia","status":"active","tenant":"south","balance":95}"#),
+                expected_status: 200,
+                expected_body: r#"{"name":"Bia","status":"active","tenant":"south","balance":95}"#,
+                success_status: "200",
+                response_component: "Customer",
+                request_body: true,
+                bad_request: true,
+                not_found: true,
+                conflict: true,
+                openapi_flags: &[],
+            },
+            ModelOperationContractCase {
+                operation: ModelStaticOperation::Delete,
+                label: "delete",
+                method: "DELETE",
+                route_path: "/contract/delete/:name",
+                openapi_path: "/contract/delete/{name}",
+                http_path: "/contract/delete/Ana",
+                body: None,
+                expected_status: 200,
+                expected_body: r#"{"name":"Ana","status":"active","tenant":"north","balance":120}"#,
+                success_status: "200",
+                response_component: "Customer",
+                request_body: false,
+                bad_request: false,
+                not_found: true,
+                conflict: false,
+                openapi_flags: &[],
+            },
+        ]
+    }
+
+    fn auth_operation_contract_cases() -> [AuthOperationContractCase; 4] {
+        [
+            AuthOperationContractCase {
+                operation: AuthStaticOperation::Register,
+                label: "register",
+                method: "POST",
+                route_path: "/contract/auth/register",
+                openapi_path: "/contract/auth/register",
+                http_path: "/contract/auth/register",
+                success_status: "201",
+                auth_config: Some("ContractAuth"),
+                request_body: true,
+                requires_auth: false,
+                csrf_header: false,
+                bad_request: true,
+                rate_limit: true,
+                forbidden: false,
+                expected_http_status: 201,
+                expected_body_fragment: r#""email":"matrix-register@example.com""#,
+            },
+            AuthOperationContractCase {
+                operation: AuthStaticOperation::Login,
+                label: "login",
+                method: "POST",
+                route_path: "/contract/auth/login",
+                openapi_path: "/contract/auth/login",
+                http_path: "/contract/auth/login",
+                success_status: "200",
+                auth_config: Some("ContractAuth"),
+                request_body: true,
+                requires_auth: false,
+                csrf_header: false,
+                bad_request: true,
+                rate_limit: true,
+                forbidden: false,
+                expected_http_status: 200,
+                expected_body_fragment: r#""email":"matrix-login@example.com""#,
+            },
+            AuthOperationContractCase {
+                operation: AuthStaticOperation::Logout,
+                label: "logout",
+                method: "POST",
+                route_path: "/contract/auth/logout",
+                openapi_path: "/contract/auth/logout",
+                http_path: "/contract/auth/logout",
+                success_status: "200",
+                auth_config: None,
+                request_body: false,
+                requires_auth: true,
+                csrf_header: true,
+                bad_request: false,
+                rate_limit: false,
+                forbidden: true,
+                expected_http_status: 200,
+                expected_body_fragment: "true",
+            },
+            AuthOperationContractCase {
+                operation: AuthStaticOperation::User,
+                label: "user",
+                method: "GET",
+                route_path: "/contract/auth/user",
+                openapi_path: "/contract/auth/user",
+                http_path: "/contract/auth/user",
+                success_status: "200",
+                auth_config: None,
+                request_body: false,
+                requires_auth: true,
+                csrf_header: false,
+                bad_request: false,
+                rate_limit: false,
+                forbidden: false,
+                expected_http_status: 200,
+                expected_body_fragment: r#""email":"matrix-user@example.com""#,
+            },
+        ]
+    }
 
     fn representative_openapi() -> String {
         let program = parse_checked_source(OPENAPI_QA_SOURCE).unwrap();
@@ -355,7 +1269,7 @@ route GET /customers/page ?(status: string?, limit: int = 10, offset: int = 0) {
 
     fn openapi_operation_for_route<'a>(
         document: &'a JsonValue,
-        route: &RouteView<'_>,
+        route: &CheckedRouteView<'_>,
     ) -> &'a JsonValue {
         let paths = expect_object_field(document, "paths");
         let openapi_path = route.path.replace(':', "{").replace_segments_for_openapi();
@@ -368,11 +1282,12 @@ route GET /customers/page ?(status: string?, limit: int = 10, offset: int = 0) {
 
     fn assert_operation_request_body_matches_route(
         document: &JsonValue,
+        program: &Program,
         operation: &JsonValue,
-        route: &RouteView<'_>,
+        route: &CheckedRouteView<'_>,
         context: &str,
     ) {
-        let Some(model) = route_request_body_model(route) else {
+        let Some(component_name) = route_request_body_component_name(program, route) else {
             assert_json_field_absent(operation, "requestBody", context);
             return;
         };
@@ -380,13 +1295,10 @@ route GET /customers/page ?(status: string?, limit: int = 10, offset: int = 0) {
         let request_body = expect_json_field(operation, "requestBody");
         let request_body_context = format!("{}.requestBody", context);
         let actual_ref = expect_ref_value(request_body, &request_body_context);
-        let expected_ref = format!(
-            "#/components/requestBodies/{}",
-            openapi_request_body_component_name(&model)
-        );
+        let expected_ref = format!("#/components/requestBodies/{}", component_name);
         assert_eq!(
             actual_ref, expected_ref,
-            "{} deveria apontar para requestBody do model real",
+            "{} deveria apontar para requestBody real da route",
             request_body_context
         );
 
@@ -397,16 +1309,20 @@ route GET /customers/page ?(status: string?, limit: int = 10, offset: int = 0) {
             request_body_context
         );
         let schema = openapi_json_content_schema(component, &request_body_context);
-        let expected_schema = format!(
-            r##"{{"$ref":"#/components/schemas/{}"}}"##,
-            escape_json(&model)
-        );
-        assert_json_matches_source(schema, &expected_schema, &request_body_context);
+        if let Some(model) = route_request_body_model(route) {
+            let expected_schema = format!(
+                r##"{{"$ref":"#/components/schemas/{}"}}"##,
+                escape_json(&model)
+            );
+            assert_json_matches_source(schema, &expected_schema, &request_body_context);
+        } else {
+            json_object_fields(schema, &request_body_context);
+        }
     }
 
     fn expected_route_response_status(
         program: &Program,
-        route: &RouteView<'_>,
+        route: &CheckedRouteView<'_>,
         status: &str,
     ) -> bool {
         match status {
@@ -440,7 +1356,7 @@ route GET /customers/page ?(status: string?, limit: int = 10, offset: int = 0) {
         document: &JsonValue,
         program: &Program,
         operation: &JsonValue,
-        route: &RouteView<'_>,
+        route: &CheckedRouteView<'_>,
         context: &str,
     ) {
         let responses = expect_object_field(operation, "responses");
@@ -683,12 +1599,14 @@ route GET /customers/page ?(status: string?, limit: int = 10, offset: int = 0) {
     ) {
         let mut route_count = 0;
 
-        for route in routes(program) {
+        for route in checked_routes(program) {
             route_count += 1;
             let operation = openapi_operation_for_route(document, &route);
             let context = format!("operation {} {}", method_name(route.method), route.path);
 
-            assert_operation_request_body_matches_route(document, operation, &route, &context);
+            assert_operation_request_body_matches_route(
+                document, program, operation, &route, &context,
+            );
             assert_operation_responses_match_route(document, program, operation, &route, &context);
         }
 
@@ -790,6 +1708,549 @@ route GET /customers/page ?(status: string?, limit: int = 10, offset: int = 0) {
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(check))
             .err()
             .map(|payload| panic_payload_message(payload.as_ref()))
+    }
+
+    fn assert_model_operation_matrix_covers_all_operations(cases: &[ModelOperationContractCase]) {
+        assert_eq!(
+            cases.len(),
+            ModelStaticOperation::ALL.len(),
+            "matriz de contrato deve ter um caso por ModelStaticOperation"
+        );
+
+        let mut covered = Vec::new();
+        for case in cases {
+            assert!(
+                !covered.contains(&case.operation),
+                "operacao {:?} duplicada na matriz",
+                case.operation
+            );
+            covered.push(case.operation);
+        }
+
+        for operation in ModelStaticOperation::ALL {
+            assert!(
+                covered.contains(&operation),
+                "operacao {:?} ausente da matriz de contrato",
+                operation
+            );
+        }
+    }
+
+    fn assert_auth_operation_matrix_covers_all_operations(cases: &[AuthOperationContractCase]) {
+        assert_eq!(
+            cases.len(),
+            AuthStaticOperation::ALL.len(),
+            "matriz de contrato deve ter um caso por AuthStaticOperation"
+        );
+
+        let mut covered = Vec::new();
+        for case in cases {
+            assert!(
+                !covered.contains(&case.operation),
+                "operacao {:?} duplicada na matriz de Auth",
+                case.operation
+            );
+            covered.push(case.operation);
+        }
+
+        for operation in AuthStaticOperation::ALL {
+            assert!(
+                covered.contains(&operation),
+                "operacao {:?} ausente da matriz de contrato de Auth",
+                operation
+            );
+        }
+    }
+
+    fn model_operation_contract_temp_dir(name: &str) -> PathBuf {
+        let mut dir = std::env::temp_dir();
+        dir.push(format!(
+            "nexuslang_model_contract_matrix_{}_{}",
+            name,
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        dir
+    }
+
+    fn model_operation_matrix_storage(label: &str) -> Storage {
+        let data_dir = model_operation_contract_temp_dir(label);
+        fs::create_dir_all(&data_dir).unwrap();
+        fs::write(
+            data_dir.join("customer.json"),
+            MODEL_OPERATION_MATRIX_RECORDS,
+        )
+        .unwrap();
+        Storage::new_json(&data_dir)
+    }
+
+    fn auth_operation_contract_temp_dir(name: &str) -> PathBuf {
+        let mut dir = std::env::temp_dir();
+        dir.push(format!(
+            "nexuslang_auth_contract_matrix_{}_{}",
+            name,
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        dir
+    }
+
+    fn auth_operation_matrix_storage(label: &str) -> Storage {
+        let data_dir = auth_operation_contract_temp_dir(label);
+        fs::create_dir_all(&data_dir).unwrap();
+        Storage::new_json(&data_dir)
+    }
+
+    fn assert_model_operation_route_matches_case(
+        program: &Program,
+        case: &ModelOperationContractCase,
+    ) {
+        let route = checked_routes(program)
+            .into_iter()
+            .find(|route| method_name(route.method) == case.method && route.path == case.route_path)
+            .unwrap_or_else(|| panic!("route {} {} ausente", case.method, case.route_path));
+
+        match route.return_expr {
+            Some(CheckedRouteExpr::ModelOperation(operation)) => {
+                assert_eq!(
+                    operation.model, "Customer",
+                    "model inesperado em {}",
+                    case.label
+                );
+                assert_eq!(
+                    operation.operation, case.operation,
+                    "operacao de route inesperada em {}",
+                    case.label
+                );
+            }
+            Some(other) => panic!(
+                "route {} deveria retornar operacao de model, encontrado {:?}",
+                case.label, other
+            ),
+            None => panic!("route {} deveria ter return", case.label),
+        }
+    }
+
+    fn assert_auth_operation_route_matches_case(
+        program: &Program,
+        case: &AuthOperationContractCase,
+    ) {
+        let route = checked_routes(program)
+            .into_iter()
+            .find(|route| method_name(route.method) == case.method && route.path == case.route_path)
+            .unwrap_or_else(|| panic!("route {} {} ausente", case.method, case.route_path));
+
+        match route.return_expr {
+            Some(CheckedRouteExpr::AuthOperation(operation)) => {
+                assert_eq!(
+                    operation.operation, case.operation,
+                    "operacao de Auth inesperada em {}",
+                    case.label
+                );
+                let checked_args = operation
+                    .checked_args
+                    .unwrap_or_else(|| panic!("Auth args nao normalizados em {}", case.label));
+                assert_eq!(
+                    checked_args.auth_config_name(),
+                    case.auth_config,
+                    "auth config normalizado inesperado em {}",
+                    case.label
+                );
+            }
+            Some(other) => panic!(
+                "route {} deveria retornar operacao de Auth, encontrado {:?}",
+                case.label, other
+            ),
+            None => panic!("route {} deveria ter return", case.label),
+        }
+    }
+
+    fn openapi_document_from_http(program: &Program) -> JsonValue {
+        let storage = model_operation_matrix_storage("openapi");
+        let response = super::router::handle_request(program, &storage, "GET", "/openapi.json", "");
+
+        assert_eq!(response.status, 200);
+        parse_openapi_document(&response.body)
+    }
+
+    fn auth_openapi_document_from_http(program: &Program) -> JsonValue {
+        let storage = auth_operation_matrix_storage("openapi");
+        let response = super::router::handle_request(program, &storage, "GET", "/openapi.json", "");
+
+        assert_eq!(response.status, 200);
+        parse_openapi_document(&response.body)
+    }
+
+    fn openapi_operation_for_case<'a>(
+        document: &'a JsonValue,
+        case: &ModelOperationContractCase,
+    ) -> &'a JsonValue {
+        let paths = expect_object_field(document, "paths");
+        let path_item = json_object_field(paths, case.openapi_path)
+            .unwrap_or_else(|| panic!("OpenAPI path '{}' ausente", case.openapi_path));
+        let method = case.method.to_lowercase();
+        json_object_field(path_item, &method).unwrap_or_else(|| {
+            panic!(
+                "OpenAPI operation '{} {}' ausente",
+                method, case.openapi_path
+            )
+        })
+    }
+
+    fn openapi_operation_for_auth_case<'a>(
+        document: &'a JsonValue,
+        case: &AuthOperationContractCase,
+    ) -> &'a JsonValue {
+        let paths = expect_object_field(document, "paths");
+        let path_item = json_object_field(paths, case.openapi_path)
+            .unwrap_or_else(|| panic!("OpenAPI path '{}' ausente", case.openapi_path));
+        let method = case.method.to_lowercase();
+        json_object_field(path_item, &method).unwrap_or_else(|| {
+            panic!(
+                "OpenAPI operation '{} {}' ausente",
+                method, case.openapi_path
+            )
+        })
+    }
+
+    fn assert_model_operation_openapi_case(
+        document: &JsonValue,
+        case: &ModelOperationContractCase,
+    ) {
+        let operation = openapi_operation_for_case(document, case);
+        let context = format!("{} {}", case.method, case.route_path);
+
+        let request_body = json_object_field(operation, "requestBody");
+        assert_eq!(
+            request_body.is_some(),
+            case.request_body,
+            "{} requestBody inesperado",
+            context
+        );
+        if let Some(request_body) = request_body {
+            assert_eq!(
+                expect_ref_value(request_body, &format!("{}.requestBody", context)),
+                "#/components/requestBodies/NexusRequestBody_Customer"
+            );
+        }
+
+        for flag in MODEL_OPERATION_OPENAPI_FLAGS {
+            let actual = json_object_field(operation, flag).is_some();
+            let expected = case.openapi_flags.contains(&flag);
+            assert_eq!(
+                actual, expected,
+                "{} flag OpenAPI '{}' inesperada",
+                context, flag
+            );
+            if actual {
+                assert!(expect_bool_field_value(operation, flag));
+            }
+        }
+
+        let responses = expect_object_field(operation, "responses");
+        let success = expect_json_field(responses, case.success_status);
+        let expected_success_ref = format!(
+            "#/components/responses/NexusResponse{}_{}",
+            case.success_status, case.response_component
+        );
+        assert_eq!(
+            expect_ref_value(success, &format!("{} response", context)),
+            expected_success_ref
+        );
+
+        for (status, expected) in [
+            ("400", case.bad_request),
+            ("404", case.not_found),
+            ("409", case.conflict),
+        ] {
+            assert_eq!(
+                json_object_field(responses, status).is_some(),
+                expected,
+                "{} response {} inesperado",
+                context,
+                status
+            );
+        }
+    }
+
+    fn assert_auth_operation_openapi_case(document: &JsonValue, case: &AuthOperationContractCase) {
+        let operation = openapi_operation_for_auth_case(document, case);
+        let context = format!("{} {}", case.method, case.route_path);
+
+        let request_body = json_object_field(operation, "requestBody");
+        assert_eq!(
+            request_body.is_some(),
+            case.request_body,
+            "{} requestBody inesperado",
+            context
+        );
+        if let Some(request_body) = request_body {
+            let expected_ref = format!(
+                "#/components/requestBodies/{}",
+                openapi_auth_request_body_component_name(case.operation, "ContractAuth")
+            );
+            assert_eq!(
+                expect_ref_value(request_body, &format!("{}.requestBody", context)),
+                expected_ref
+            );
+            assert_auth_request_body_component_schema(document, request_body, case, &context);
+        }
+        assert_eq!(
+            json_object_field(operation, "security").is_some(),
+            case.requires_auth,
+            "{} security inesperado",
+            context
+        );
+        assert_eq!(
+            operation_has_csrf_header_parameter(operation),
+            case.csrf_header,
+            "{} parametro CSRF inesperado",
+            context
+        );
+
+        let responses = expect_object_field(operation, "responses");
+        expect_json_field(responses, case.success_status);
+        for (status, expected) in [
+            ("400", case.bad_request),
+            ("401", case.requires_auth),
+            ("403", case.forbidden),
+            ("429", case.rate_limit),
+        ] {
+            assert_eq!(
+                json_object_field(responses, status).is_some(),
+                expected,
+                "{} response {} inesperado",
+                context,
+                status
+            );
+        }
+    }
+
+    fn operation_has_csrf_header_parameter(operation: &JsonValue) -> bool {
+        expect_array_field(operation, "parameters")
+            .iter()
+            .any(|param| {
+                matches!(
+                    json_object_field(param, "name"),
+                    Some(JsonValue::String(name)) if name == "X-Nexus-CSRF-Token"
+                )
+            })
+    }
+
+    fn assert_auth_request_body_component_schema(
+        document: &JsonValue,
+        request_body: &JsonValue,
+        case: &AuthOperationContractCase,
+        context: &str,
+    ) {
+        let request_body_ref = expect_ref_value(request_body, &format!("{}.requestBody", context));
+        let component = component_ref_target(document, request_body_ref);
+        assert!(expect_bool_field_value(component, "required"));
+        let schema = openapi_json_content_schema(component, &format!("{}.requestBody", context));
+        expect_string_field(schema, "type", "object");
+        let properties = expect_object_field(schema, "properties");
+        expect_object_field(properties, "password");
+
+        match case.operation {
+            AuthStaticOperation::Register => {
+                expect_object_field(properties, "email");
+                expect_object_field(properties, "name");
+                expect_object_field(properties, "role");
+                let password = expect_object_field(properties, "password");
+                assert_eq!(expect_number_field_value(password, "minLength"), 15.0);
+                assert_string_array_field(schema, "required", &["email", "name", "password"]);
+            }
+            AuthStaticOperation::Login => {
+                expect_object_field(properties, "email");
+                assert_json_field_absent(properties, "name", context);
+                assert_json_field_absent(properties, "role", context);
+                assert_string_array_field(schema, "required", &["email", "password"]);
+            }
+            AuthStaticOperation::Logout | AuthStaticOperation::User => {}
+        }
+    }
+
+    fn assert_model_operation_http_case(program: &Program, case: &ModelOperationContractCase) {
+        let storage = model_operation_matrix_storage(case.label);
+        let response = super::router::handle_request(
+            program,
+            &storage,
+            case.method,
+            case.http_path,
+            case.body.unwrap_or(""),
+        );
+
+        assert_eq!(
+            response.status, case.expected_status,
+            "status HTTP inesperado em {}",
+            case.label
+        );
+        assert_eq!(
+            response.body, case.expected_body,
+            "body HTTP inesperado em {}",
+            case.label
+        );
+    }
+
+    fn assert_auth_operation_http_case(program: &Program, case: &AuthOperationContractCase) {
+        let storage = auth_operation_matrix_storage(case.label);
+        let response = match case.operation {
+            AuthStaticOperation::Register => super::router::handle_request(
+                program,
+                &storage,
+                case.method,
+                case.http_path,
+                r#"{"email":"matrix-register@example.com","name":"Matrix Register","role":"admin","password":"strong-password-123"}"#,
+            ),
+            AuthStaticOperation::Login => {
+                register_auth_matrix_user(
+                    program,
+                    &storage,
+                    "matrix-login@example.com",
+                    "Matrix Login",
+                    "user",
+                );
+                super::router::handle_request(
+                    program,
+                    &storage,
+                    case.method,
+                    case.http_path,
+                    r#"{"email":"matrix-login@example.com","password":"strong-password-123"}"#,
+                )
+            }
+            AuthStaticOperation::Logout => {
+                let token = register_auth_matrix_user(
+                    program,
+                    &storage,
+                    "matrix-logout@example.com",
+                    "Matrix Logout",
+                    "admin",
+                );
+                let headers = bearer_headers(&token);
+                let response = super::router::handle_request_with_headers(
+                    program,
+                    &storage,
+                    case.method,
+                    case.http_path,
+                    &headers,
+                    "",
+                );
+                let after_logout = super::router::handle_request_with_headers(
+                    program,
+                    &storage,
+                    "GET",
+                    "/contract/auth/user",
+                    &headers,
+                    "",
+                );
+                assert_eq!(after_logout.status, 401, "logout deveria revogar token");
+                response
+            }
+            AuthStaticOperation::User => {
+                let token = register_auth_matrix_user(
+                    program,
+                    &storage,
+                    "matrix-user@example.com",
+                    "Matrix User",
+                    "admin",
+                );
+                let headers = bearer_headers(&token);
+                super::router::handle_request_with_headers(
+                    program,
+                    &storage,
+                    case.method,
+                    case.http_path,
+                    &headers,
+                    "",
+                )
+            }
+        };
+
+        assert_eq!(
+            response.status, case.expected_http_status,
+            "status HTTP inesperado em {}",
+            case.label
+        );
+        assert!(
+            response.body.contains(case.expected_body_fragment),
+            "body HTTP inesperado em {}: {}",
+            case.label,
+            response.body
+        );
+    }
+
+    fn register_auth_matrix_user(
+        program: &Program,
+        storage: &Storage,
+        email: &str,
+        name: &str,
+        role: &str,
+    ) -> String {
+        let body = format!(
+            r#"{{"email":"{}","name":"{}","role":"{}","password":"strong-password-123"}}"#,
+            email, name, role
+        );
+        let response = super::router::handle_request(
+            program,
+            storage,
+            "POST",
+            "/contract/auth/register",
+            &body,
+        );
+        assert_eq!(response.status, 201, "precondition register failed");
+        json_response_string_field(&response.body, "token")
+    }
+
+    fn bearer_headers(token: &str) -> Vec<(String, String)> {
+        vec![("Authorization".to_string(), format!("Bearer {}", token))]
+    }
+
+    fn json_response_string_field(body: &str, field: &str) -> String {
+        let value = parse_json(body)
+            .unwrap_or_else(|err| panic!("response body nao e JSON parseavel: {}\n{}", err, body));
+        expect_string_field_value(&value, field).to_string()
+    }
+
+    #[test]
+    fn model_operation_contract_matrix_validates_checker_openapi_and_http() {
+        let cases = model_operation_contract_cases();
+        assert_model_operation_matrix_covers_all_operations(&cases);
+
+        let program = parse_checked_source(MODEL_OPERATION_MATRIX_SOURCE).unwrap_or_else(|err| {
+            panic!(
+                "checker rejeitou a matriz de contrato de operacoes de model: {}",
+                err
+            )
+        });
+        let document = openapi_document_from_http(&program);
+        assert_openapi_operations_match_route_contracts_and_components(&document, &program);
+
+        for case in &cases {
+            assert_model_operation_route_matches_case(&program, case);
+            assert_model_operation_openapi_case(&document, case);
+            assert_model_operation_http_case(&program, case);
+        }
+    }
+
+    #[test]
+    fn auth_operation_contract_matrix_validates_checker_hir_openapi_and_http() {
+        let cases = auth_operation_contract_cases();
+        assert_auth_operation_matrix_covers_all_operations(&cases);
+
+        let program = parse_checked_source(AUTH_OPERATION_MATRIX_SOURCE).unwrap_or_else(|err| {
+            panic!(
+                "checker rejeitou a matriz de contrato de operacoes de Auth: {}",
+                err
+            )
+        });
+        let document = auth_openapi_document_from_http(&program);
+        assert_openapi_operations_match_route_contracts_and_components(&document, &program);
+
+        for case in &cases {
+            assert_auth_operation_route_matches_case(&program, case);
+            assert_auth_operation_openapi_case(&document, case);
+            assert_auth_operation_http_case(&program, case);
+        }
     }
 
     #[test]

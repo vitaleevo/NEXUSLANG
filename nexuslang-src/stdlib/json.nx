@@ -1,0 +1,46 @@
+// NexusLang Standard Library - JSON Utilities
+
+export fn json_escape(value: string) -> string {
+    return __std_json_escape(value)
+}
+
+export fn json_string(value: string) -> string {
+    return __std_json_string(value)
+}
+
+export fn json_int(value: int) -> string {
+    return str(value)
+}
+
+export fn json_float(value: float) -> string {
+    return str(value)
+}
+
+export fn json_bool(value: bool) -> string {
+    if value { return "true" }
+    return "false"
+}
+
+export fn json_pair(key: string, value_json: string) -> string {
+    return json_string(key) + ":" + value_json
+}
+
+export fn json_object_1(pair_a: string) -> string {
+    return "{" + pair_a + "}"
+}
+
+export fn json_object_2(pair_a: string, pair_b: string) -> string {
+    return "{" + pair_a + "," + pair_b + "}"
+}
+
+export fn json_array_2(value_a: string, value_b: string) -> string {
+    return "[" + value_a + "," + value_b + "]"
+}
+
+export fn json_is_object(value: string) -> bool {
+    return __std_json_is_object(value)
+}
+
+export fn json_is_array(value: string) -> bool {
+    return __std_json_is_array(value)
+}

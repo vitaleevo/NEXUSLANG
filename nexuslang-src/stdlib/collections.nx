@@ -1,0 +1,52 @@
+// NexusLang Standard Library - Collection Utilities
+//
+// NexusLang does not have generics yet, so this module exposes typed helpers
+// for the array element kinds commonly used in current ERP examples.
+
+export fn len_int(items: [int]) -> int {
+    return len(items)
+}
+
+export fn len_string(items: [string]) -> int {
+    return len(items)
+}
+
+export fn is_empty_int(items: [int]) -> bool {
+    return len(items) == 0
+}
+
+export fn is_empty_string(items: [string]) -> bool {
+    return len(items) == 0
+}
+
+export fn contains_int(items: [int], item: int) -> bool {
+    return __std_array_contains_int(items, item)
+}
+
+export fn contains_string(items: [string], item: string) -> bool {
+    return __std_array_contains_string(items, item)
+}
+
+export fn first_int(items: [int]) -> int {
+    return __std_array_first_int(items)
+}
+
+export fn first_string(items: [string]) -> string {
+    return __std_array_first_string(items)
+}
+
+export fn last_int(items: [int]) -> int {
+    return __std_array_last_int(items)
+}
+
+export fn last_string(items: [string]) -> string {
+    return __std_array_last_string(items)
+}
+
+export fn reverse_int(items: [int]) -> [int] {
+    return __std_array_reverse_int(items)
+}
+
+export fn reverse_string(items: [string]) -> [string] {
+    return __std_array_reverse_string(items)
+}

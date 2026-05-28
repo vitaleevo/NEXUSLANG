@@ -1,6 +1,17 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::*;
+use crate::auth_ops::{
+    AuthOperationRequestBodyKind, AuthOperationReturnKind, AuthStaticOperation,
+    CheckedAuthOperationArgs,
+};
+use crate::model_ops::{
+    CheckedModelOperationArgs, ModelOperationOpenApiFeature, ModelStaticOperation,
+};
+use crate::route_hir::{
+    checked_routes, CheckedRouteAuthOperation, CheckedRouteExpr, CheckedRouteModelOperation,
+    CheckedRouteView,
+};
 
 use super::http::method_name;
 use super::storage::*;
@@ -15,13 +26,13 @@ pub fn generate_openapi(program: &Program) -> String {
     let request_body_components = openapi_component_request_bodies(program);
     let response_components = openapi_component_responses(program);
 
-    for route in routes(program) {
+    for route in checked_routes(program) {
         let openapi_path = route.path.replace(':', "{").replace_segments_for_openapi();
         let params = route_parameters(&route, &parameter_components);
         let schema = route_response_schema(program, &route);
         let response_status = route_response_status(&route);
         let success_response_ref = openapi_success_response_ref(response_status, &schema);
-        let request_body = route_request_body_ref(&route);
+        let request_body = route_request_body_ref(program, &route);
         let operation_id = unique_operation_id(route_operation_id(&route), &mut operation_ids);
         let tag = route_tag(&route);
         if seen_route_tags.insert(tag.clone()) {
@@ -101,10 +112,14 @@ pub fn generate_openapi(program: &Program) -> String {
         if route_has_conflict_response(program, &route) {
             operation.push_str(&openapi_error_response("409", "Conflict"));
         }
+        if route_has_auth_rate_limit_response(&route) {
+            operation.push_str(&openapi_error_response("429", "Too Many Requests"));
+        }
         if route.auth.is_some() {
             operation.push_str(&openapi_error_response("401", "Unauthorized"));
         }
-        if route.auth.and_then(|guard| guard.role.as_ref()).is_some() {
+        if route.auth.and_then(|guard| guard.role.as_ref()).is_some() || route_requires_csrf(&route)
+        {
             operation.push_str(&openapi_error_response("403", "Forbidden"));
         }
         operation.push_str(r#"}}"#);
@@ -214,7 +229,7 @@ impl OpenApiParameterComponents {
 fn openapi_component_parameters(program: &Program) -> OpenApiParameterComponents {
     let mut components = OpenApiParameterComponents::default();
 
-    for route in routes(program) {
+    for route in checked_routes(program) {
         for param in route.params {
             components.insert(
                 openapi_parameter_component_base_name("NexusPathParam", param),
@@ -240,31 +255,25 @@ fn openapi_parameter_component_base_name(prefix: &str, name: &str) -> String {
     )
 }
 
-fn openapi_component_request_bodies(program: &Program) -> Vec<String> {
-    let mut models = Vec::new();
+fn openapi_component_request_bodies(program: &Program) -> Vec<(String, String)> {
+    let mut components = Vec::new();
     let mut seen = HashSet::new();
 
-    for route in routes(program) {
-        if let Some(model) = route_request_body_model(&route) {
-            if seen.insert(model.clone()) {
-                models.push(model);
+    for route in checked_routes(program) {
+        if let Some((name, body)) = route_request_body_component(program, &route) {
+            if seen.insert(name.clone()) {
+                components.push((name, body));
             }
         }
     }
 
-    models
+    components
 }
 
-fn openapi_request_bodies(models: &[String]) -> String {
-    models
+fn openapi_request_bodies(components: &[(String, String)]) -> String {
+    components
         .iter()
-        .map(|model| {
-            format!(
-                r#""{}":{}"#,
-                escape_json(&openapi_request_body_component_name(model)),
-                openapi_request_body_component(model)
-            )
-        })
+        .map(|(name, body)| format!(r#""{}":{}"#, escape_json(name), body))
         .collect::<Vec<_>>()
         .join(",")
 }
@@ -280,10 +289,10 @@ fn openapi_request_body_component(model: &str) -> String {
     )
 }
 
-fn openapi_request_body_ref(model: &str) -> String {
+fn openapi_request_body_ref(component_name: &str) -> String {
     format!(
         r##"{{"$ref":"#/components/requestBodies/{}"}}"##,
-        escape_json(&openapi_request_body_component_name(model))
+        escape_json(component_name)
     )
 }
 
@@ -291,7 +300,7 @@ fn openapi_component_responses(program: &Program) -> Vec<(String, String)> {
     let mut responses = Vec::new();
     let mut seen = HashSet::new();
 
-    for route in routes(program) {
+    for route in checked_routes(program) {
         let schema = route_response_schema(program, &route);
         let status = route_response_status(&route);
         if let Some(name) = openapi_success_response_component_name(status, &schema) {
@@ -446,59 +455,76 @@ fn openapi_field_schema(field: &Field) -> String {
     schema
 }
 
-pub(crate) fn route_response_schema(program: &Program, route: &RouteView<'_>) -> String {
+pub(crate) fn route_response_schema(program: &Program, route: &CheckedRouteView<'_>) -> String {
     route
-        .body
-        .iter()
-        .find_map(|stmt| match stmt {
-            Stmt::Return { value, .. } => Some(
-                openapi_auth_expr_schema(program, route, value).unwrap_or_else(|| {
-                    openapi_expr_schema(program, value, route.params, route.query_params)
-                }),
-            ),
-            _ => None,
-        })
+        .return_expr
+        .as_ref()
+        .map(|expr| openapi_checked_expr_schema(program, route, expr))
         .unwrap_or_else(|| "{}".to_string())
 }
 
-fn openapi_auth_expr_schema(
+fn openapi_checked_expr_schema(
     program: &Program,
-    route: &RouteView<'_>,
-    expr: &Expr,
-) -> Option<String> {
-    let Expr::StaticCall {
-        ty, method, args, ..
-    } = expr
-    else {
-        return None;
-    };
-    if ty != "Auth" {
-        return None;
+    route: &CheckedRouteView<'_>,
+    expr: &CheckedRouteExpr<'_>,
+) -> String {
+    match expr {
+        CheckedRouteExpr::AuthOperation(operation) => {
+            openapi_auth_operation_schema(program, route, operation)
+                .unwrap_or_else(|| "{}".to_string())
+        }
+        CheckedRouteExpr::ModelOperation(operation) => openapi_model_operation_schema(operation),
+        CheckedRouteExpr::Expr(expr) => {
+            openapi_expr_schema(program, expr, route.params, route.query_params)
+        }
     }
-    match method.as_str() {
-        "register" | "login" => auth_config_from_args(program, args).map(|config| {
-            format!(
-                r#"{{"type":"object","properties":{{"user":{},"token":{{"type":"string"}},"expires_in":{{"type":"integer"}}}}}}"#,
-                openapi_response_schema_for_type(&Type::Model(config.model.clone()))
-            )
+}
+
+fn openapi_auth_operation_schema(
+    program: &Program,
+    route: &CheckedRouteView<'_>,
+    operation: &CheckedRouteAuthOperation<'_>,
+) -> Option<String> {
+    match operation.operation.return_kind() {
+        AuthOperationReturnKind::AuthSuccess => operation.checked_args.and_then(|args| {
+            auth_config_from_checked_args(program, args).map(|config| {
+                format!(
+                    r#"{{"type":"object","properties":{{"user":{},"token":{{"type":"string"}},"csrf_token":{{"type":"string"}},"expires_in":{{"type":"integer"}}}}}}"#,
+                    openapi_response_schema_for_type(&Type::Model(config.model.clone()))
+                )
+            })
         }),
-        "user" => route
+        AuthOperationReturnKind::CurrentUser => route
             .auth
             .and_then(|guard| auth_config(program, &guard.auth))
             .map(|config| openapi_response_schema_for_type(&Type::Model(config.model.clone()))),
-        "logout" => Some(r#"{"type":"boolean"}"#.to_string()),
-        _ => None,
+        AuthOperationReturnKind::Bool => Some(r#"{"type":"boolean"}"#.to_string()),
     }
 }
 
-fn auth_config_from_args<'a>(program: &'a Program, args: &[Expr]) -> Option<&'a AuthConfig> {
-    let [Expr::Ident { name, .. }] = args else {
-        return None;
-    };
-    auth_config(program, name)
+fn openapi_model_operation_schema(operation: &CheckedRouteModelOperation<'_>) -> String {
+    if operation
+        .checked_args
+        .is_some_and(CheckedModelOperationArgs::has_page_response)
+    {
+        openapi_page_schema(operation.model)
+    } else {
+        openapi_response_schema_for_type(&operation.operation.return_type(operation.model))
+    }
 }
 
-fn route_parameters(route: &RouteView<'_>, components: &OpenApiParameterComponents) -> String {
+fn auth_config_from_checked_args<'a>(
+    program: &'a Program,
+    args: CheckedAuthOperationArgs<'_>,
+) -> Option<&'a AuthConfig> {
+    args.auth_config_name()
+        .and_then(|name| auth_config(program, name))
+}
+
+fn route_parameters(
+    route: &CheckedRouteView<'_>,
+    components: &OpenApiParameterComponents,
+) -> String {
     let mut params = route
         .params
         .iter()
@@ -517,7 +543,23 @@ fn route_parameters(route: &RouteView<'_>, components: &OpenApiParameterComponen
             .unwrap_or(definition)
     }));
 
+    if route_requires_csrf(route) {
+        params.push(openapi_csrf_header_parameter());
+    }
+
     params.join(",")
+}
+
+fn route_requires_csrf(route: &CheckedRouteView<'_>) -> bool {
+    route.auth.is_some()
+        && matches!(
+            route.method,
+            HttpMethod::Post | HttpMethod::Put | HttpMethod::Delete
+        )
+}
+
+fn openapi_csrf_header_parameter() -> String {
+    r#"{"name":"X-Nexus-CSRF-Token","in":"header","required":false,"description":"Required when authenticating unsafe methods with the Nexus session cookie. Bearer token requests do not need this header.","schema":{"type":"string"}}"#.to_string()
 }
 
 fn openapi_path_parameter_definition(param: &str) -> String {
@@ -548,40 +590,155 @@ fn openapi_query_parameter_definition(param: &QueryParam) -> String {
     )
 }
 
-fn route_request_body_ref(route: &RouteView<'_>) -> Option<String> {
-    route_request_body_model(route).map(|model| openapi_request_body_ref(&model))
+fn route_request_body_ref(program: &Program, route: &CheckedRouteView<'_>) -> Option<String> {
+    route_request_body_component_name(program, route).map(|name| openapi_request_body_ref(&name))
 }
 
-pub(crate) fn route_request_body_model(route: &RouteView<'_>) -> Option<String> {
-    route_create_model(route).or_else(|| route_update_model(route))
+pub(crate) fn route_request_body_model(route: &CheckedRouteView<'_>) -> Option<String> {
+    let Some(CheckedRouteExpr::ModelOperation(operation)) = route.return_expr else {
+        return None;
+    };
+    if operation.operation.uses_request_body() && operation.checked_args.is_some() {
+        Some(operation.model.to_string())
+    } else {
+        None
+    }
 }
 
-pub(crate) fn route_response_status(route: &RouteView<'_>) -> &'static str {
-    let auth_register = route.body.iter().any(|stmt| {
-        matches!(
-            stmt,
-            Stmt::Return {
-                value:
-                    Expr::StaticCall {
-                        ty,
-                        method,
-                        ..
-                    },
-                ..
-            } if ty == "Auth" && method == "register"
-        )
-    });
-    let model_create =
-        matches!(route.method, HttpMethod::Post) && route_create_model(route).is_some();
+pub(crate) fn route_request_body_component_name(
+    program: &Program,
+    route: &CheckedRouteView<'_>,
+) -> Option<String> {
+    route_request_body_component(program, route).map(|(name, _)| name)
+}
 
-    if auth_register || model_create {
+fn route_request_body_component(
+    program: &Program,
+    route: &CheckedRouteView<'_>,
+) -> Option<(String, String)> {
+    if let Some(model) = route_request_body_model(route) {
+        return Some((
+            openapi_request_body_component_name(&model),
+            openapi_request_body_component(&model),
+        ));
+    }
+
+    let Some(CheckedRouteExpr::AuthOperation(operation)) = route.return_expr else {
+        return None;
+    };
+    if !operation.operation.uses_request_body() {
+        return None;
+    }
+    let checked_args = operation.checked_args?;
+    let config = auth_config_from_checked_args(program, checked_args)?;
+    Some((
+        openapi_auth_request_body_component_name(operation.operation, &config.name),
+        openapi_auth_request_body_component(program, operation.operation, config),
+    ))
+}
+
+pub(crate) fn openapi_auth_request_body_component_name(
+    operation: AuthStaticOperation,
+    auth_name: &str,
+) -> String {
+    format!(
+        "NexusAuth{}RequestBody_{}",
+        title_case_ascii(operation.method_name()),
+        auth_name
+    )
+}
+
+fn title_case_ascii(value: &str) -> String {
+    let mut chars = value.chars();
+    let Some(first) = chars.next() else {
+        return String::new();
+    };
+    let mut out = String::new();
+    out.push(first.to_ascii_uppercase());
+    out.extend(chars);
+    out
+}
+
+fn openapi_auth_request_body_component(
+    program: &Program,
+    operation: AuthStaticOperation,
+    config: &AuthConfig,
+) -> String {
+    format!(
+        r#"{{"required":true,"content":{{"application/json":{{"schema":{}}}}}}}"#,
+        openapi_auth_request_body_schema(program, operation, config)
+    )
+}
+
+fn openapi_auth_request_body_schema(
+    program: &Program,
+    operation: AuthStaticOperation,
+    config: &AuthConfig,
+) -> String {
+    match operation.request_body_kind() {
+        Some(AuthOperationRequestBodyKind::Register) => {
+            openapi_auth_register_request_schema(program, config)
+        }
+        Some(AuthOperationRequestBodyKind::Login) => openapi_auth_login_request_schema(config),
+        None => "{}".to_string(),
+    }
+}
+
+fn openapi_auth_register_request_schema(program: &Program, config: &AuthConfig) -> String {
+    let fields = model_fields(program, &config.model).unwrap_or_default();
+    let mut properties = fields
+        .iter()
+        .map(|field| {
+            format!(
+                r#""{}":{}"#,
+                escape_json(&field.name),
+                openapi_field_schema(field)
+            )
+        })
+        .collect::<Vec<_>>();
+    properties.push(format!(
+        r#""password":{{"type":"string","minLength":{}}}"#,
+        config.password_min
+    ));
+
+    let mut required = fields
+        .iter()
+        .filter(|field| field.default.is_none() && !type_is_optional(&field.ty))
+        .map(|field| format!(r#""{}""#, escape_json(&field.name)))
+        .collect::<Vec<_>>();
+    required.push(r#""password""#.to_string());
+
+    format!(
+        r#"{{"type":"object","properties":{{{}}},"required":[{}]}}"#,
+        properties.join(","),
+        required.join(",")
+    )
+}
+
+fn openapi_auth_login_request_schema(config: &AuthConfig) -> String {
+    format!(
+        r#"{{"type":"object","properties":{{"{}":{{"type":"string"}},"password":{{"type":"string"}}}},"required":["{}","password"]}}"#,
+        escape_json(&config.identity),
+        escape_json(&config.identity)
+    )
+}
+
+pub(crate) fn route_response_status(route: &CheckedRouteView<'_>) -> &'static str {
+    if let Some(CheckedRouteExpr::AuthOperation(operation)) = route.return_expr {
+        return operation.operation.success_status_name();
+    }
+
+    let model_create = matches!(route.method, HttpMethod::Post)
+        && route_has_model_operation(route, |operation, _args| operation.is_create());
+
+    if model_create {
         "201"
     } else {
         "200"
     }
 }
 
-fn route_operation_id(route: &RouteView<'_>) -> String {
+fn route_operation_id(route: &CheckedRouteView<'_>) -> String {
     let mut parts = vec![method_name(route.method).to_lowercase()];
 
     for segment in route.path.split('/').filter(|segment| !segment.is_empty()) {
@@ -598,7 +755,7 @@ fn route_operation_id(route: &RouteView<'_>) -> String {
     parts.join("_")
 }
 
-fn route_tag(route: &RouteView<'_>) -> String {
+fn route_tag(route: &CheckedRouteView<'_>) -> String {
     route
         .path
         .split('/')
@@ -650,539 +807,142 @@ fn operation_id_segment(segment: &str) -> Option<String> {
     }
 }
 
-pub(crate) fn route_has_bad_request_response(route: &RouteView<'_>) -> bool {
+pub(crate) fn route_has_bad_request_response(route: &CheckedRouteView<'_>) -> bool {
     !route.query_params.is_empty()
-        || route_create_model(route).is_some()
-        || route_update_model(route).is_some()
+        || route_has_model_operation(route, |operation, _args| operation.uses_request_body())
+        || route_has_auth_operation(route, |operation| operation.has_bad_request_response())
 }
 
-pub(crate) fn route_has_not_found_response(route: &RouteView<'_>) -> bool {
-    route_find_model(route).is_some()
-        || route_update_model(route).is_some()
-        || route_delete_model(route).is_some()
+pub(crate) fn route_has_not_found_response(route: &CheckedRouteView<'_>) -> bool {
+    route_has_model_operation(route, |operation, _args| operation.has_not_found_response())
 }
 
-pub(crate) fn route_has_conflict_response(program: &Program, route: &RouteView<'_>) -> bool {
-    route_create_model(route)
-        .or_else(|| route_update_model(route))
-        .and_then(|model| model_fields(program, &model))
+pub(crate) fn route_has_conflict_response(program: &Program, route: &CheckedRouteView<'_>) -> bool {
+    route_model_operation(route)
+        .and_then(|operation| {
+            if operation.operation.may_conflict_on_unique_fields()
+                && operation.checked_args.is_some()
+            {
+                Some(operation.model)
+            } else {
+                None
+            }
+        })
+        .and_then(|model| model_fields(program, model))
         .map(has_unique_fields)
         .unwrap_or(false)
 }
 
-fn route_has_pagination(route: &RouteView<'_>) -> bool {
-    route.body.iter().any(|stmt| match stmt {
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "all" => all_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "page" => page_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where" => where_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_page" => where_page_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_not" => where_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_not_page" => where_page_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_not_in" => where_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_not_in_page" => where_page_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_not_in_optional" => where_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_not_in_optional_page" => where_page_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_optional" => where_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_optional_page" => where_page_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_in" => where_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_in_page" => where_page_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_in_optional" => where_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_in_optional_page" => where_page_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_compare" => where_compare_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_compare_page" => advanced_page_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_text" => where_compare_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_text_page" => advanced_page_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_between" => where_compare_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_between_page" => advanced_page_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_all" => where_all_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_all_page" => where_all_page_filter_arg_count(args).is_some(),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_any" => where_all_args_have_pagination(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_any_page" => where_all_page_filter_arg_count(args).is_some(),
-        _ => false,
-    })
+fn route_has_auth_rate_limit_response(route: &CheckedRouteView<'_>) -> bool {
+    route_has_auth_operation(route, AuthStaticOperation::has_rate_limit_response)
 }
 
-fn route_has_ordering(route: &RouteView<'_>) -> bool {
-    route.body.iter().any(|stmt| match stmt {
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "all" => all_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "page" => page_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where" => where_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_page" => where_page_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_not" => where_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_not_page" => where_page_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_not_in" => where_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_not_in_page" => where_page_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_not_in_optional" => where_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_not_in_optional_page" => where_page_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_optional" => where_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_optional_page" => where_page_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_in" => where_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_in_page" => where_page_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_in_optional" => where_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_in_optional_page" => where_page_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_compare" => where_compare_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_compare_page" => advanced_page_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_text" => where_compare_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_text_page" => advanced_page_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_between" => where_compare_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_between_page" => advanced_page_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_all" => where_all_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_all_page" => where_all_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_any" => where_all_args_have_ordering(args),
-        Stmt::Return {
-            value: Expr::StaticCall { method, args, .. },
-            ..
-        } if method == "where_any_page" => where_all_args_have_ordering(args),
-        _ => false,
-    })
+fn route_has_auth_operation(
+    route: &CheckedRouteView<'_>,
+    predicate: impl Fn(AuthStaticOperation) -> bool,
+) -> bool {
+    matches!(
+        route.return_expr,
+        Some(CheckedRouteExpr::AuthOperation(operation)) if predicate(operation.operation)
+    )
 }
 
-fn route_has_total_count(route: &RouteView<'_>) -> bool {
-    route.body.iter().any(|stmt| {
-        matches!(
-            stmt,
-            Stmt::Return {
-                value: Expr::StaticCall { method, args, .. },
-                ..
-            } if (method == "page" && page_args_have_pagination(args))
-                || (method == "where_page" && where_page_args_have_pagination(args))
-                || (method == "where_not_page" && where_page_args_have_pagination(args))
-                || (method == "where_not_in_page" && where_page_args_have_pagination(args))
-                || (method == "where_not_in_optional_page" && where_page_args_have_pagination(args))
-                || (method == "where_optional_page" && where_page_args_have_pagination(args))
-                || (method == "where_in_page" && where_page_args_have_pagination(args))
-                || (method == "where_in_optional_page" && where_page_args_have_pagination(args))
-                || (method == "where_compare_page" && advanced_page_args_have_pagination(args))
-                || (method == "where_text_page" && advanced_page_args_have_pagination(args))
-                || (method == "where_between_page" && advanced_page_args_have_pagination(args))
-                || (method == "where_all_page" && where_all_page_filter_arg_count(args).is_some())
-                || (method == "where_any_page" && where_all_page_filter_arg_count(args).is_some())
+fn route_has_pagination(route: &CheckedRouteView<'_>) -> bool {
+    route_has_model_operation(route, |_operation, args| args.has_pagination())
+}
+
+fn route_has_ordering(route: &CheckedRouteView<'_>) -> bool {
+    route_has_model_operation(route, |_operation, args| args.has_ordering())
+}
+
+fn route_has_total_count(route: &CheckedRouteView<'_>) -> bool {
+    route_has_model_operation(route, |_operation, args| args.has_page_response())
+}
+
+fn route_has_composite_filters(route: &CheckedRouteView<'_>) -> bool {
+    route_has_model_operation(route, |operation, args| {
+        operation.has_openapi_feature_for_checked_args(
+            ModelOperationOpenApiFeature::CompositeFilters,
+            args,
         )
     })
 }
 
-fn route_has_composite_filters(route: &RouteView<'_>) -> bool {
-    route.body.iter().any(|stmt| {
-        matches!(
-            stmt,
-            Stmt::Return {
-                value: Expr::StaticCall { method, args, .. },
-                ..
-            } if (method == "where_all" && where_all_filter_arg_count(args).is_some())
-                || (method == "where_all_page" && where_all_page_filter_arg_count(args).is_some())
+fn route_has_or_filters(route: &CheckedRouteView<'_>) -> bool {
+    route_has_model_operation(route, |operation, args| {
+        operation
+            .has_openapi_feature_for_checked_args(ModelOperationOpenApiFeature::OrFilters, args)
+    })
+}
+
+fn route_has_exclusion_filters(route: &CheckedRouteView<'_>) -> bool {
+    route_has_model_operation(route, |operation, args| {
+        operation.has_openapi_feature_for_checked_args(
+            ModelOperationOpenApiFeature::ExclusionFilters,
+            args,
         )
     })
 }
 
-fn route_has_or_filters(route: &RouteView<'_>) -> bool {
-    route.body.iter().any(|stmt| {
-        matches!(
-            stmt,
-            Stmt::Return {
-                value: Expr::StaticCall { method, args, .. },
-                ..
-            } if (method == "where_any" && where_all_filter_arg_count(args).is_some())
-                || (method == "where_any_page" && where_all_page_filter_arg_count(args).is_some())
+fn route_has_optional_filters(route: &CheckedRouteView<'_>) -> bool {
+    route_has_model_operation(route, |operation, args| {
+        operation.has_openapi_feature_for_checked_args(
+            ModelOperationOpenApiFeature::OptionalFilters,
+            args,
         )
     })
 }
 
-fn route_has_exclusion_filters(route: &RouteView<'_>) -> bool {
-    route.body.iter().any(|stmt| {
-        matches!(
-            stmt,
-            Stmt::Return {
-                value: Expr::StaticCall { method, args, .. },
-                ..
-            } if (method == "where_not" && (args.len() == 2 || args.len() == 4 || args.len() == 6))
-                || (method == "where_not_page" && where_page_args_have_pagination(args))
-                || (method == "where_not_in" && (args.len() == 2 || args.len() == 4 || args.len() == 6))
-                || (method == "where_not_in_page" && where_page_args_have_pagination(args))
-                || (method == "where_not_in_optional" && (args.len() == 2 || args.len() == 4 || args.len() == 6))
-                || (method == "where_not_in_optional_page" && where_page_args_have_pagination(args))
+fn route_has_in_filters(route: &CheckedRouteView<'_>) -> bool {
+    route_has_model_operation(route, |operation, args| {
+        operation
+            .has_openapi_feature_for_checked_args(ModelOperationOpenApiFeature::InFilters, args)
+    })
+}
+
+fn route_has_comparison_filters(route: &CheckedRouteView<'_>) -> bool {
+    route_has_model_operation(route, |operation, args| {
+        operation.has_openapi_feature_for_checked_args(
+            ModelOperationOpenApiFeature::ComparisonFilters,
+            args,
         )
     })
 }
 
-fn route_has_optional_filters(route: &RouteView<'_>) -> bool {
-    route.body.iter().any(|stmt| {
-        matches!(
-            stmt,
-            Stmt::Return {
-                value: Expr::StaticCall { method, args, .. },
-                ..
-            } if (method == "where_optional" && (args.len() == 2 || args.len() == 4 || args.len() == 6))
-                || (method == "where_optional_page" && where_page_args_have_pagination(args))
-                || (method == "where_in_optional" && (args.len() == 2 || args.len() == 4 || args.len() == 6))
-                || (method == "where_in_optional_page" && where_page_args_have_pagination(args))
-                || (method == "where_not_in_optional" && (args.len() == 2 || args.len() == 4 || args.len() == 6))
-                || (method == "where_not_in_optional_page" && where_page_args_have_pagination(args))
-        )
+fn route_has_text_filters(route: &CheckedRouteView<'_>) -> bool {
+    route_has_model_operation(route, |operation, args| {
+        operation
+            .has_openapi_feature_for_checked_args(ModelOperationOpenApiFeature::TextFilters, args)
     })
 }
 
-fn route_has_in_filters(route: &RouteView<'_>) -> bool {
-    route.body.iter().any(|stmt| {
-        matches!(
-            stmt,
-            Stmt::Return {
-                value: Expr::StaticCall { method, args, .. },
-                ..
-            } if (method == "where_in" && (args.len() == 2 || args.len() == 4 || args.len() == 6))
-                || (method == "where_in_page" && where_page_args_have_pagination(args))
-                || (method == "where_in_optional" && (args.len() == 2 || args.len() == 4 || args.len() == 6))
-                || (method == "where_in_optional_page" && where_page_args_have_pagination(args))
-                || (method == "where_not_in" && (args.len() == 2 || args.len() == 4 || args.len() == 6))
-                || (method == "where_not_in_page" && where_page_args_have_pagination(args))
-                || (method == "where_not_in_optional" && (args.len() == 2 || args.len() == 4 || args.len() == 6))
-                || (method == "where_not_in_optional_page" && where_page_args_have_pagination(args))
-        )
+fn route_has_range_filters(route: &CheckedRouteView<'_>) -> bool {
+    route_has_model_operation(route, |operation, args| {
+        operation
+            .has_openapi_feature_for_checked_args(ModelOperationOpenApiFeature::RangeFilters, args)
     })
 }
 
-fn route_has_comparison_filters(route: &RouteView<'_>) -> bool {
-    route.body.iter().any(|stmt| {
-        matches!(
-            stmt,
-            Stmt::Return {
-                value: Expr::StaticCall { method, args, .. },
-                ..
-            } if (method == "where_compare" && (args.len() == 3 || args.len() == 5 || args.len() == 7))
-                || (method == "where_compare_page" && advanced_page_args_have_pagination(args))
-        )
-    })
+fn route_has_model_operation(
+    route: &CheckedRouteView<'_>,
+    predicate: impl for<'a> Fn(ModelStaticOperation, CheckedModelOperationArgs<'a>) -> bool,
+) -> bool {
+    route_model_operation(route)
+        .and_then(|operation| {
+            operation
+                .checked_args
+                .map(|args| predicate(operation.operation, args))
+        })
+        .unwrap_or(false)
 }
 
-fn route_has_text_filters(route: &RouteView<'_>) -> bool {
-    route.body.iter().any(|stmt| {
-        matches!(
-            stmt,
-            Stmt::Return {
-                value: Expr::StaticCall { method, args, .. },
-                ..
-            } if (method == "where_text" && (args.len() == 3 || args.len() == 5 || args.len() == 7))
-                || (method == "where_text_page" && advanced_page_args_have_pagination(args))
-        )
-    })
-}
-
-fn route_has_range_filters(route: &RouteView<'_>) -> bool {
-    route.body.iter().any(|stmt| {
-        matches!(
-            stmt,
-            Stmt::Return {
-                value: Expr::StaticCall { method, args, .. },
-                ..
-            } if (method == "where_between" && (args.len() == 3 || args.len() == 5 || args.len() == 7))
-                || (method == "where_between_page" && advanced_page_args_have_pagination(args))
-        )
-    })
-}
-
-fn all_args_have_pagination(args: &[Expr]) -> bool {
-    (args.len() == 2 && !starts_ordering_args(args)) || args.len() == 4
-}
-
-fn all_args_have_ordering(args: &[Expr]) -> bool {
-    (args.len() == 2 && starts_ordering_args(args)) || args.len() == 4
-}
-
-fn page_args_have_pagination(args: &[Expr]) -> bool {
-    args.len() == 2 || args.len() == 4
-}
-
-fn page_args_have_ordering(args: &[Expr]) -> bool {
-    args.len() == 4
-}
-
-fn where_args_have_pagination(args: &[Expr]) -> bool {
-    (args.len() == 4 && !starts_ordering_args(&args[2..])) || args.len() == 6
-}
-
-fn where_args_have_ordering(args: &[Expr]) -> bool {
-    (args.len() == 4 && starts_ordering_args(&args[2..])) || args.len() == 6
-}
-
-fn where_page_args_have_pagination(args: &[Expr]) -> bool {
-    args.len() == 4 || args.len() == 6
-}
-
-fn where_page_args_have_ordering(args: &[Expr]) -> bool {
-    args.len() == 6
-}
-
-fn where_compare_args_have_pagination(args: &[Expr]) -> bool {
-    (args.len() == 5 && !starts_ordering_args(&args[3..])) || args.len() == 7
-}
-
-fn where_compare_args_have_ordering(args: &[Expr]) -> bool {
-    (args.len() == 5 && starts_ordering_args(&args[3..])) || args.len() == 7
-}
-
-fn advanced_page_args_have_pagination(args: &[Expr]) -> bool {
-    args.len() == 5 || args.len() == 7
-}
-
-fn advanced_page_args_have_ordering(args: &[Expr]) -> bool {
-    args.len() == 7
-}
-
-fn starts_ordering_args(args: &[Expr]) -> bool {
-    args.first().is_some_and(expr_is_string_lit)
-}
-
-fn expr_is_string_lit(expr: &Expr) -> bool {
-    matches!(expr, Expr::StringLit { .. })
-}
-
-fn where_all_filter_arg_count(args: &[Expr]) -> Option<usize> {
-    if args.len() < 4 {
-        return None;
-    }
-    let filter_arg_count = if where_all_args_have_ordering(args) {
-        args.len() - 4
-    } else if where_all_args_have_pagination(args) {
-        args.len() - 2
-    } else {
-        args.len()
-    };
-    if filter_arg_count >= 4 && filter_arg_count % 2 == 0 {
-        Some(filter_arg_count)
-    } else {
-        None
-    }
-}
-
-fn where_all_page_filter_arg_count(args: &[Expr]) -> Option<usize> {
-    if args.len() < 6 || !where_all_args_have_pagination(args) {
-        return None;
-    }
-    let filter_arg_count = if where_all_args_have_ordering(args) {
-        args.len() - 4
-    } else {
-        args.len() - 2
-    };
-    if filter_arg_count >= 4 && filter_arg_count % 2 == 0 {
-        Some(filter_arg_count)
-    } else {
-        None
-    }
-}
-
-fn where_all_args_have_pagination(args: &[Expr]) -> bool {
-    args.len() >= 6 && !expr_is_string_lit(&args[args.len() - 2])
-}
-
-fn where_all_args_have_ordering(args: &[Expr]) -> bool {
-    args.len() >= 8
-        && expr_is_string_lit(&args[args.len() - 4])
-        && expr_is_order_direction_lit(&args[args.len() - 3])
-        && !expr_is_string_lit(&args[args.len() - 2])
-}
-
-fn expr_is_order_direction_lit(expr: &Expr) -> bool {
-    matches!(expr, Expr::StringLit { value, .. } if value == "asc" || value == "desc")
-}
-
-fn route_create_model(route: &RouteView<'_>) -> Option<String> {
-    route.body.iter().find_map(|stmt| match stmt {
-        Stmt::Return {
-            value: Expr::StaticCall {
-                ty, method, args, ..
-            },
-            ..
-        } if method == "create" && args.is_empty() => Some(ty.clone()),
+fn route_model_operation<'a>(
+    route: &CheckedRouteView<'a>,
+) -> Option<CheckedRouteModelOperation<'a>> {
+    match route.return_expr {
+        Some(CheckedRouteExpr::ModelOperation(operation)) => Some(operation),
         _ => None,
-    })
-}
-
-fn route_find_model(route: &RouteView<'_>) -> Option<String> {
-    route.body.iter().find_map(|stmt| match stmt {
-        Stmt::Return {
-            value: Expr::StaticCall {
-                ty, method, args, ..
-            },
-            ..
-        } if method == "find" && args.len() == 2 => Some(ty.clone()),
-        _ => None,
-    })
-}
-
-fn route_update_model(route: &RouteView<'_>) -> Option<String> {
-    route.body.iter().find_map(|stmt| match stmt {
-        Stmt::Return {
-            value: Expr::StaticCall {
-                ty, method, args, ..
-            },
-            ..
-        } if method == "update" && args.len() == 2 => Some(ty.clone()),
-        _ => None,
-    })
-}
-
-fn route_delete_model(route: &RouteView<'_>) -> Option<String> {
-    route.body.iter().find_map(|stmt| match stmt {
-        Stmt::Return {
-            value: Expr::StaticCall {
-                ty, method, args, ..
-            },
-            ..
-        } if method == "delete" && args.len() == 2 => Some(ty.clone()),
-        _ => None,
-    })
+    }
 }
 
 fn openapi_expr_schema(
@@ -1191,81 +951,9 @@ fn openapi_expr_schema(
     params: &[String],
     query_params: &[QueryParam],
 ) -> String {
-    if let Some(schema) = openapi_page_expr_schema(expr) {
-        return schema;
-    }
     infer_http_expr_type(program, expr, params, query_params)
         .map(|ty| openapi_response_schema_for_type(&ty))
         .unwrap_or_else(|| "{}".to_string())
-}
-
-fn openapi_page_expr_schema(expr: &Expr) -> Option<String> {
-    match expr {
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "page" && page_args_have_pagination(args) => Some(openapi_page_schema(ty)),
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_page" && where_page_args_have_pagination(args) => {
-            Some(openapi_page_schema(ty))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_not_page" && where_page_args_have_pagination(args) => {
-            Some(openapi_page_schema(ty))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_not_in_page" && where_page_args_have_pagination(args) => {
-            Some(openapi_page_schema(ty))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_not_in_optional_page" && where_page_args_have_pagination(args) => {
-            Some(openapi_page_schema(ty))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_optional_page" && where_page_args_have_pagination(args) => {
-            Some(openapi_page_schema(ty))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_in_page" && where_page_args_have_pagination(args) => {
-            Some(openapi_page_schema(ty))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_in_optional_page" && where_page_args_have_pagination(args) => {
-            Some(openapi_page_schema(ty))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_compare_page" && advanced_page_args_have_pagination(args) => {
-            Some(openapi_page_schema(ty))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_text_page" && advanced_page_args_have_pagination(args) => {
-            Some(openapi_page_schema(ty))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_between_page" && advanced_page_args_have_pagination(args) => {
-            Some(openapi_page_schema(ty))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_all_page" && where_all_page_filter_arg_count(args).is_some() => {
-            Some(openapi_page_schema(ty))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_any_page" && where_all_page_filter_arg_count(args).is_some() => {
-            Some(openapi_page_schema(ty))
-        }
-        _ => None,
-    }
 }
 
 fn openapi_page_schema(model: &str) -> String {
@@ -1365,160 +1053,6 @@ fn infer_http_expr_type(
         Expr::BinOp { .. } | Expr::UnaryOp { .. } => None,
         Expr::Call { name, args, .. } if name == "str" && args.len() == 1 => Some(Type::String),
         Expr::Call { .. } => None,
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "all" && (args.is_empty() || args.len() == 2 || args.len() == 4) => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "page" && page_args_have_pagination(args) => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "create" && args.is_empty() => Some(Type::Model(ty.clone())),
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "find" && args.len() == 2 => Some(Type::Model(ty.clone())),
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where" && (args.len() == 2 || args.len() == 4 || args.len() == 6) => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_page" && where_page_args_have_pagination(args) => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_not_page" && where_page_args_have_pagination(args) => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_not" && (args.len() == 2 || args.len() == 4 || args.len() == 6) => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_not_in_page" && where_page_args_have_pagination(args) => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_not_in"
-            && (args.len() == 2 || args.len() == 4 || args.len() == 6) =>
-        {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_not_in_optional_page" && where_page_args_have_pagination(args) => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_not_in_optional"
-            && (args.len() == 2 || args.len() == 4 || args.len() == 6) =>
-        {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_optional_page" && where_page_args_have_pagination(args) => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_optional"
-            && (args.len() == 2 || args.len() == 4 || args.len() == 6) =>
-        {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_in" && (args.len() == 2 || args.len() == 4 || args.len() == 6) => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_in_page" && where_page_args_have_pagination(args) => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_in_optional"
-            && (args.len() == 2 || args.len() == 4 || args.len() == 6) =>
-        {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_in_optional_page" && where_page_args_have_pagination(args) => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_compare_page" && advanced_page_args_have_pagination(args) => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_compare"
-            && (args.len() == 3 || args.len() == 5 || args.len() == 7) =>
-        {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_text_page" && advanced_page_args_have_pagination(args) => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_text" && (args.len() == 3 || args.len() == 5 || args.len() == 7) => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_between_page" && advanced_page_args_have_pagination(args) => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_between"
-            && (args.len() == 3 || args.len() == 5 || args.len() == 7) =>
-        {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_all_page" && where_all_page_filter_arg_count(args).is_some() => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_all" && where_all_filter_arg_count(args).is_some() => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_any_page" && where_all_page_filter_arg_count(args).is_some() => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "where_any" && where_all_filter_arg_count(args).is_some() => {
-            Some(Type::Array(Box::new(Type::Model(ty.clone()))))
-        }
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "update" && args.len() == 2 => Some(Type::Model(ty.clone())),
-        Expr::StaticCall {
-            ty, method, args, ..
-        } if method == "delete" && args.len() == 2 => Some(Type::Model(ty.clone())),
         Expr::StaticCall { .. } => None,
     }
 }

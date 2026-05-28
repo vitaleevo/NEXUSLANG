@@ -1,0 +1,25 @@
+// NexusLang Standard Library - CRM Utilities
+
+import to_lower from "std/string"
+import trim from "std/string"
+import is_email from "std/validation"
+
+export fn crm_display_name(first_name: string, last_name: string) -> string {
+    return trim(first_name + " " + last_name)
+}
+
+export fn crm_normalize_status(status: string) -> string {
+    return to_lower(trim(status))
+}
+
+export fn crm_is_active_status(status: string) -> bool {
+    return crm_normalize_status(status) == "active"
+}
+
+export fn crm_is_valid_email(email: string) -> bool {
+    return is_email(email)
+}
+
+export fn crm_contact_label(name: string, email: string) -> string {
+    return name + " <" + email + ">"
+}

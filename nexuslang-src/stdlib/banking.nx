@@ -1,0 +1,26 @@
+// NexusLang Standard Library - Banking Utilities
+
+import is_positive_money from "std/money"
+import is_zero_money from "std/money"
+
+export fn banking_balance_after(balance: money, movement: money) -> money {
+    return balance + movement
+}
+
+export fn banking_is_credit(amount: money) -> bool {
+    return is_positive_money(amount)
+}
+
+export fn banking_is_zero(amount: money) -> bool {
+    return is_zero_money(amount)
+}
+
+export fn banking_is_debit(amount: money) -> bool {
+    if is_positive_money(amount) { return false }
+    if is_zero_money(amount) { return false }
+    return true
+}
+
+export fn banking_reference(bank_code: string, reference: string) -> string {
+    return bank_code + "-" + reference
+}

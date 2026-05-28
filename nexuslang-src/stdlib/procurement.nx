@@ -1,0 +1,21 @@
+// NexusLang Standard Library - Procurement Utilities
+
+import max from "std/math"
+
+export fn procurement_order_total(qty: int, unit_cost: money) -> money {
+    return unit_cost * qty
+}
+
+export fn procurement_needs_approval(total: money, limit: money) -> bool {
+    return total > limit
+}
+
+export fn procurement_backorder(requested: int, available: int) -> int {
+    return max(0, requested - available)
+}
+
+export fn procurement_status(received: int, ordered: int) -> string {
+    if received >= ordered { return "complete" }
+    if received <= 0 { return "open" }
+    return "partial"
+}

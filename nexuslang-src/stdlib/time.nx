@@ -1,0 +1,37 @@
+// NexusLang Standard Library - Time Utilities
+
+export fn time_runtime_clock_available() -> bool {
+    return __std_time_runtime_clock_available()
+}
+
+export fn time_unix_seconds() -> int {
+    return __std_time_unix_seconds()
+}
+
+export fn time_unix_millis() -> int {
+    return __std_time_unix_millis()
+}
+
+export fn time_seconds_between(start_seconds: int, end_seconds: int) -> int {
+    return end_seconds - start_seconds
+}
+
+export fn time_minutes_between(start_seconds: int, end_seconds: int) -> float {
+    return time_seconds_between(start_seconds, end_seconds) / 60.0
+}
+
+export fn time_hours_between(start_seconds: int, end_seconds: int) -> float {
+    return time_seconds_between(start_seconds, end_seconds) / 3600.0
+}
+
+export fn time_days_between(start_seconds: int, end_seconds: int) -> float {
+    return time_seconds_between(start_seconds, end_seconds) / 86400.0
+}
+
+export fn time_is_before(left_seconds: int, right_seconds: int) -> bool {
+    return left_seconds < right_seconds
+}
+
+export fn time_is_after(left_seconds: int, right_seconds: int) -> bool {
+    return left_seconds > right_seconds
+}

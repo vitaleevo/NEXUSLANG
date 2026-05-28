@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 
 use crate::ast::*;
+use crate::model_ops::{
+    CheckedModelOperationArgs, ModelOperationStorageCategory, ModelStaticOperation,
+};
+use crate::route_hir::{checked_routes, CheckedRouteExpr, CheckedRouteView};
 
 use super::auth::{self, AuthenticatedUser};
 use super::http::{json_response, method_name, route_error_status, HttpResponse};
@@ -39,7 +43,7 @@ pub(crate) fn handle_request_with_headers(
     }
 
     let mut best_match = None;
-    for route in routes(program) {
+    for route in checked_routes(program) {
         if method_name(route.method) != method {
             continue;
         }
@@ -69,7 +73,7 @@ pub(crate) fn handle_request_with_headers(
                 format!(r#"{{"error":"{}"}}"#, escape_json(&e)),
             );
         }
-        let auth_context = match authenticate_route(program, storage, &route, headers) {
+        let auth_context = match authenticate_route(program, storage, &route, method, headers) {
             Ok(user) => user,
             Err(e) => {
                 return json_response(
@@ -101,11 +105,14 @@ pub(crate) fn handle_request_with_headers(
 fn authenticate_route(
     program: &Program,
     storage: &Storage,
-    route: &RouteView<'_>,
+    route: &CheckedRouteView<'_>,
+    method: &str,
     headers: &[(String, String)],
 ) -> Result<Option<AuthenticatedUser>, String> {
     match route.auth {
-        Some(guard) => auth::authenticate_request(program, storage, guard, headers).map(Some),
+        Some(guard) => {
+            auth::authenticate_request(program, storage, guard, method, headers).map(Some)
+        }
         None => Ok(None),
     }
 }
@@ -118,7 +125,7 @@ fn route_path_specificity(path: &str) -> usize {
 }
 
 fn bind_query_params(
-    route: &RouteView<'_>,
+    route: &CheckedRouteView<'_>,
     query_values: &HashMap<String, String>,
     params: &mut HashMap<String, ServerValue>,
     storage: &Storage,
@@ -247,19 +254,8 @@ fn parse_query_money(name: &str, raw: &str) -> Result<ServerValue, String> {
     Ok(ServerValue::Money(amount, currency.to_string()))
 }
 
-fn is_model_create_call(expr: &Expr) -> bool {
-    matches!(
-        expr,
-        Expr::StaticCall {
-            method,
-            args,
-            ..
-        } if method == "create" && args.is_empty()
-    )
-}
-
 fn eval_route(
-    route: &RouteView<'_>,
+    route: &CheckedRouteView<'_>,
     params: &HashMap<String, ServerValue>,
     storage: &Storage,
     program: &Program,
@@ -267,52 +263,62 @@ fn eval_route(
     request_body: &str,
     auth_context: Option<&AuthenticatedUser>,
 ) -> Result<HttpResponse, String> {
-    for stmt in route.body {
-        match stmt {
-            Stmt::Return { value, .. } => {
-                if let Some(auth_response) = auth::eval_auth_return(
-                    value,
-                    program,
-                    storage,
-                    headers,
-                    request_body,
-                    auth_context,
-                ) {
-                    let auth_response = auth_response?;
-                    return Ok(HttpResponse {
-                        status: auth_response.status,
-                        content_type: "application/json",
-                        body: auth_response.body,
-                        headers: auth_response.headers,
-                    });
-                }
-                let body =
-                    eval_expr_json(value, params, storage, program, request_body, route.method)?;
-                let status =
-                    if matches!(route.method, HttpMethod::Post) && is_model_create_call(value) {
-                        201
-                    } else {
-                        200
-                    };
-                return Ok(json_response(status, body));
-            }
-            Stmt::Print { .. } | Stmt::ExprStmt { .. } | Stmt::Let { .. } | Stmt::Const { .. } => {}
-            Stmt::Assign { .. } | Stmt::If { .. } | Stmt::While { .. } | Stmt::For { .. } => {}
-        }
+    let Some(return_expr) = &route.return_expr else {
+        return Ok(json_response(200, "null".to_string()));
+    };
+
+    if let CheckedRouteExpr::AuthOperation(auth_operation) = return_expr {
+        let Some(checked_args) = auth_operation.checked_args else {
+            return Err(auth_operation.operation.argument_error(auth_operation.args));
+        };
+        let auth_response = auth::eval_checked_auth_return(
+            auth_operation.operation,
+            checked_args,
+            program,
+            storage,
+            headers,
+            request_body,
+            auth_context,
+        )?;
+        return Ok(HttpResponse {
+            status: auth_response.status,
+            content_type: "application/json",
+            body: auth_response.body,
+            headers: auth_response.headers,
+        });
     }
 
-    Ok(json_response(200, "null".to_string()))
+    let body = eval_checked_expr_json(
+        return_expr,
+        params,
+        storage,
+        program,
+        request_body,
+        route.method,
+    )?;
+    let status = if matches!(route.method, HttpMethod::Post)
+        && matches!(
+            return_expr,
+            CheckedRouteExpr::ModelOperation(operation)
+                if operation.operation.is_create()
+                    && operation.checked_args.is_some()
+        ) {
+        201
+    } else {
+        200
+    };
+    Ok(json_response(status, body))
 }
 
-fn eval_expr_json(
-    expr: &Expr,
+fn eval_checked_expr_json(
+    expr: &CheckedRouteExpr<'_>,
     params: &HashMap<String, ServerValue>,
     storage: &Storage,
     program: &Program,
     request_body: &str,
     route_method: &HttpMethod,
 ) -> Result<String, String> {
-    Ok(server_value_json(eval_expr_value(
+    Ok(server_value_json(eval_checked_expr_value(
         expr,
         params,
         storage,
@@ -320,6 +326,38 @@ fn eval_expr_json(
         request_body,
         route_method,
     )?))
+}
+
+fn eval_checked_expr_value(
+    expr: &CheckedRouteExpr<'_>,
+    params: &HashMap<String, ServerValue>,
+    storage: &Storage,
+    program: &Program,
+    request_body: &str,
+    route_method: &HttpMethod,
+) -> Result<ServerValue, String> {
+    match expr {
+        CheckedRouteExpr::ModelOperation(operation) => {
+            let ctx = RouteEvalContext {
+                params,
+                storage,
+                program,
+                request_body,
+                route_method,
+            };
+            let Some(args) = operation.checked_args else {
+                return unsupported_model_static_call(operation.model, operation.operation);
+            };
+            eval_model_static_operation(operation.operation, operation.model, args, &ctx)
+        }
+        CheckedRouteExpr::AuthOperation(operation) => Err(format!(
+            "Auth::{}() nao pode ser usado como expressao HTTP aninhada",
+            operation.operation.method_name()
+        )),
+        CheckedRouteExpr::Expr(expr) => {
+            eval_expr_value(expr, params, storage, program, request_body, route_method)
+        }
+    }
 }
 
 pub(crate) fn eval_expr_value(
@@ -438,1145 +476,814 @@ pub(crate) fn eval_expr_value(
         Expr::StaticCall {
             ty, method, args, ..
         } => {
-            if method == "all" && args.is_empty() {
-                return Ok(ServerValue::Json(storage.read_model_raw_json(ty)?));
-            }
-            if method == "all" && (args.len() == 2 || args.len() == 4) {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!(
-                        "{}::all() com argumentos so pode ser usado em GET",
-                        ty
-                    ));
-                }
-                let options = eval_all_list_options(
-                    ty,
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                return storage.list_model_records(
-                    program,
-                    ty,
-                    options.ordering,
-                    options.pagination,
-                );
-            }
-            if method == "page" && (args.len() == 2 || args.len() == 4) {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!("{}::page() so pode ser usado em GET", ty));
-                }
-                let options = eval_page_list_options(
-                    ty,
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                return storage.list_model_records_page(
-                    program,
-                    ty,
-                    options.ordering,
-                    options.pagination,
-                );
-            }
-            if method == "create" && args.is_empty() {
-                if !matches!(route_method, HttpMethod::Post) {
-                    return Err(format!("{}::create() so pode ser usado em POST", ty));
-                }
-                return storage.create_model_record(program, ty, request_body);
-            }
-            if method == "find" && args.len() == 2 {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!("{}::find() so pode ser usado em GET", ty));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => return Err(format!("{}::find() espera campo string literal", ty)),
-                };
-                let expected = eval_expr_value(
-                    &args[1],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                return storage.find_model_record(program, ty, field, &expected);
-            }
-            if method == "where" && (args.len() == 2 || args.len() == 4 || args.len() == 6) {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!("{}::where() so pode ser usado em GET", ty));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => return Err(format!("{}::where() espera campo string literal", ty)),
-                };
-                let expected = eval_expr_value(
-                    &args[1],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let options = eval_where_list_options(
-                    ty,
-                    "where",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                return storage.filter_model_records(
-                    program,
-                    ty,
-                    field,
-                    &expected,
-                    options.ordering,
-                    options.pagination,
-                );
-            }
-            if method == "where_page" && (args.len() == 4 || args.len() == 6) {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!("{}::where_page() so pode ser usado em GET", ty));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => return Err(format!("{}::where_page() espera campo string literal", ty)),
-                };
-                let expected = eval_expr_value(
-                    &args[1],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let options = eval_where_page_list_options(
-                    ty,
-                    "where_page",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                return storage.filter_model_records_page(
-                    program,
-                    ty,
-                    field,
-                    &expected,
-                    options.ordering,
-                    options.pagination,
-                );
-            }
-            if method == "where_not" && (args.len() == 2 || args.len() == 4 || args.len() == 6) {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!("{}::where_not() so pode ser usado em GET", ty));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => return Err(format!("{}::where_not() espera campo string literal", ty)),
-                };
-                let expected = eval_expr_value(
-                    &args[1],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let options = eval_where_list_options(
-                    ty,
-                    "where_not",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                return storage.filter_model_records_not(
-                    program,
-                    ty,
-                    field,
-                    &expected,
-                    options.ordering,
-                    options.pagination,
-                );
-            }
-            if method == "where_not_page" && (args.len() == 4 || args.len() == 6) {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!("{}::where_not_page() so pode ser usado em GET", ty));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => {
-                        return Err(format!(
-                            "{}::where_not_page() espera campo string literal",
-                            ty
-                        ));
-                    }
-                };
-                let expected = eval_expr_value(
-                    &args[1],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let options = eval_where_page_list_options(
-                    ty,
-                    "where_not_page",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let ListOptions {
-                    ordering,
-                    pagination,
-                } = options;
-                let items = storage
-                    .filter_model_records_not(program, ty, field, &expected, ordering, None)?;
-                return storage.paginated_array_response(items, pagination);
-            }
-            if method == "where_not_in" && (args.len() == 2 || args.len() == 4 || args.len() == 6) {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!("{}::where_not_in() so pode ser usado em GET", ty));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => {
-                        return Err(format!(
-                            "{}::where_not_in() espera campo string literal",
-                            ty
-                        ));
-                    }
-                };
-                let values = eval_expr_value(
-                    &args[1],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let ServerValue::Array(values) = values else {
-                    return Err(format!(
-                        "Requisicao invalida: {}::where_not_in() espera array de valores",
-                        ty
-                    ));
-                };
-                let options = eval_where_list_options(
-                    ty,
-                    "where_not_in",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                return storage.filter_model_records_by_not_in(
-                    program,
-                    ty,
-                    field,
-                    &values,
-                    options.ordering,
-                    options.pagination,
-                );
-            }
-            if method == "where_not_in_page" && (args.len() == 4 || args.len() == 6) {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!(
-                        "{}::where_not_in_page() so pode ser usado em GET",
-                        ty
-                    ));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => {
-                        return Err(format!(
-                            "{}::where_not_in_page() espera campo string literal",
-                            ty
-                        ));
-                    }
-                };
-                let values = eval_expr_value(
-                    &args[1],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let ServerValue::Array(values) = values else {
-                    return Err(format!(
-                        "Requisicao invalida: {}::where_not_in_page() espera array de valores",
-                        ty
-                    ));
-                };
-                let options = eval_where_page_list_options(
-                    ty,
-                    "where_not_in_page",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let ListOptions {
-                    ordering,
-                    pagination,
-                } = options;
-                let items = storage
-                    .filter_model_records_by_not_in(program, ty, field, &values, ordering, None)?;
-                return storage.paginated_array_response(items, pagination);
-            }
-            if method == "where_not_in_optional"
-                && (args.len() == 2 || args.len() == 4 || args.len() == 6)
-            {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!(
-                        "{}::where_not_in_optional() so pode ser usado em GET",
-                        ty
-                    ));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => {
-                        return Err(format!(
-                            "{}::where_not_in_optional() espera campo string literal",
-                            ty
-                        ));
-                    }
-                };
-                let values = eval_expr_value(
-                    &args[1],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let options = eval_where_list_options(
-                    ty,
-                    "where_not_in_optional",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                if matches!(values, ServerValue::Null) {
-                    return storage.list_model_records(
-                        program,
-                        ty,
-                        options.ordering,
-                        options.pagination,
-                    );
-                }
-                let ServerValue::Array(values) = values else {
-                    return Err(format!(
-                        "Requisicao invalida: {}::where_not_in_optional() espera array opcional de valores",
-                        ty
-                    ));
-                };
-                return storage.filter_model_records_by_not_in(
-                    program,
-                    ty,
-                    field,
-                    &values,
-                    options.ordering,
-                    options.pagination,
-                );
-            }
-            if method == "where_not_in_optional_page" && (args.len() == 4 || args.len() == 6) {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!(
-                        "{}::where_not_in_optional_page() so pode ser usado em GET",
-                        ty
-                    ));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => {
-                        return Err(format!(
-                            "{}::where_not_in_optional_page() espera campo string literal",
-                            ty
-                        ));
-                    }
-                };
-                let values = eval_expr_value(
-                    &args[1],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let options = eval_where_page_list_options(
-                    ty,
-                    "where_not_in_optional_page",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let ListOptions {
-                    ordering,
-                    pagination,
-                } = options;
-                if matches!(values, ServerValue::Null) {
-                    return storage.list_model_records_page(program, ty, ordering, pagination);
-                }
-                let ServerValue::Array(values) = values else {
-                    return Err(format!(
-                        "Requisicao invalida: {}::where_not_in_optional_page() espera array opcional de valores",
-                        ty
-                    ));
-                };
-                let items = storage
-                    .filter_model_records_by_not_in(program, ty, field, &values, ordering, None)?;
-                return storage.paginated_array_response(items, pagination);
-            }
-            if method == "where_optional" && (args.len() == 2 || args.len() == 4 || args.len() == 6)
-            {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!("{}::where_optional() so pode ser usado em GET", ty));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => {
-                        return Err(format!(
-                            "{}::where_optional() espera campo string literal",
-                            ty
-                        ));
-                    }
-                };
-                let expected = eval_expr_value(
-                    &args[1],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let options = eval_where_list_options(
-                    ty,
-                    "where_optional",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                if matches!(expected, ServerValue::Null) {
-                    return storage.list_model_records(
-                        program,
-                        ty,
-                        options.ordering,
-                        options.pagination,
-                    );
-                }
-                return storage.filter_model_records(
-                    program,
-                    ty,
-                    field,
-                    &expected,
-                    options.ordering,
-                    options.pagination,
-                );
-            }
-            if method == "where_optional_page" && (args.len() == 4 || args.len() == 6) {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!(
-                        "{}::where_optional_page() so pode ser usado em GET",
-                        ty
-                    ));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => {
-                        return Err(format!(
-                            "{}::where_optional_page() espera campo string literal",
-                            ty
-                        ));
-                    }
-                };
-                let expected = eval_expr_value(
-                    &args[1],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let options = eval_where_page_list_options(
-                    ty,
-                    "where_optional_page",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                if matches!(expected, ServerValue::Null) {
-                    return storage.list_model_records_page(
-                        program,
-                        ty,
-                        options.ordering,
-                        options.pagination,
-                    );
-                }
-                return storage.filter_model_records_page(
-                    program,
-                    ty,
-                    field,
-                    &expected,
-                    options.ordering,
-                    options.pagination,
-                );
-            }
-            if method == "where_in" && (args.len() == 2 || args.len() == 4 || args.len() == 6) {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!("{}::where_in() so pode ser usado em GET", ty));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => return Err(format!("{}::where_in() espera campo string literal", ty)),
-                };
-                let values = eval_expr_value(
-                    &args[1],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let ServerValue::Array(values) = values else {
-                    return Err(format!(
-                        "Requisicao invalida: {}::where_in() espera array de valores",
-                        ty
-                    ));
-                };
-                let options = eval_where_list_options(
-                    ty,
-                    "where_in",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                return storage.filter_model_records_by_in(
-                    program,
-                    ty,
-                    field,
-                    &values,
-                    options.ordering,
-                    options.pagination,
-                );
-            }
-            if method == "where_in_page" && (args.len() == 4 || args.len() == 6) {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!("{}::where_in_page() so pode ser usado em GET", ty));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => {
-                        return Err(format!(
-                            "{}::where_in_page() espera campo string literal",
-                            ty
-                        ));
-                    }
-                };
-                let values = eval_expr_value(
-                    &args[1],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let ServerValue::Array(values) = values else {
-                    return Err(format!(
-                        "Requisicao invalida: {}::where_in_page() espera array de valores",
-                        ty
-                    ));
-                };
-                let options = eval_where_page_list_options(
-                    ty,
-                    "where_in_page",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let ListOptions {
-                    ordering,
-                    pagination,
-                } = options;
-                let items = storage
-                    .filter_model_records_by_in(program, ty, field, &values, ordering, None)?;
-                return storage.paginated_array_response(items, pagination);
-            }
-            if method == "where_in_optional"
-                && (args.len() == 2 || args.len() == 4 || args.len() == 6)
-            {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!(
-                        "{}::where_in_optional() so pode ser usado em GET",
-                        ty
-                    ));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => {
-                        return Err(format!(
-                            "{}::where_in_optional() espera campo string literal",
-                            ty
-                        ));
-                    }
-                };
-                let values = eval_expr_value(
-                    &args[1],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let options = eval_where_list_options(
-                    ty,
-                    "where_in_optional",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                if matches!(values, ServerValue::Null) {
-                    return storage.list_model_records(
-                        program,
-                        ty,
-                        options.ordering,
-                        options.pagination,
-                    );
-                }
-                let ServerValue::Array(values) = values else {
-                    return Err(format!(
-                        "Requisicao invalida: {}::where_in_optional() espera array opcional de valores",
-                        ty
-                    ));
-                };
-                return storage.filter_model_records_by_in(
-                    program,
-                    ty,
-                    field,
-                    &values,
-                    options.ordering,
-                    options.pagination,
-                );
-            }
-            if method == "where_in_optional_page" && (args.len() == 4 || args.len() == 6) {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!(
-                        "{}::where_in_optional_page() so pode ser usado em GET",
-                        ty
-                    ));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => {
-                        return Err(format!(
-                            "{}::where_in_optional_page() espera campo string literal",
-                            ty
-                        ));
-                    }
-                };
-                let values = eval_expr_value(
-                    &args[1],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let options = eval_where_page_list_options(
-                    ty,
-                    "where_in_optional_page",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let ListOptions {
-                    ordering,
-                    pagination,
-                } = options;
-                if matches!(values, ServerValue::Null) {
-                    return storage.list_model_records_page(program, ty, ordering, pagination);
-                }
-                let ServerValue::Array(values) = values else {
-                    return Err(format!(
-                        "Requisicao invalida: {}::where_in_optional_page() espera array opcional de valores",
-                        ty
-                    ));
-                };
-                let items = storage
-                    .filter_model_records_by_in(program, ty, field, &values, ordering, None)?;
-                return storage.paginated_array_response(items, pagination);
-            }
-            if method == "where_compare" && (args.len() == 3 || args.len() == 5 || args.len() == 7)
-            {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!("{}::where_compare() so pode ser usado em GET", ty));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => {
-                        return Err(format!(
-                            "{}::where_compare() espera campo string literal",
-                            ty
-                        ));
-                    }
-                };
-                let operator = match &args[1] {
-                    Expr::StringLit { value, .. } => parse_compare_operator(ty, value)?,
-                    _ => {
-                        return Err(format!(
-                            "{}::where_compare() espera operador string literal",
-                            ty
-                        ));
-                    }
-                };
-                let expected = eval_expr_value(
-                    &args[2],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let options = eval_where_compare_list_options(
-                    ty,
-                    "where_compare",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                return storage.filter_model_records_by_comparison(
-                    program,
-                    ty,
-                    field,
-                    operator,
-                    &expected,
-                    options.ordering,
-                    options.pagination,
-                );
-            }
-            if method == "where_compare_page" && (args.len() == 5 || args.len() == 7) {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!(
-                        "{}::where_compare_page() so pode ser usado em GET",
-                        ty
-                    ));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => {
-                        return Err(format!(
-                            "{}::where_compare_page() espera campo string literal",
-                            ty
-                        ));
-                    }
-                };
-                let operator = match &args[1] {
-                    Expr::StringLit { value, .. } => parse_compare_operator(ty, value)?,
-                    _ => {
-                        return Err(format!(
-                            "{}::where_compare_page() espera operador string literal",
-                            ty
-                        ));
-                    }
-                };
-                let expected = eval_expr_value(
-                    &args[2],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let options = eval_where_compare_list_options(
-                    ty,
-                    "where_compare_page",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let ListOptions {
-                    ordering,
-                    pagination,
-                } = options;
-                let items = storage.filter_model_records_by_comparison(
-                    program, ty, field, operator, &expected, ordering, None,
-                )?;
-                return storage.paginated_array_response(items, pagination);
-            }
-            if method == "where_text" && (args.len() == 3 || args.len() == 5 || args.len() == 7) {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!("{}::where_text() so pode ser usado em GET", ty));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => return Err(format!("{}::where_text() espera campo string literal", ty)),
-                };
-                let operator = match &args[1] {
-                    Expr::StringLit { value, .. } => parse_text_operator(ty, value)?,
-                    _ => {
-                        return Err(format!(
-                            "{}::where_text() espera operador textual string literal",
-                            ty
-                        ));
-                    }
-                };
-                let expected = eval_expr_value(
-                    &args[2],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let options = eval_where_compare_list_options(
-                    ty,
-                    "where_text",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                return storage.filter_model_records_by_text(
-                    program,
-                    ty,
-                    field,
-                    operator,
-                    &expected,
-                    options.ordering,
-                    options.pagination,
-                );
-            }
-            if method == "where_text_page" && (args.len() == 5 || args.len() == 7) {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!(
-                        "{}::where_text_page() so pode ser usado em GET",
-                        ty
-                    ));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => {
-                        return Err(format!(
-                            "{}::where_text_page() espera campo string literal",
-                            ty
-                        ))
-                    }
-                };
-                let operator = match &args[1] {
-                    Expr::StringLit { value, .. } => parse_text_operator(ty, value)?,
-                    _ => {
-                        return Err(format!(
-                            "{}::where_text_page() espera operador textual string literal",
-                            ty
-                        ));
-                    }
-                };
-                let expected = eval_expr_value(
-                    &args[2],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let options = eval_where_compare_list_options(
-                    ty,
-                    "where_text_page",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let ListOptions {
-                    ordering,
-                    pagination,
-                } = options;
-                let items = storage.filter_model_records_by_text(
-                    program, ty, field, operator, &expected, ordering, None,
-                )?;
-                return storage.paginated_array_response(items, pagination);
-            }
-            if method == "where_between" && (args.len() == 3 || args.len() == 5 || args.len() == 7)
-            {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!("{}::where_between() so pode ser usado em GET", ty));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => {
-                        return Err(format!(
-                            "{}::where_between() espera campo string literal",
-                            ty
-                        ));
-                    }
-                };
-                let min = eval_expr_value(
-                    &args[1],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let max = eval_expr_value(
-                    &args[2],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let options = eval_where_compare_list_options(
-                    ty,
-                    "where_between",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                return storage.filter_model_records_by_range(
-                    program,
-                    ty,
-                    field,
-                    &min,
-                    &max,
-                    options.ordering,
-                    options.pagination,
-                );
-            }
-            if method == "where_between_page" && (args.len() == 5 || args.len() == 7) {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!(
-                        "{}::where_between_page() so pode ser usado em GET",
-                        ty
-                    ));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => {
-                        return Err(format!(
-                            "{}::where_between_page() espera campo string literal",
-                            ty
-                        ));
-                    }
-                };
-                let min = eval_expr_value(
-                    &args[1],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let max = eval_expr_value(
-                    &args[2],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let options = eval_where_compare_list_options(
-                    ty,
-                    "where_between_page",
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let ListOptions {
-                    ordering,
-                    pagination,
-                } = options;
-                let items = storage.filter_model_records_by_range(
-                    program, ty, field, &min, &max, ordering, None,
-                )?;
-                return storage.paginated_array_response(items, pagination);
-            }
-            if method == "where_all" && where_all_filter_arg_count(args).is_some() {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!("{}::where_all() so pode ser usado em GET", ty));
-                }
-                let (filters, options) = eval_where_all_filters_and_options(
-                    ty,
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                return storage.filter_model_records_by_filters(
-                    program,
-                    ty,
-                    &filters,
-                    options.ordering,
-                    options.pagination,
-                );
-            }
-            if method == "where_all_page" && where_all_page_filter_arg_count(args).is_some() {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!("{}::where_all_page() so pode ser usado em GET", ty));
-                }
-                let (filters, options) = eval_where_all_page_filters_and_options(
-                    ty,
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let ListOptions {
-                    ordering,
-                    pagination,
-                } = options;
-                let items = storage
-                    .filter_model_records_by_filters(program, ty, &filters, ordering, None)?;
-                return storage.paginated_array_response(items, pagination);
-            }
-            if method == "where_any" && where_all_filter_arg_count(args).is_some() {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!("{}::where_any() so pode ser usado em GET", ty));
-                }
-                let (filters, options) = eval_where_any_filters_and_options(
-                    ty,
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                return storage.filter_model_records_by_any_filters(
-                    program,
-                    ty,
-                    &filters,
-                    options.ordering,
-                    options.pagination,
-                );
-            }
-            if method == "where_any_page" && where_all_page_filter_arg_count(args).is_some() {
-                if !matches!(route_method, HttpMethod::Get) {
-                    return Err(format!("{}::where_any_page() so pode ser usado em GET", ty));
-                }
-                let (filters, options) = eval_where_any_page_filters_and_options(
-                    ty,
-                    args,
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                let ListOptions {
-                    ordering,
-                    pagination,
-                } = options;
-                let items = storage
-                    .filter_model_records_by_any_filters(program, ty, &filters, ordering, None)?;
-                return storage.paginated_array_response(items, pagination);
-            }
-            if method == "update" && args.len() == 2 {
-                if !matches!(route_method, HttpMethod::Put) {
-                    return Err(format!("{}::update() so pode ser usado em PUT", ty));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => return Err(format!("{}::update() espera campo string literal", ty)),
-                };
-                let expected = eval_expr_value(
-                    &args[1],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                return storage.update_model_record(program, ty, field, &expected, request_body);
-            }
-            if method == "delete" && args.len() == 2 {
-                if !matches!(route_method, HttpMethod::Delete) {
-                    return Err(format!("{}::delete() so pode ser usado em DELETE", ty));
-                }
-                let field = match &args[0] {
-                    Expr::StringLit { value, .. } => value,
-                    _ => return Err(format!("{}::delete() espera campo string literal", ty)),
-                };
-                let expected = eval_expr_value(
-                    &args[1],
-                    params,
-                    storage,
-                    program,
-                    request_body,
-                    route_method,
-                )?;
-                return storage.delete_model_record(program, ty, field, &expected);
-            }
-            Err(format!(
-                "Static call '{}::{}' nao suportada em HTTP",
-                ty, method
-            ))
+            let Some(operation) = ModelStaticOperation::from_method(method) else {
+                return Err(format!(
+                    "Static call '{}::{}' nao suportada em HTTP",
+                    ty, method
+                ));
+            };
+            let ctx = RouteEvalContext {
+                params,
+                storage,
+                program,
+                request_body,
+                route_method,
+            };
+            let Some(args) = operation.checked_args(args) else {
+                return unsupported_model_static_call(ty, operation);
+            };
+            eval_model_static_operation(operation, ty, args, &ctx)
         }
     }
+}
+
+struct RouteEvalContext<'a> {
+    params: &'a HashMap<String, ServerValue>,
+    storage: &'a Storage,
+    program: &'a Program,
+    request_body: &'a str,
+    route_method: &'a HttpMethod,
+}
+
+fn eval_model_static_operation(
+    operation: ModelStaticOperation,
+    ty: &str,
+    args: CheckedModelOperationArgs<'_>,
+    ctx: &RouteEvalContext<'_>,
+) -> Result<ServerValue, String> {
+    match operation.storage_category() {
+        ModelOperationStorageCategory::ListRecords => {
+            if args.raw.is_empty() {
+                return Ok(ServerValue::Json(ctx.storage.read_model_raw_json(ty)?));
+            }
+            ensure_all_args_get(ty, ctx.route_method)?;
+            let options = eval_all_list_options(
+                ty,
+                args,
+                ctx.params,
+                ctx.storage,
+                ctx.program,
+                ctx.request_body,
+                ctx.route_method,
+            )?;
+            ctx.storage
+                .list_model_records(ctx.program, ty, options.ordering, options.pagination)
+        }
+        ModelOperationStorageCategory::PageRecords => {
+            ensure_model_runtime_route_method(ty, operation, args, ctx.route_method)?;
+            let options = eval_page_list_options(
+                ty,
+                args,
+                ctx.params,
+                ctx.storage,
+                ctx.program,
+                ctx.request_body,
+                ctx.route_method,
+            )?;
+            ctx.storage.list_model_records_page(
+                ctx.program,
+                ty,
+                options.ordering,
+                options.pagination,
+            )
+        }
+        ModelOperationStorageCategory::CreateRecord => {
+            ensure_model_runtime_route_method(ty, operation, args, ctx.route_method)?;
+            ctx.storage
+                .create_model_record(ctx.program, ty, ctx.request_body)
+        }
+        ModelOperationStorageCategory::FindRecord => {
+            ensure_model_runtime_route_method(ty, operation, args, ctx.route_method)?;
+            let (field_arg, value_arg) = lookup_args(ty, operation, args)?;
+            let field = model_string_arg(
+                ty,
+                operation.method_name(),
+                field_arg,
+                "campo string literal",
+            )?;
+            let expected = eval_route_arg(value_arg, ctx)?;
+            ctx.storage
+                .find_model_record(ctx.program, ty, field, &expected)
+        }
+        ModelOperationStorageCategory::EqualityFilter { negated } => {
+            ensure_model_runtime_route_method(ty, operation, args, ctx.route_method)?;
+            let method = operation.method_name();
+            let (field_arg, value_arg) = lookup_args(ty, operation, args)?;
+            let field = model_string_arg(ty, method, field_arg, "campo string literal")?;
+            let expected = eval_route_arg(value_arg, ctx)?;
+            if args.has_page_response() {
+                let options = eval_where_page_list_options(
+                    ty,
+                    method,
+                    args,
+                    ctx.params,
+                    ctx.storage,
+                    ctx.program,
+                    ctx.request_body,
+                    ctx.route_method,
+                )?;
+                if negated {
+                    let ListOptions {
+                        ordering,
+                        pagination,
+                    } = options;
+                    let items = ctx.storage.filter_model_records_not(
+                        ctx.program,
+                        ty,
+                        field,
+                        &expected,
+                        ordering,
+                        None,
+                    )?;
+                    return ctx.storage.paginated_array_response(items, pagination);
+                }
+                return ctx.storage.filter_model_records_page(
+                    ctx.program,
+                    ty,
+                    field,
+                    &expected,
+                    options.ordering,
+                    options.pagination,
+                );
+            }
+
+            let options = eval_where_list_options(
+                ty,
+                method,
+                args,
+                ctx.params,
+                ctx.storage,
+                ctx.program,
+                ctx.request_body,
+                ctx.route_method,
+            )?;
+            if negated {
+                ctx.storage.filter_model_records_not(
+                    ctx.program,
+                    ty,
+                    field,
+                    &expected,
+                    options.ordering,
+                    options.pagination,
+                )
+            } else {
+                ctx.storage.filter_model_records(
+                    ctx.program,
+                    ty,
+                    field,
+                    &expected,
+                    options.ordering,
+                    options.pagination,
+                )
+            }
+        }
+        ModelOperationStorageCategory::InclusionFilter { negated } => {
+            ensure_model_runtime_route_method(ty, operation, args, ctx.route_method)?;
+            let method = operation.method_name();
+            let (field_arg, value_arg) = lookup_args(ty, operation, args)?;
+            let field = model_string_arg(ty, method, field_arg, "campo string literal")?;
+            let values = expect_array_values(ty, method, eval_route_arg(value_arg, ctx)?, false)?;
+            if args.has_page_response() {
+                let options = eval_where_page_list_options(
+                    ty,
+                    method,
+                    args,
+                    ctx.params,
+                    ctx.storage,
+                    ctx.program,
+                    ctx.request_body,
+                    ctx.route_method,
+                )?;
+                let ListOptions {
+                    ordering,
+                    pagination,
+                } = options;
+                let items = if negated {
+                    ctx.storage.filter_model_records_by_not_in(
+                        ctx.program,
+                        ty,
+                        field,
+                        &values,
+                        ordering,
+                        None,
+                    )?
+                } else {
+                    ctx.storage.filter_model_records_by_in(
+                        ctx.program,
+                        ty,
+                        field,
+                        &values,
+                        ordering,
+                        None,
+                    )?
+                };
+                return ctx.storage.paginated_array_response(items, pagination);
+            }
+
+            let options = eval_where_list_options(
+                ty,
+                method,
+                args,
+                ctx.params,
+                ctx.storage,
+                ctx.program,
+                ctx.request_body,
+                ctx.route_method,
+            )?;
+            if negated {
+                ctx.storage.filter_model_records_by_not_in(
+                    ctx.program,
+                    ty,
+                    field,
+                    &values,
+                    options.ordering,
+                    options.pagination,
+                )
+            } else {
+                ctx.storage.filter_model_records_by_in(
+                    ctx.program,
+                    ty,
+                    field,
+                    &values,
+                    options.ordering,
+                    options.pagination,
+                )
+            }
+        }
+        ModelOperationStorageCategory::OptionalEqualityFilter => {
+            eval_optional_filter(operation, ty, args, ctx)
+        }
+        ModelOperationStorageCategory::OptionalInclusionFilter
+        | ModelOperationStorageCategory::OptionalExclusionFilter => {
+            eval_optional_array_filter(operation, ty, args, ctx)
+        }
+        ModelOperationStorageCategory::ComparisonFilter => {
+            eval_compare_filter(operation, ty, args, ctx)
+        }
+        ModelOperationStorageCategory::TextFilter => eval_text_filter(operation, ty, args, ctx),
+        ModelOperationStorageCategory::RangeFilter => eval_between_filter(operation, ty, args, ctx),
+        ModelOperationStorageCategory::CompositeFilter { .. } => {
+            eval_composite_filter(operation, ty, args, ctx)
+        }
+        ModelOperationStorageCategory::UpdateRecord => {
+            ensure_model_runtime_route_method(ty, operation, args, ctx.route_method)?;
+            let method = operation.method_name();
+            let (field_arg, value_arg) = lookup_args(ty, operation, args)?;
+            let field = model_string_arg(ty, method, field_arg, "campo string literal")?;
+            let expected = eval_route_arg(value_arg, ctx)?;
+            ctx.storage
+                .update_model_record(ctx.program, ty, field, &expected, ctx.request_body)
+        }
+        ModelOperationStorageCategory::DeleteRecord => {
+            ensure_model_runtime_route_method(ty, operation, args, ctx.route_method)?;
+            let method = operation.method_name();
+            let (field_arg, value_arg) = lookup_args(ty, operation, args)?;
+            let field = model_string_arg(ty, method, field_arg, "campo string literal")?;
+            let expected = eval_route_arg(value_arg, ctx)?;
+            ctx.storage
+                .delete_model_record(ctx.program, ty, field, &expected)
+        }
+    }
+}
+
+fn eval_optional_filter(
+    operation: ModelStaticOperation,
+    ty: &str,
+    args: CheckedModelOperationArgs<'_>,
+    ctx: &RouteEvalContext<'_>,
+) -> Result<ServerValue, String> {
+    let paged = args.has_page_response();
+    ensure_model_runtime_route_method(ty, operation, args, ctx.route_method)?;
+    let method = operation.method_name();
+    let (field_arg, value_arg) = lookup_args(ty, operation, args)?;
+    let field = model_string_arg(ty, method, field_arg, "campo string literal")?;
+    let expected = eval_route_arg(value_arg, ctx)?;
+
+    if paged {
+        let options = eval_where_page_list_options(
+            ty,
+            method,
+            args,
+            ctx.params,
+            ctx.storage,
+            ctx.program,
+            ctx.request_body,
+            ctx.route_method,
+        )?;
+        if matches!(expected, ServerValue::Null) {
+            return ctx.storage.list_model_records_page(
+                ctx.program,
+                ty,
+                options.ordering,
+                options.pagination,
+            );
+        }
+        return ctx.storage.filter_model_records_page(
+            ctx.program,
+            ty,
+            field,
+            &expected,
+            options.ordering,
+            options.pagination,
+        );
+    }
+
+    let options = eval_where_list_options(
+        ty,
+        method,
+        args,
+        ctx.params,
+        ctx.storage,
+        ctx.program,
+        ctx.request_body,
+        ctx.route_method,
+    )?;
+    if matches!(expected, ServerValue::Null) {
+        return ctx.storage.list_model_records(
+            ctx.program,
+            ty,
+            options.ordering,
+            options.pagination,
+        );
+    }
+    ctx.storage.filter_model_records(
+        ctx.program,
+        ty,
+        field,
+        &expected,
+        options.ordering,
+        options.pagination,
+    )
+}
+
+fn eval_optional_array_filter(
+    operation: ModelStaticOperation,
+    ty: &str,
+    args: CheckedModelOperationArgs<'_>,
+    ctx: &RouteEvalContext<'_>,
+) -> Result<ServerValue, String> {
+    let paged = args.has_page_response();
+    ensure_model_runtime_route_method(ty, operation, args, ctx.route_method)?;
+    let method = operation.method_name();
+    let (field_arg, value_arg) = lookup_args(ty, operation, args)?;
+    let field = model_string_arg(ty, method, field_arg, "campo string literal")?;
+    let values = eval_route_arg(value_arg, ctx)?;
+    let negated = match operation.storage_category() {
+        ModelOperationStorageCategory::OptionalInclusionFilter => false,
+        ModelOperationStorageCategory::OptionalExclusionFilter => true,
+        _ => return unsupported_model_static_call(ty, operation),
+    };
+
+    if paged {
+        let options = eval_where_page_list_options(
+            ty,
+            method,
+            args,
+            ctx.params,
+            ctx.storage,
+            ctx.program,
+            ctx.request_body,
+            ctx.route_method,
+        )?;
+        let ListOptions {
+            ordering,
+            pagination,
+        } = options;
+        if matches!(values, ServerValue::Null) {
+            return ctx
+                .storage
+                .list_model_records_page(ctx.program, ty, ordering, pagination);
+        }
+        let values = expect_array_values(ty, method, values, true)?;
+        let items = if negated {
+            ctx.storage.filter_model_records_by_not_in(
+                ctx.program,
+                ty,
+                field,
+                &values,
+                ordering,
+                None,
+            )?
+        } else {
+            ctx.storage.filter_model_records_by_in(
+                ctx.program,
+                ty,
+                field,
+                &values,
+                ordering,
+                None,
+            )?
+        };
+        return ctx.storage.paginated_array_response(items, pagination);
+    }
+
+    let options = eval_where_list_options(
+        ty,
+        method,
+        args,
+        ctx.params,
+        ctx.storage,
+        ctx.program,
+        ctx.request_body,
+        ctx.route_method,
+    )?;
+    if matches!(values, ServerValue::Null) {
+        return ctx.storage.list_model_records(
+            ctx.program,
+            ty,
+            options.ordering,
+            options.pagination,
+        );
+    }
+    let values = expect_array_values(ty, method, values, true)?;
+    if negated {
+        ctx.storage.filter_model_records_by_not_in(
+            ctx.program,
+            ty,
+            field,
+            &values,
+            options.ordering,
+            options.pagination,
+        )
+    } else {
+        ctx.storage.filter_model_records_by_in(
+            ctx.program,
+            ty,
+            field,
+            &values,
+            options.ordering,
+            options.pagination,
+        )
+    }
+}
+
+fn eval_compare_filter(
+    operation: ModelStaticOperation,
+    ty: &str,
+    args: CheckedModelOperationArgs<'_>,
+    ctx: &RouteEvalContext<'_>,
+) -> Result<ServerValue, String> {
+    let paged = args.has_page_response();
+    ensure_model_runtime_route_method(ty, operation, args, ctx.route_method)?;
+    let method = operation.method_name();
+    let (field_arg, operator_arg, value_arg) = advanced_filter_args(ty, operation, args)?;
+    let field = model_string_arg(ty, method, field_arg, "campo string literal")?;
+    let operator = parse_compare_operator(
+        ty,
+        model_string_arg(ty, method, operator_arg, "operador string literal")?,
+    )?;
+    let expected = eval_route_arg(value_arg, ctx)?;
+    let options = eval_where_compare_list_options(
+        ty,
+        method,
+        args,
+        ctx.params,
+        ctx.storage,
+        ctx.program,
+        ctx.request_body,
+        ctx.route_method,
+    )?;
+    if paged {
+        let ListOptions {
+            ordering,
+            pagination,
+        } = options;
+        let items = ctx.storage.filter_model_records_by_comparison(
+            ctx.program,
+            ty,
+            field,
+            operator,
+            &expected,
+            ordering,
+            None,
+        )?;
+        return ctx.storage.paginated_array_response(items, pagination);
+    }
+    ctx.storage.filter_model_records_by_comparison(
+        ctx.program,
+        ty,
+        field,
+        operator,
+        &expected,
+        options.ordering,
+        options.pagination,
+    )
+}
+
+fn eval_text_filter(
+    operation: ModelStaticOperation,
+    ty: &str,
+    args: CheckedModelOperationArgs<'_>,
+    ctx: &RouteEvalContext<'_>,
+) -> Result<ServerValue, String> {
+    let paged = args.has_page_response();
+    ensure_model_runtime_route_method(ty, operation, args, ctx.route_method)?;
+    let method = operation.method_name();
+    let (field_arg, operator_arg, value_arg) = advanced_filter_args(ty, operation, args)?;
+    let field = model_string_arg(ty, method, field_arg, "campo string literal")?;
+    let operator = parse_text_operator(
+        ty,
+        model_string_arg(ty, method, operator_arg, "operador textual string literal")?,
+    )?;
+    let expected = eval_route_arg(value_arg, ctx)?;
+    let options = eval_where_compare_list_options(
+        ty,
+        method,
+        args,
+        ctx.params,
+        ctx.storage,
+        ctx.program,
+        ctx.request_body,
+        ctx.route_method,
+    )?;
+    if paged {
+        let ListOptions {
+            ordering,
+            pagination,
+        } = options;
+        let items = ctx.storage.filter_model_records_by_text(
+            ctx.program,
+            ty,
+            field,
+            operator,
+            &expected,
+            ordering,
+            None,
+        )?;
+        return ctx.storage.paginated_array_response(items, pagination);
+    }
+    ctx.storage.filter_model_records_by_text(
+        ctx.program,
+        ty,
+        field,
+        operator,
+        &expected,
+        options.ordering,
+        options.pagination,
+    )
+}
+
+fn eval_between_filter(
+    operation: ModelStaticOperation,
+    ty: &str,
+    args: CheckedModelOperationArgs<'_>,
+    ctx: &RouteEvalContext<'_>,
+) -> Result<ServerValue, String> {
+    let paged = args.has_page_response();
+    ensure_model_runtime_route_method(ty, operation, args, ctx.route_method)?;
+    let method = operation.method_name();
+    let (field_arg, min_arg, max_arg) = range_filter_args(ty, operation, args)?;
+    let field = model_string_arg(ty, method, field_arg, "campo string literal")?;
+    let min = eval_route_arg(min_arg, ctx)?;
+    let max = eval_route_arg(max_arg, ctx)?;
+    let options = eval_where_compare_list_options(
+        ty,
+        method,
+        args,
+        ctx.params,
+        ctx.storage,
+        ctx.program,
+        ctx.request_body,
+        ctx.route_method,
+    )?;
+    if paged {
+        let ListOptions {
+            ordering,
+            pagination,
+        } = options;
+        let items = ctx.storage.filter_model_records_by_range(
+            ctx.program,
+            ty,
+            field,
+            &min,
+            &max,
+            ordering,
+            None,
+        )?;
+        return ctx.storage.paginated_array_response(items, pagination);
+    }
+    ctx.storage.filter_model_records_by_range(
+        ctx.program,
+        ty,
+        field,
+        &min,
+        &max,
+        options.ordering,
+        options.pagination,
+    )
+}
+
+fn eval_composite_filter(
+    operation: ModelStaticOperation,
+    ty: &str,
+    args: CheckedModelOperationArgs<'_>,
+    ctx: &RouteEvalContext<'_>,
+) -> Result<ServerValue, String> {
+    let paged = args.has_page_response();
+    let ModelOperationStorageCategory::CompositeFilter { any } = operation.storage_category()
+    else {
+        return unsupported_model_static_call(ty, operation);
+    };
+    ensure_model_runtime_route_method(ty, operation, args, ctx.route_method)?;
+
+    if paged {
+        let (filters, options) = if any {
+            eval_where_any_page_filters_and_options(
+                ty,
+                args,
+                ctx.params,
+                ctx.storage,
+                ctx.program,
+                ctx.request_body,
+                ctx.route_method,
+            )?
+        } else {
+            eval_where_all_page_filters_and_options(
+                ty,
+                args,
+                ctx.params,
+                ctx.storage,
+                ctx.program,
+                ctx.request_body,
+                ctx.route_method,
+            )?
+        };
+        let ListOptions {
+            ordering,
+            pagination,
+        } = options;
+        let items = if any {
+            ctx.storage.filter_model_records_by_any_filters(
+                ctx.program,
+                ty,
+                &filters,
+                ordering,
+                None,
+            )?
+        } else {
+            ctx.storage.filter_model_records_by_filters(
+                ctx.program,
+                ty,
+                &filters,
+                ordering,
+                None,
+            )?
+        };
+        return ctx.storage.paginated_array_response(items, pagination);
+    }
+
+    let (filters, options) = if any {
+        eval_where_any_filters_and_options(
+            ty,
+            args,
+            ctx.params,
+            ctx.storage,
+            ctx.program,
+            ctx.request_body,
+            ctx.route_method,
+        )?
+    } else {
+        eval_where_all_filters_and_options(
+            ty,
+            args,
+            ctx.params,
+            ctx.storage,
+            ctx.program,
+            ctx.request_body,
+            ctx.route_method,
+        )?
+    };
+    if any {
+        ctx.storage.filter_model_records_by_any_filters(
+            ctx.program,
+            ty,
+            &filters,
+            options.ordering,
+            options.pagination,
+        )
+    } else {
+        ctx.storage.filter_model_records_by_filters(
+            ctx.program,
+            ty,
+            &filters,
+            options.ordering,
+            options.pagination,
+        )
+    }
+}
+
+fn eval_route_arg(expr: &Expr, ctx: &RouteEvalContext<'_>) -> Result<ServerValue, String> {
+    eval_expr_value(
+        expr,
+        ctx.params,
+        ctx.storage,
+        ctx.program,
+        ctx.request_body,
+        ctx.route_method,
+    )
+}
+
+fn model_string_arg<'a>(
+    ty: &str,
+    method: &str,
+    expr: &'a Expr,
+    expected: &str,
+) -> Result<&'a str, String> {
+    match expr {
+        Expr::StringLit { value, .. } => Ok(value),
+        _ => Err(format!("{}::{}() espera {}", ty, method, expected)),
+    }
+}
+
+fn expect_array_values(
+    ty: &str,
+    method: &str,
+    value: ServerValue,
+    optional: bool,
+) -> Result<Vec<ServerValue>, String> {
+    let ServerValue::Array(values) = value else {
+        let qualifier = if optional { "array opcional" } else { "array" };
+        return Err(format!(
+            "Requisicao invalida: {}::{}() espera {} de valores",
+            ty, method, qualifier
+        ));
+    };
+    Ok(values)
+}
+
+fn ensure_all_args_get(ty: &str, route_method: &HttpMethod) -> Result<(), String> {
+    let Some(required) = ModelStaticOperation::All.required_route_method(2) else {
+        return Ok(());
+    };
+    if required.matches(route_method) {
+        Ok(())
+    } else {
+        Err(format!(
+            "{}::all() com argumentos so pode ser usado em GET",
+            ty
+        ))
+    }
+}
+
+fn ensure_model_runtime_route_method(
+    ty: &str,
+    operation: ModelStaticOperation,
+    args: CheckedModelOperationArgs<'_>,
+    route_method: &HttpMethod,
+) -> Result<(), String> {
+    let Some(required) = operation.required_route_method(args.raw.len()) else {
+        return Ok(());
+    };
+    if required.matches(route_method) {
+        Ok(())
+    } else {
+        Err(format!(
+            "{}::{}() so pode ser usado em {}",
+            ty,
+            operation.method_name(),
+            required.name()
+        ))
+    }
+}
+
+fn lookup_args<'a>(
+    ty: &str,
+    operation: ModelStaticOperation,
+    args: CheckedModelOperationArgs<'a>,
+) -> Result<(&'a Expr, &'a Expr), String> {
+    args.lookup()
+        .ok_or_else(|| unsupported_model_static_call_message(ty, operation))
+}
+
+fn advanced_filter_args<'a>(
+    ty: &str,
+    operation: ModelStaticOperation,
+    args: CheckedModelOperationArgs<'a>,
+) -> Result<(&'a Expr, &'a Expr, &'a Expr), String> {
+    args.advanced_filter()
+        .ok_or_else(|| unsupported_model_static_call_message(ty, operation))
+}
+
+fn range_filter_args<'a>(
+    ty: &str,
+    operation: ModelStaticOperation,
+    args: CheckedModelOperationArgs<'a>,
+) -> Result<(&'a Expr, &'a Expr, &'a Expr), String> {
+    args.range_filter()
+        .ok_or_else(|| unsupported_model_static_call_message(ty, operation))
+}
+
+fn unsupported_model_static_call(
+    ty: &str,
+    operation: ModelStaticOperation,
+) -> Result<ServerValue, String> {
+    Err(unsupported_model_static_call_message(ty, operation))
+}
+
+fn unsupported_model_static_call_message(ty: &str, operation: ModelStaticOperation) -> String {
+    format!(
+        "Static call '{}::{}' nao suportada em HTTP",
+        ty,
+        operation.method_name()
+    )
 }

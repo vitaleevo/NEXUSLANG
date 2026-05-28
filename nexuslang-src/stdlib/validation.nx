@@ -1,0 +1,21 @@
+// NexusLang Standard Library - Validation Utilities
+
+export fn is_blank(s: string) -> bool {
+    return __std_validation_is_blank(s)
+}
+
+export fn min_len(s: string, min: int) -> bool {
+    return len(s) >= min
+}
+
+export fn max_len(s: string, max: int) -> bool {
+    return len(s) <= max
+}
+
+export fn between_len(s: string, min: int, max: int) -> bool {
+    return len(s) >= min && len(s) <= max
+}
+
+export fn is_email(s: string) -> bool {
+    return __std_validation_is_email(s)
+}

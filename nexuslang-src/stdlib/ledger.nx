@@ -1,0 +1,26 @@
+// NexusLang Standard Library - Ledger Utilities
+
+import is_positive_money from "std/money"
+import is_zero_money from "std/money"
+
+export fn ledger_entry_label(account: string, description: string) -> string {
+    return account + ": " + description
+}
+
+export fn ledger_is_zero(amount: money) -> bool {
+    return is_zero_money(amount)
+}
+
+export fn ledger_post(balance: money, amount: money) -> money {
+    return balance + amount
+}
+
+export fn ledger_reverse(amount: money) -> money {
+    return -amount
+}
+
+export fn ledger_side(amount: money) -> string {
+    if is_positive_money(amount) { return "debit" }
+    if is_zero_money(amount) { return "zero" }
+    return "credit"
+}

@@ -1,0 +1,20 @@
+// NexusLang Standard Library - Project Utilities
+
+import max from "std/math"
+
+export fn project_progress_percent(done: int, total: int) -> float {
+    if total <= 0 { return 0.0 }
+    return done / (total * 1.0) * 100.0
+}
+
+export fn project_is_complete(done: int, total: int) -> bool {
+    return total > 0 && done >= total
+}
+
+export fn project_remaining_tasks(done: int, total: int) -> int {
+    return max(0, total - done)
+}
+
+export fn project_label(code: string, name: string) -> string {
+    return code + " - " + name
+}

@@ -1,0 +1,21 @@
+// NexusLang Standard Library - Sales Utilities
+
+export fn sales_line_total(qty: int, unit_price: money) -> money {
+    return unit_price * qty
+}
+
+export fn sales_margin(revenue: money, cost: money) -> money {
+    return revenue - cost
+}
+
+export fn sales_is_profitable(revenue: money, cost: money) -> bool {
+    return revenue > cost
+}
+
+export fn sales_commission(revenue: money, rate: float) -> money {
+    return revenue * rate
+}
+
+export fn sales_quote_label(customer: string, code: string) -> string {
+    return customer + " #" + code
+}

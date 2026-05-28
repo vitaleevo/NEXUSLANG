@@ -1,0 +1,20 @@
+// NexusLang Standard Library - KPI Utilities
+
+import abs from "std/math"
+
+export fn kpi_ratio(numerator: int, denominator: int) -> float {
+    if denominator == 0 { return 0.0 }
+    return numerator / (denominator * 1.0)
+}
+
+export fn kpi_percent(numerator: int, denominator: int) -> float {
+    return kpi_ratio(numerator, denominator) * 100.0
+}
+
+export fn kpi_is_target_met(actual: int, target: int) -> bool {
+    return actual >= target
+}
+
+export fn kpi_abs_variance(actual: int, target: int) -> int {
+    return abs(actual - target)
+}
