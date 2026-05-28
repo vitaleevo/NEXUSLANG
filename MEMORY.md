@@ -5,6 +5,17 @@ the short English-named memory requested for architecture decisions.
 
 Last updated: 2026-05-28
 
+## 2026-05-28 - RC branch pushed, PR blocked by auth
+
+- Branch `codex/prepare-nexuslang-0.2.0-rc` was pushed to
+  `origin/codex/prepare-nexuslang-0.2.0-rc`.
+- GitHub returned the PR creation URL:
+  `https://github.com/vitaleevo/NEXUSLANG/pull/new/codex/prepare-nexuslang-0.2.0-rc`.
+- Local `gh` is installed but not authenticated, so automated PR creation and
+  CI observation are blocked until `gh auth login` or manual PR creation.
+- No tag, signed artifact, strict public-release dry-run, or public GitHub
+  Release was created in this phase.
+
 ## 2026-05-28 - 0.2.0-rc.1 local RC packaging
 
 - The post-`v0.1.1` work is now organized on

@@ -5,32 +5,25 @@ repositorio.
 
 ## Status atual
 
-Fase 11.51 concluida em 2026-05-28: o RC local `0.2.0-rc.1` foi empacotado e
-validado em diretorio limpo. A branch `codex/prepare-nexuslang-0.2.0-rc` tem
-commits por escopo, quality gate local aprovada, pacote local gerado e
-`validate-release-package.sh` aprovado. Ainda falta push/PR/CI e strict
-public-release preflight antes de tag/publicacao.
+Fase 11.52 concluida em 2026-05-28: a branch
+`codex/prepare-nexuslang-0.2.0-rc` foi pushada para `origin`, mas PR/CI ainda
+nao foram criados/observados porque `gh` nao esta autenticado nesta maquina.
+O RC local `0.2.0-rc.1` ja passou quality gate, package-release e
+validate-release-package.
 
 ## Tarefas concluidas
 
-- [x] Criar branch `codex/prepare-nexuslang-0.2.0-rc`.
-- [x] Atualizar linha local para `0.2.0-rc.1`, mantendo `v0.1.1` como release
-  publica mais recente.
-- [x] Separar commits por escopo:
-  - `8ec9321 docs: prepare 0.2.0 rc handoff`
-  - `71e1a3c refactor: modularize core diagnostics and checker`
-  - `9fce40b feat: harden runtime auth storage and openapi`
-  - `ac9f9ec feat: add local packages and stdlib workflows`
-  - `bf49b7c feat: add NexusLang LSP adapter`
-  - `9c2c606 feat: refresh playground wasm artifact`
-  - `1fae863 build: tighten release packaging gates`
+- [x] Confirmar worktree limpo na branch `codex/prepare-nexuslang-0.2.0-rc`.
 - [x] Validar LSP com check, test e clippy estrito.
-- [x] Rodar quality gate ampla com clippy.
+- [x] Rodar `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`.
 - [x] Gerar pacote local `nexuslang-v0.2.0-rc.1-local-release.tar.gz`.
-- [x] Gerar checksum do pacote local.
-- [x] Validar pacote em diretorio limpo com `validate-release-package.sh`.
-- [x] Confirmar ausencia de marcadores pendentes reais fora dos diretorios
-  ignorados.
+- [x] Validar pacote em diretorio limpo com `./scripts/validate-release-package.sh`.
+- [x] Pushar branch:
+  `git push -u origin codex/prepare-nexuslang-0.2.0-rc`.
+- [x] Registrar link de PR retornado pelo GitHub:
+  `https://github.com/vitaleevo/NEXUSLANG/pull/new/codex/prepare-nexuslang-0.2.0-rc`.
+- [x] Confirmar bloqueio de PR/CI automatico: `gh auth status` falha por falta
+  de login.
 
 ## Validacao executada
 
@@ -46,35 +39,32 @@ NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
 ./scripts/validate-release-package.sh
 git diff --check
 rg de marcadores pendentes no workspace, ignorando diretorios de build
+git push -u origin codex/prepare-nexuslang-0.2.0-rc
+gh auth status
 ```
 
-Resultado: PASS. O LSP passou com 23 testes. A quality gate passou com fmt,
-check all-targets com warnings como erro, clippy all-targets, testes Rust,
-smokes HTTP/auth/storage, validacao OpenAPI e contratos. O pacote
-`nexuslang-v0.2.0-rc.1-local-release.tar.gz` foi gerado com checksum `.sha256`
-ao lado do artefato e validado em diretorio limpo.
+Resultado: PASS para LSP, quality gate, package-release, validate-release-package,
+diff check, varredura de marcadores e push da branch. `gh auth status` falhou
+porque nao ha sessao GitHub CLI autenticada; por isso PR/CI ficam para a
+proxima fase.
 
 ## Proxima fase recomendada
 
-Fase 11.52: push/PR/CI e strict public-release preflight do RC `0.2.0-rc.1`.
-Pushar a branch, abrir PR ou fluxo equivalente, observar CI verde, e so depois
-rodar `NEXUS_RELEASE_SIGNING_KEY=<fingerprint> ./scripts/release-dry-run-strict.sh`.
+Fase 11.53: criar PR/observar CI do RC `0.2.0-rc.1`. Autenticar `gh` com
+`gh auth login` ou abrir o link de PR manualmente, acompanhar checks remotos
+ate CI verde e depois rodar strict public-release preflight com chave mantida.
 
 ## Arquivos para abrir primeiro na proxima fase
 
 - `MEMORIA_NEXUSLANG.md`
 - `meta/CURRENT_TASKS.md`
 - `RELEASE_NOTES.md`
-- `VERSIONING.md`
 - `scripts/release-dry-run-strict.sh`
-- `scripts/sign-release-artifacts.sh`
 - `GITHUB_RELEASE.md`
 
 ## Riscos de compatibilidade
 
-- Nao publicar release antes de push, CI verde, strict preflight e assinatura.
+- Nao publicar tag/release antes de PR/CI verde, strict preflight e assinatura.
 - Nao prometer registry remoto real enquanto `PACKAGE_MANAGER.md` ainda o
   define como contrato futuro.
-- `0.2.0-rc.1` e RC local ate publicacao; `v0.1.1` continua sendo a release
-  publica validada.
-- O strict preflight depende de chave de assinatura mantida e acesso GitHub/CI.
+- `0.2.0-rc.1` continua RC local/remoto de branch ate PR/CI e publicacao.

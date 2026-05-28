@@ -4,7 +4,99 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-28 (Fase 11.51 - package/preflight do RC 0.2.0-rc.1)
+Ultima atualizacao: 2026-05-28 (Fase 11.52 - push do branch RC e bloqueio de PR/CI)
+
+## Etapa concluida: Fase 11.52 - push do branch RC e bloqueio de PR/CI
+
+Objetivo: iniciar o fluxo remoto do RC `0.2.0-rc.1` depois do package/preflight
+local, pushando a branch de preparacao e tentando preparar PR/CI sem publicar
+release.
+
+Foi feito:
+
+- Confirmado `git status --short --branch` limpo na branch
+  `codex/prepare-nexuslang-0.2.0-rc`.
+- Confirmado remote `origin` como
+  `https://github.com/vitaleevo/NEXUSLANG.git`.
+- Push executado com sucesso:
+  `git push -u origin codex/prepare-nexuslang-0.2.0-rc`.
+- Branch remota criada e configurada como upstream local.
+- GitHub retornou o link de criacao de PR:
+  `https://github.com/vitaleevo/NEXUSLANG/pull/new/codex/prepare-nexuslang-0.2.0-rc`.
+- Verificado que `gh` esta instalado, mas `gh auth status` falha porque nao ha
+  sessao GitHub CLI autenticada.
+- PR/CI nao foram abertos/observados nesta etapa por falta de auth do `gh` e
+  por nao haver ferramenta de criacao de PR disponivel nesta sessao.
+
+Arquivos principais:
+
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+- `MEMORY.md`
+- branch remota `origin/codex/prepare-nexuslang-0.2.0-rc`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang
+git status --short --branch
+git remote -v
+gh --version
+gh auth status
+git push -u origin codex/prepare-nexuslang-0.2.0-rc
+```
+
+Resultado:
+
+- `git status --short --branch` PASS antes do push.
+- `git push -u origin codex/prepare-nexuslang-0.2.0-rc` PASS.
+- `gh --version` PASS.
+- `gh auth status` FAIL: `You are not logged into any GitHub hosts`.
+- Release judgement: pronto localmente e branch pushada; bloqueado para PR/CI
+  remoto ate autenticar `gh` ou abrir PR manualmente pelo link do GitHub.
+
+Estado atual:
+
+- Branch RC existe no remoto.
+- RC local `0.2.0-rc.1` ja passou LSP checks, quality gate, package-release e
+  validate-release-package.
+- Ainda nao ha PR criado, CI observado, strict dry-run assinado, tag ou release
+  publica.
+
+Estado do projeto:
+
+- Fase/trilha atual: release/producao, no primeiro passo remoto do RC.
+- Solido agora: branch pushada e artefatos locais validados.
+- Falta imediato: autenticar `gh` ou abrir PR manualmente, observar CI, depois
+  rodar strict public-release preflight com chave mantida.
+- Distancia do fim: RC local esta pronto; publicacao ainda esta bloqueada por
+  etapa remota/autenticacao, nao por build/test local.
+
+## Proximo passo recomendado
+
+Fase 11.53 - criar PR/observar CI do RC `0.2.0-rc.1`: autenticar `gh` com
+`gh auth login` ou abrir o PR pelo link do GitHub, acompanhar checks ate CI
+verde, e so depois rodar strict public-release preflight.
+
+AVISO: O proximo passo e criar/implementar PR/CI do RC `0.2.0-rc.1`. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e `meta/CURRENT_TASKS.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Rodar `gh auth login` ou abrir
+  `https://github.com/vitaleevo/NEXUSLANG/pull/new/codex/prepare-nexuslang-0.2.0-rc`.
+- Criar PR draft para `main`.
+- Observar CI remoto ate passar.
+- Se CI passar, rodar `NEXUS_RELEASE_SIGNING_KEY=<fingerprint>
+  ./scripts/release-dry-run-strict.sh`.
+- So depois preparar tag/publicacao.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+- `RELEASE_NOTES.md`
+- `scripts/release-dry-run-strict.sh`
+- `GITHUB_RELEASE.md`
 
 ## Etapa concluida: Fase 11.51 - package/preflight do RC 0.2.0-rc.1
 
