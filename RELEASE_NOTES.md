@@ -28,8 +28,8 @@ stable `0.2.0` decision.
 
 ## 0.2.0-rc.2 Validation Summary
 
-This RC must be prepared from a clean branch that starts at the validated
-post-merge `main` line and must pass:
+This RC was prepared from a clean branch that starts at the validated
+post-merge `main` line and passed:
 
 ```bash
 NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
@@ -38,15 +38,23 @@ NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
 NEXUS_RELEASE_SIGNING_KEY=<fingerprint> ./scripts/release-dry-run-strict.sh
 ```
 
-The `v0.2.0-rc.2` tag must be annotated and signed. The GitHub Release must be
-published as a public pre-release, not as the latest stable release. The
+The `v0.2.0-rc.2` tag is annotated and signed. The GitHub Release is published
+as a public pre-release, not as the latest stable release. The
 `.sha256`, `.asc`, public key, and fingerprint assets attached to the
 pre-release are the source of truth for archive integrity.
 
-After publication, validate the public install path with:
+Public install validation passed with:
 
 ```bash
 NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.sh
+```
+
+Validated public archive:
+
+```text
+SHA-256: 8ed601c2751e86ca84c40cbbd0edec9b4f1266d3663299fd83e8b2b4912eea0b
+Bytes: 1590587
+WASM bytes: 479717
 ```
 
 ## 0.2.0-rc.2 Known Limits

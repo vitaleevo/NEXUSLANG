@@ -6,10 +6,9 @@ It is intentionally small: the source of truth is still the automated gate.
 ## Current readiness
 
 - Local RC target: `0.2.0-rc.2`.
-- Current RC status: post-merge public pre-release `v0.2.0-rc.2` for the
-  `main` line after PR #1. Do not promote to stable `0.2.0` until this RC has
-  public install validation, feedback review, and an explicit stable release
-  decision.
+- Current RC status: post-merge public pre-release `v0.2.0-rc.2` published and
+  public install validation passed. Do not promote to stable `0.2.0` until this
+  RC has feedback review and an explicit stable release decision.
 - Language/core: 78/100
 - Playground: 84/100
 - OpenAPI/runtime: 66/100
@@ -18,7 +17,7 @@ It is intentionally small: the source of truth is still the automated gate.
   published and post-release install validated
 - Overall project score after the latest completed release phase: 100/100
 - Public GitHub Release v0.1.1: published and post-release install validated
-- Public GitHub pre-release v0.2.0-rc.2: target for post-merge validation
+- Public GitHub pre-release v0.2.0-rc.2: published and public install validated
 - Public GitHub pre-release v0.2.0-rc.1: published and public install validated
 - Previous public GitHub Release v0.1.0: published and post-release install
   validated
@@ -174,9 +173,9 @@ NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.s
   `3237F7CC5CE2514FC9671BB93CB6808B55385273`.
 - [x] Strict release dry-run passed with maintained-key signing and remote CI
   observation.
-- [ ] `v0.2.0-rc.2` pre-release is published with signed archive, checksum,
+- [x] `v0.2.0-rc.2` pre-release is published with signed archive, checksum,
   signatures, public key, and fingerprint.
-- [ ] Public GitHub pre-release install validation passes for `v0.2.0-rc.2`.
+- [x] Public GitHub pre-release install validation passes for `v0.2.0-rc.2`.
 - [x] `v0.2.0-rc.1` pre-release was published with signed archive, checksum,
   signatures, public key, and fingerprint.
 - [x] Public GitHub pre-release install validation passes for `v0.2.0-rc.1`.

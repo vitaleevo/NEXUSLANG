@@ -5,6 +5,26 @@ the short English-named memory requested for architecture decisions.
 
 Last updated: 2026-05-28
 
+## 2026-05-28 - Public RC2 pre-release published and validated
+
+- Branch `codex/prepare-nexuslang-0.2.0-rc.2` bumps source and LSP versions to
+  `0.2.0-rc.2` and updates release docs for the post-merge RC.
+- Local validation passed: `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`,
+  `./scripts/package-release.sh`, and `./scripts/validate-release-package.sh`.
+- Remote GitHub Actions passed for commit
+  `5561a2484e7f5082b9d339f94b02ee5dd8d77be0`.
+- Strict release preflight and dry-run passed with maintained signing key
+  `3237F7CC5CE2514FC9671BB93CB6808B55385273` and remote CI observed.
+- Signed annotated tag `v0.2.0-rc.2` points to
+  `5561a2484e7f5082b9d339f94b02ee5dd8d77be0`.
+- GitHub Release `v0.2.0-rc.2` is public pre-release, not latest stable:
+  `https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0-rc.2`.
+- Public install validation passed with archive SHA-256
+  `8ed601c2751e86ca84c40cbbd0edec9b4f1266d3663299fd83e8b2b4912eea0b`,
+  archive size `1590587` bytes, and WASM size `479717` bytes.
+- `v0.1.1` remains the stable/latest release. Next work is PR/review of the
+  RC2 branch and a controlled stable `0.2.0` decision.
+
 ## 2026-05-28 - PR #1 merged; post-merge validation passed
 
 - PR #1 is merged into `main` with merge commit

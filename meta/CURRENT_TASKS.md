@@ -5,12 +5,13 @@ repositorio.
 
 ## Status atual
 
-Fase 11.59 concluida em 2026-05-28: o PR #1 foi mergeado em `main` pelo merge
-commit `bcedf2c feat(release): prepare NexusLang 0.2.0-rc.1`, o `main` local
-foi atualizado por fast-forward e o gate completo pos-merge passou com clippy
-estrito. A validacao publica de install do `v0.2.0-rc.1` tambem passou, mas esse
-pre-release continua historico e anterior as correcoes pos-publicacao; `v0.1.1`
-segue como release stable/latest.
+Fase 11.60 concluida em 2026-05-28: a branch
+`codex/prepare-nexuslang-0.2.0-rc.2` foi criada a partir do `main` pos-merge,
+a versao fonte/LSP foi atualizada para `0.2.0-rc.2`, CI remoto passou, strict
+release preflight/dry-run passou com chave mantida, a tag assinada
+`v0.2.0-rc.2` foi enviada e o GitHub Release foi publicado como pre-release
+publico. A validacao publica de install do `v0.2.0-rc.2` passou. `v0.1.1`
+continua sendo a release stable/latest.
 
 ## Tarefas concluidas
 
@@ -59,6 +60,16 @@ segue como release stable/latest.
 - [x] Rodar `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh` em `main`.
 - [x] Rodar `NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh`.
 - [x] Confirmar `v0.2.0-rc.1` como pre-release publico e `v0.1.1` como stable/latest.
+- [x] Criar branch `codex/prepare-nexuslang-0.2.0-rc.2`.
+- [x] Atualizar `nexuslang-src` e `nexus-lsp` para `0.2.0-rc.2`.
+- [x] Atualizar README, release notes, versioning e release docs para RC2.
+- [x] Rodar `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh` em RC2.
+- [x] Gerar e validar pacote local `nexuslang-v0.2.0-rc.2-local-release.tar.gz`.
+- [x] Pushar branch RC2 e observar GitHub Actions verde.
+- [x] Rodar strict release preflight/dry-run com chave mantida.
+- [x] Criar e pushar tag assinada `v0.2.0-rc.2`.
+- [x] Publicar GitHub Release `v0.2.0-rc.2` como pre-release, nao latest.
+- [x] Rodar validacao publica de install contra `v0.2.0-rc.2`.
 
 ## Validacao executada
 
@@ -106,6 +117,20 @@ NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
 NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh
 gh release view v0.2.0-rc.1 -R vitaleevo/NEXUSLANG --json tagName,isDraft,isPrerelease,publishedAt,url,targetCommitish
 gh release view -R vitaleevo/NEXUSLANG --json tagName,isDraft,isPrerelease,publishedAt,url,targetCommitish
+git switch -c codex/prepare-nexuslang-0.2.0-rc.2
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check --workspace --all-targets
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+./scripts/package-release.sh
+./scripts/validate-release-package.sh
+git push -u origin codex/prepare-nexuslang-0.2.0-rc.2
+gh run watch 26595258834 -R vitaleevo/NEXUSLANG --exit-status --interval 10
+NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 ./scripts/release-dry-run-strict.sh --preflight-only
+NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 ./scripts/release-dry-run-strict.sh
+git tag -u 3CB6808B55385273 -m NexusLang-0.2.0-rc.2 v0.2.0-rc.2 HEAD
+git tag -v v0.2.0-rc.2
+git push origin refs/tags/v0.2.0-rc.2
+gh release create v0.2.0-rc.2 -R vitaleevo/NEXUSLANG --title 'NexusLang 0.2.0-rc.2' --notes-file RELEASE_NOTES.md --prerelease --latest=false --verify-tag ...
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.sh
 ```
 
 Resultado: PASS para LSP, quality gate, package-release, validate-release-package,
@@ -124,14 +149,20 @@ pos-feedback PASS; CodeRabbit PASS com um comentario documental corrigido em
 `bcedf2c1d8ef37c4afdf014a99e79fa8d8757e64`, o quality gate completo passou de
 novo em `main`, a validacao publica de install do `v0.2.0-rc.1` passou, o
 pre-release segue `isDraft=false`/`isPrerelease=true`, e a release latest
-estavel continua `v0.1.1`.
+estavel continua `v0.1.1`. Para RC2, o commit validado e
+`5561a2484e7f5082b9d339f94b02ee5dd8d77be0`, a Actions remota
+`26595258834` passou, strict preflight/dry-run passou, a tag assinada
+`v0.2.0-rc.2` foi publicada, o GitHub Release publico esta em
+`https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0-rc.2`, e a
+validacao publica de install passou. Archive publico RC2:
+`8ed601c2751e86ca84c40cbbd0edec9b4f1266d3663299fd83e8b2b4912eea0b`,
+1590587 bytes; WASM: 479717 bytes.
 
 ## Proxima fase recomendada
 
-Fase 11.60: novo RC pos-merge ou plano controlado de `0.2.0` estavel. A opcao
-mais segura e publicar `v0.2.0-rc.2` a partir do `main` validado em `bcedf2c`,
-com strict release preflight/dry-run, assinatura, assets e validacao publica,
-antes de promover qualquer `0.2.0` estavel.
+Fase 11.61: abrir/revisar PR da branch `codex/prepare-nexuslang-0.2.0-rc.2`,
+observar feedback automatizado e decidir se a linha RC2 entra em `main` antes
+de qualquer plano de `0.2.0` estavel.
 
 ## Arquivos para abrir primeiro na proxima fase
 
@@ -140,14 +171,14 @@ antes de promover qualquer `0.2.0` estavel.
 - `RELEASE_NOTES.md`
 - `GITHUB_RELEASE.md`
 - `scripts/release-dry-run-strict.sh`
-- Release publico `https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0-rc.1`
+- Release publico `https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0-rc.2`
 
 ## Riscos de compatibilidade
 
 - Nao promover para release estavel; este alvo continua RC/pre-release.
 - Nao prometer registry remoto real enquanto `PACKAGE_MANAGER.md` ainda o
   define como contrato futuro.
-- O PR #1 ja foi mergeado; a distribuicao publica das correcoes pos-merge ainda
-  precisa de novo RC/tag ou plano explicito de stable.
+- O PR #1 ja foi mergeado e RC2 ja foi publicado; a branch RC2 ainda precisa de
+  PR/review/merge para manter `main` alinhado ao artefato publico.
 - GitHub Actions avisou sobre futura migracao de actions Node.js 20 para
   Node.js 24; isso nao bloqueou o RC, mas deve entrar no hardening de CI.
