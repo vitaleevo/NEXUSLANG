@@ -74,12 +74,12 @@ continua sendo a release stable/latest.
 ## Validacao executada
 
 ```bash
-cd /home/alexandre/Nesusang/nexuslang-src
+cd <repo-root>/nexuslang-src
 CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check -p nexus-lsp
 CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p nexus-lsp
 CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo clippy -p nexus-lsp -- -D warnings
 
-cd /home/alexandre/Nesusang
+cd <repo-root>
 NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
 ./scripts/package-release.sh
 ./scripts/validate-release-package.sh

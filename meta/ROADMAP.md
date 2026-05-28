@@ -40,8 +40,9 @@ stable/latest continua sendo `v0.1.1`.
 
 ## Trilhas proximas
 
-1. Release/producao: abrir/revisar PR da branch `v0.2.0-rc.2`, colher feedback
-   e so depois decidir promocao controlada para `0.2.0` estavel.
+1. Release/producao: abrir/revisar PR da branch
+   `codex/prepare-nexuslang-0.2.0-rc.2`, colher feedback e so depois
+   decidir promocao controlada para `0.2.0` estavel.
 2. Diagnostics/tooling API: preservar JSON v1 enquanto melhora APIs internas
    para consumidores de editor.
 3. LSP/editor tooling: adicionar workspace symbols, formatting, rename ou code

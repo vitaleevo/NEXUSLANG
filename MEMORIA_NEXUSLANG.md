@@ -53,7 +53,7 @@ Arquivos principais:
 Verificacao executada:
 
 ```bash
-cd /home/alexandre/Nesusang
+cd <repo-root>
 CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check --workspace --all-targets
 git diff --check
 NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
@@ -109,7 +109,7 @@ de `0.2.0` estavel.
 
 AVISO: O proximo passo e criar/implementar PR/review/merge do RC2 `v0.2.0-rc.2`. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e `meta/CURRENT_TASKS.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
 
-## Etapa concluida: Fase 11.59 - PR #1 mergeado e validacao pos-merge verde
+## Historico: Fase 11.59 - PR #1 mergeado e validacao pos-merge verde
 
 Objetivo: decidir o merge do PR #1 com criterios objetivos, atualizar `main`,
 validar a linha pos-merge e manter clara a diferenca entre o RC publico
