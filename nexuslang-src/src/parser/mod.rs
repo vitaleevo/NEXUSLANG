@@ -291,6 +291,16 @@ impl Parser {
     }
 
     fn parse_decl(&mut self) -> ParseResult<Decl> {
+        // Contextual keywords: 'import' and 'export' are only keywords at
+        // declaration start. In expression context they are regular identifiers.
+        if let Token::Ident(name) = self.peek().clone() {
+            if name == "import" {
+                return self.parse_import();
+            }
+            if name == "export" {
+                return self.parse_export();
+            }
+        }
         match self.peek().clone() {
             Token::Fn => self.parse_function(),
             Token::Model => self.parse_model(),
@@ -303,6 +313,95 @@ impl Parser {
                 Ok(Decl::Statement(stmt))
             }
         }
+    }
+
+    /// Parse: import Name [as Alias] from "path"
+    fn parse_import(&mut self) -> ParseResult<Decl> {
+        let span = self.current_span();
+        self.advance(); // consume 'import'
+        let name_span = self.current_span();
+        let name = self.expect_ident()?;
+
+        let mut alias = None;
+        let mut alias_span = None;
+        if let Token::Ident(keyword) = self.peek().clone() {
+            if keyword == "as" {
+                self.advance(); // consume 'as'
+                let a_span = self.current_span();
+                alias = Some(self.expect_ident()?);
+                alias_span = Some(a_span);
+            }
+        }
+
+        // 'from' keyword
+        if let Token::Ident(keyword) = self.peek().clone() {
+            if keyword != "from" {
+                return Err(self.error("import espera 'from' antes do caminho"));
+            }
+        } else {
+            return Err(self.error("import espera 'from' antes do caminho"));
+        }
+        self.advance(); // consume 'from'
+
+        let source_span = self.current_span();
+        let source = match self.advance() {
+            Token::StringLit(s) => s,
+            tok => {
+                return Err(self.error(format!(
+                    "import espera string literal como caminho, encontrado {:?}",
+                    tok
+                )));
+            }
+        };
+
+        Ok(Decl::Import {
+            import: ImportDecl {
+                name,
+                alias,
+                source,
+                span,
+                name_span,
+                alias_span,
+                source_span,
+            },
+        })
+    }
+
+    /// Parse: export model/fn/workflow/auth ...
+    fn parse_export(&mut self) -> ParseResult<Decl> {
+        let export_span = self.current_span();
+        self.advance(); // consume 'export'
+
+        // Peek at the next token to determine what is being exported
+        let inner = self.parse_decl()?;
+
+        // Validate export targets
+        match &inner {
+            Decl::Import { .. } => {
+                return Err(self.error("não é possível exportar um import"));
+            }
+            Decl::Invoice { .. } => {
+                return Err(self.error("não é possível exportar invoice nesta versão"));
+            }
+            Decl::Route { .. } => {
+                return Err(self.error("não é possível exportar route nesta versão"));
+            }
+            Decl::Statement(stmt) => {
+                return Err(self.error_at(
+                    stmt.span().line,
+                    stmt.span().column,
+                    "export não pode ser usado em statements",
+                ));
+            }
+            _ => {}
+        }
+
+        let span = Span::new(export_span.line, export_span.column);
+        Ok(Decl::Export {
+            decl: Box::new(inner),
+            export_span,
+            span,
+        })
     }
 
     fn parse_function(&mut self) -> ParseResult<Decl> {

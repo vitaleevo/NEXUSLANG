@@ -124,6 +124,12 @@ fn lint_decl(decl: &Decl, warnings: &mut Vec<LintWarning>) {
                 );
             }
         }
+        Decl::Import { .. } => {
+            // Imports are not linted in single-file mode.
+        }
+        Decl::Export { decl: inner, .. } => {
+            lint_decl(inner, warnings);
+        }
         Decl::Statement(stmt) => lint_stmt(stmt, warnings),
     }
 }

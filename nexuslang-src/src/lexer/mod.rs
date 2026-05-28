@@ -1,5 +1,5 @@
 /// NexusLang Lexer — converte código fonte em tokens
-use crate::diagnostic::Diagnostic;
+use crate::diagnostic::{codes, Diagnostic};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -160,16 +160,16 @@ impl Lexer {
                             "string nao terminada",
                             start_line,
                             start_column,
-                        ))
+                        )
+                        .with_code(codes::LEXER_UNTERMINATED_STRING))
                     }
                 },
                 Some(c) => s.push(c),
                 None => {
-                    return Err(Diagnostic::lexer(
-                        "string nao terminada",
-                        start_line,
-                        start_column,
-                    ))
+                    return Err(
+                        Diagnostic::lexer("string nao terminada", start_line, start_column)
+                            .with_code(codes::LEXER_UNTERMINATED_STRING),
+                    )
                 }
             }
         }
@@ -389,7 +389,8 @@ impl Lexer {
                             "operador '&' invalido; use '&&'",
                             line,
                             column,
-                        ));
+                        )
+                        .with_code(codes::LEXER_INVALID_OPERATOR));
                     }
                 }
                 '|' => {
@@ -401,7 +402,8 @@ impl Lexer {
                             "operador '|' invalido; use '||'",
                             line,
                             column,
-                        ));
+                        )
+                        .with_code(codes::LEXER_INVALID_OPERATOR));
                     }
                 }
                 ':' => {
