@@ -5,6 +5,23 @@ the short English-named memory requested for architecture decisions.
 
 Last updated: 2026-05-28
 
+## 2026-05-28 - PR post-feedback CI passed; RC status clarified
+
+- Commit `38b64e6 fix(rc): address automated review feedback` is on
+  `origin/codex/prepare-nexuslang-0.2.0-rc`; PR #1 is open, ready for review,
+  mergeable, and had two remote `quality` jobs plus CodeRabbit pass on that
+  head.
+- CodeRabbit left one residual documentation comment in `meta/ROADMAP.md`; the
+  roadmap now clarifies that public `v0.2.0-rc.1` is a historical pre-release
+  and does not include the post-publication fixes on the current PR head.
+- Architectural release decision: do not treat the published `v0.2.0-rc.1`
+  assets as representing the current PR head. Use a new RC/tag or explicit
+  post-merge validation before any stable `0.2.0`.
+- Final local validation for this phase passed:
+  `CARGO_TARGET_DIR=/tmp/nexuslang-target-codex NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`,
+  `cargo clippy --workspace --all-targets -- -D warnings`, and
+  `cargo test --workspace --all-targets`.
+
 ## 2026-05-28 - PR feedback hardening passed locally
 
 - PR #1 was marked ready for review (`isDraft=false`) and remains open,

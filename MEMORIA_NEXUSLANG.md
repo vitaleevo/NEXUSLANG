@@ -4,7 +4,70 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-28 (Fase 11.57 - PR pronto e feedback automatizado corrigido)
+Ultima atualizacao: 2026-05-28 (Fase 11.58 - PR pos-feedback com CI verde e release status clarificado)
+
+## Etapa concluida: Fase 11.58 - PR pos-feedback com CI verde e release status clarificado
+
+Objetivo: commitar/pushar as correcoes do feedback automatizado, observar CI e
+CodeRabbit no novo head do PR #1, corrigir comentario residual e deixar a
+decisao de merge preparada sem confundir o RC publico historico com o head atual
+do PR.
+
+Foi feito:
+
+- Confirmado que o worktree ficou limpo e sincronizado apos o commit
+  `38b64e6 fix(rc): address automated review feedback`.
+- Observados checks remotos do PR #1 no head
+  `38b64e67bb6a97b4bdc851c06fb5b2097627a23d`.
+- Confirmado que as duas jobs `quality` do GitHub Actions passaram.
+- Confirmado que o status `CodeRabbit` passou no novo head, mas deixou um unico
+  comentario documental em `meta/ROADMAP.md`.
+- Corrigido `meta/ROADMAP.md` para deixar claro que `v0.2.0-rc.1` ja existe
+  como pre-release publico historico, enquanto as correcoes pos-publicacao do
+  PR nao pertencem ao tag/assets publicados; novo RC ou validacao pos-merge deve
+  ser planejado antes de qualquer `0.2.0` estavel.
+- Revalidado `git diff --check` e varredura de marcadores
+  `TODO|FIXME|HACK|XXX` sem ocorrencias.
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang
+gh pr checks 1 -R vitaleevo/NEXUSLANG --watch --interval 10 --fail-fast
+gh pr view 1 -R vitaleevo/NEXUSLANG --json number,title,state,isDraft,url,headRefOid,mergeable,reviewDecision,statusCheckRollup,latestReviews,comments
+git diff --check
+rg -n 'TODO|FIXME|HACK|XXX' -S --glob '!target/**' --glob '!.git/**'
+```
+
+Resultado:
+
+- PR #1 esta aberto, fora de draft, mergeable e com checks remotos verdes no
+  head pos-feedback.
+- O unico comentario novo do CodeRabbit foi documental e foi corrigido em
+  `meta/ROADMAP.md`.
+- O `v0.2.0-rc.1` publico nao deve ser tratado como representando o head atual
+  do PR depois das correcoes; para distribuicao publica dessas correcoes, usar
+  novo RC/tag ou fluxo pos-merge explicito.
+
+Estado do projeto:
+
+- Fase/trilha atual: decisao final de merge/novo RC.
+- Solido agora: branch limpa/sincronizada antes da correcao documental final,
+  CI remoto verde, CodeRabbit verde exceto comentario documental ja corrigido.
+- Falta imediato: observar a rodada curta de CI/CodeRabbit apos a clarificacao
+  documental e entao decidir merge ou novo RC.
+- Distancia do fim: a trilha RC esta operacionalmente pronta para decisao; a
+  linguagem ainda nao deve ser chamada de 100/100 producao ate merge, validacao
+  pos-merge e novo artefato publico para as correcoes pos-`v0.2.0-rc.1`.
+
+## Proximo passo recomendado
+
+Fase 11.59 - decisao de merge e novo RC/pos-merge: observar checks finais do
+PR #1 apos a clarificacao documental, decidir merge com criterios objetivos e
+preparar `v0.2.0-rc.2` ou validacao pos-merge antes de promover qualquer
+`0.2.0` estavel.
+
+AVISO: O proximo passo e criar/implementar decisao de merge e novo RC/pos-merge do PR #1. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e `meta/CURRENT_TASKS.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
 
 ## Etapa concluida: Fase 11.57 - PR pronto e feedback automatizado corrigido
 
