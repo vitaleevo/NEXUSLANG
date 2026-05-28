@@ -1,9 +1,10 @@
 # NexusLang
 
 NexusLang is an ERP-first programming language for business workflows,
-models, invoices, routes, and small runtime services. The current release line
-has a public pre-release `v0.2.0-rc.2` for RC evaluation. The latest stable
-GitHub Release is still `v0.1.1` for demos and conservative QA.
+models, invoices, routes, and small runtime services. The source tree is now
+prepared for the `0.2.0` stable release branch. Until `v0.2.0` is tagged and
+published, the latest stable GitHub Release remains `v0.1.1`; the latest public
+pre-release remains `v0.2.0-rc.2` for RC evaluation.
 
 ## What is included
 
@@ -74,15 +75,14 @@ end to end from a clean temporary directory:
 
 ## Build Or Validate A Local Package
 
-Build locally or download the public pre-release package artifacts for the
-current RC:
+Build the stable package locally from this branch:
 
 ```text
-nexuslang-v0.2.0-rc.2-local-release.tar.gz
-nexuslang-v0.2.0-rc.2-local-release.tar.gz.sha256
+nexuslang-v0.2.0-local-release.tar.gz
+nexuslang-v0.2.0-local-release.tar.gz.sha256
 ```
 
-Public RC artifact URLs:
+The last public RC artifacts remain available for comparison:
 
 - https://github.com/vitaleevo/NEXUSLANG/releases/download/v0.2.0-rc.2/nexuslang-v0.2.0-rc.2-local-release.tar.gz
 - https://github.com/vitaleevo/NEXUSLANG/releases/download/v0.2.0-rc.2/nexuslang-v0.2.0-rc.2-local-release.tar.gz.sha256
@@ -90,7 +90,7 @@ Public RC artifact URLs:
 Verify the archive before extracting it:
 
 ```bash
-sha256sum -c nexuslang-v0.2.0-rc.2-local-release.tar.gz.sha256
+sha256sum -c nexuslang-v0.2.0-local-release.tar.gz.sha256
 ```
 
 For signed public artifacts, also verify the detached GPG signatures described
@@ -106,8 +106,8 @@ NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.s
 Extract and enter the package:
 
 ```bash
-tar -xzf nexuslang-v0.2.0-rc.2-local-release.tar.gz
-cd nexuslang-v0.2.0-rc.2-local-release
+tar -xzf nexuslang-v0.2.0-local-release.tar.gz
+cd nexuslang-v0.2.0-local-release
 ```
 
 Run the packaged smoke test:
@@ -460,7 +460,7 @@ NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh
 - The package manager is still an MVP; registry dependencies can be declared,
   but remote downloads, semantic version resolution, package publishing, and
   transitive dependencies are not implemented yet.
-- The current source version is `0.2.0-rc.2`; version/tag policy is documented in
+- The current source version is `0.2.0`; version/tag policy is documented in
   `VERSIONING.md`.
 - Release artifacts have SHA-256 checksums and detached GPG signatures.
 - Strict public-release validation is scripted in `GITHUB_RELEASE.md`, and the

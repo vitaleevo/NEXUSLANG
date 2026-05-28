@@ -81,14 +81,15 @@ For any release candidate:
 
 ## Current Release
 
-Current source version: `0.2.0-rc.2`
+Current source version: `0.2.0`
 
 Latest stable GitHub Release: `v0.1.1`.
 
 Current public pre-release RC: `v0.2.0-rc.2`.
 
-Stable `0.2.0` decision: hold stable publication and run a short pre-stable
-hardening cycle first. See `meta/STABLE_0_2_0_DECISION.md`.
+Stable `0.2.0` branch status: source version prepared; publish `v0.2.0` only
+after pushed-head CI, package validation, strict public-release dry-run,
+signed tag/release creation, and public install validation.
 
 Previous published GitHub Release: `v0.1.0`.
 

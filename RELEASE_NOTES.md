@@ -1,3 +1,61 @@
+# NexusLang 0.2.0 Release Notes
+
+Release type: controlled stable release branch for the `0.2.0` line.
+
+This release promotes the validated RC2 feature surface to the final `0.2.0`
+source version. It does not expand scope beyond RC2; the purpose is to publish a
+clean stable artifact only after package validation, pushed-head CI, maintained
+GPG signing, and strict public-release dry-run all pass.
+
+## 0.2.0 Highlights
+
+- Version target updated from `0.2.0-rc.2` to `0.2.0`.
+- Includes the RC2 feature surface: multi-module language/runtime hardening,
+  local package manager MVP, expanded stdlib modules, native auth MVP,
+  JSON/SQLite parity checks, OpenAPI validation, diagnostics tooling APIs, and
+  the initial `nexus-lsp` crate.
+- Keeps the post-RC2 CI hardening: first-party GitHub Actions refs are pinned by
+  commit SHA and use Node 24-compatible action runtimes.
+- Preserves release discipline: `v0.2.0` must be tagged and published only after
+  the stable branch head passes local quality, package validation, remote CI,
+  and strict public-release dry-run.
+
+## 0.2.0 Validation Summary
+
+This stable branch is prepared to pass:
+
+```bash
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+./scripts/package-release.sh
+./scripts/validate-release-package.sh
+NEXUS_RELEASE_SIGNING_KEY=<fingerprint> ./scripts/release-dry-run-strict.sh
+```
+
+Before public release, the `v0.2.0` tag should be annotated and signed, and the
+GitHub Release should publish the archive, checksum, detached signatures, public
+key, and fingerprint assets. After publication, the stable install path must
+pass:
+
+```bash
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0 ./scripts/validate-public-release-install.sh
+```
+
+## 0.2.0 Known Limits
+
+- Registry dependencies are declarations only; there are still no remote
+  downloads, package publishing command, semantic version solver, or
+  transitive dependency solver.
+- LSP features remain MVP-level and do not yet include workspace symbols,
+  formatting, rename, code actions, or persistent source database indexing.
+- The playground is still a local/package asset, not a hosted public web
+  product.
+- SQLite physical schema remains experimental; JSON/SQLite behavior is tested
+  for supported flows, not a full production database migration system.
+- This release should not be tagged or published from a dirty worktree or before
+  pushed-head CI and strict public-release dry-run pass.
+
+---
+
 # NexusLang 0.2.0-rc.2 Release Notes
 
 Release type: public post-merge release candidate for the `0.2.0` line.

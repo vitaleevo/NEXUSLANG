@@ -183,3 +183,23 @@ Public RC2 validation command:
 ```bash
 NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.sh
 ```
+
+The stable `0.2.0` branch is prepared from the post-hardening `main` line. It
+bumps the source version from `0.2.0-rc.2` to `0.2.0`, keeps the RC2 feature
+surface, and preserves the documented limits for registry dependencies,
+SQLite physical schema, LSP editor features, and hosted playground.
+
+Do not create or publish `v0.2.0` until the branch head has passed:
+
+```bash
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+./scripts/package-release.sh
+./scripts/validate-release-package.sh
+NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 ./scripts/release-dry-run-strict.sh
+```
+
+After publication, run:
+
+```bash
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0 ./scripts/validate-public-release-install.sh
+```
