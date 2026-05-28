@@ -68,3 +68,10 @@ dedicated stable release branch if the remaining gates pass.
 - `actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e`: `v6`
 - `actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405`: `v6`
 - `actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f`: `v6`
+
+The pinned refs above were resolved from the corresponding `v6` action tags.
+For these actions, Node 24 compatibility refers to the JavaScript action
+runtime (`runs.using: node24`), which is separate from the project test runtime
+selected by `actions/setup-node` with `node-version: 24`. GitHub-hosted runners
+passed this workflow in PR #3; any future self-hosted runner should be kept at
+Actions Runner `v2.327.1` or newer before using these pinned `v6` refs.
