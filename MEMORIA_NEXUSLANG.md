@@ -4,9 +4,96 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-28 (Fase 11.65 - triagem pos-release 0.2.0)
+Ultima atualizacao: 2026-05-28 (Fase 11.66 - registry remoto MVP read-only)
 
-## Etapa concluida: Fase 11.65 - triagem pos-release 0.2.0
+## Etapa concluida: Fase 11.66 - registry remoto MVP read-only
+
+Objetivo: implementar o primeiro registry remoto read-only do package manager,
+com contrato de metadata, download de dependencias declaradas, cache local
+seguro, checksum, testes e integracao minima com imports instalados, sem
+publish, auth, solver semantico completo ou dependencias transitivas.
+
+Foi feito:
+
+- Criada a branch `codex/package-registry-readonly-mvp`.
+- Adicionado `NEXUS_REGISTRY_URL` como base opcional de registry.
+- Suportados registry roots por caminho local, `file://` e `http://` simples.
+- Definido o metadata MVP `nexus-package.toml` com `name`, `version`,
+  `archive` e `sha256` opcional.
+- Implementado download/leitura de archive `.tar`, validacao de SHA-256 quando
+  informado e extracao segura para `.nexus/packages/<pacote>`.
+- Bloqueados path traversal, caminhos absolutos, links e tipos tar nao
+  suportados.
+- `nexus.lock` agora registra `resolved_path`, `registry_package` e
+  `checksum = "sha256:<hex>"` quando o registry esta configurado.
+- O module loader passa a resolver imports de `registry:<pacote>@<versao>`
+  quando o pacote ja esta instalado no cache.
+- Mantida compatibilidade: sem `NEXUS_REGISTRY_URL`, registry deps continuam no
+  modo contrato/marker sem download.
+- Atualizados docs e roadmaps para refletir o registry read-only MVP.
+- Criado o PR #5:
+  `https://github.com/vitaleevo/NEXUSLANG/pull/5`.
+
+Arquivos principais:
+
+- `nexuslang-src/src/package_manager.rs`
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/tests/cli_package_manager.rs`
+- `PACKAGE_MANAGER.md`
+- `meta/ROADMAP.md`
+- `nexuslang-src/ROADMAP.md`
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+
+Verificacao executada:
+
+```bash
+cd <repo-root>/nexuslang-src
+cargo fmt
+CARGO_TARGET_DIR=/tmp/nexuslang-target-registry cargo test -p nexuslang --test cli_package_manager -- --nocapture
+CARGO_TARGET_DIR=/tmp/nexuslang-target-registry cargo check --workspace --all-targets
+CARGO_TARGET_DIR=/tmp/nexuslang-target-registry cargo clippy --workspace --all-targets -- -D warnings
+
+cd <repo-root>
+git diff --check
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- Testes focados do package manager: PASS, 12/12.
+- Coberto por testes: download/cache de registry local, imports via cache,
+  registry HTTP simples, checksum invalido, path traversal, metadata invalido e
+  package inexistente.
+- `cargo check --workspace --all-targets`: PASS.
+- `cargo clippy --workspace --all-targets -- -D warnings`: PASS.
+- Quality gate completo: PASS.
+
+Estado atual:
+
+- O registry remoto read-only MVP esta implementado em branch controlada.
+- O PR #5 esta aberto para review antes de virar estado da `main`.
+- `v0.2.0` nao foi alterada; qualquer release futura deve usar nova versao/tag.
+
+Estado do projeto:
+
+- Fase/trilha atual: registry remoto read-only MVP implementado; PR #5 aberto.
+- Solido agora: contrato de registry, cache seguro, checksum, extracao segura,
+  lockfile e import de pacote instalado estao cobertos por testes.
+- Falta imediato: revisar/mergear PR #5 e validar a `main` pos-merge.
+- Distancia do fim: a trilha registry saiu do estado inicial e entrou no meio;
+  ainda faltam HTTPS, assinaturas, auth/publish, transitive deps e solver para
+  virar ecossistema completo.
+
+## Proximo passo recomendado
+
+Fase 11.67 - review/merge do PR #5 do registry remoto MVP read-only: revisar
+feedback automatizado, confirmar CI, mergear em `main` apenas com checks
+verdes e rodar validacao pos-merge focada no package manager.
+
+AVISO: O proximo passo e criar/implementar Fase 11.67 - review/merge do PR #5 do registry remoto MVP read-only, com CI verde e validacao pos-merge do package manager antes de iniciar SQLite/migracoes ou outra trilha. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, `meta/CURRENT_TASKS.md`, `PACKAGE_MANAGER.md` e o PR #5 `https://github.com/vitaleevo/NEXUSLANG/pull/5` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Historico: Fase 11.65 - triagem pos-release 0.2.0
 
 Objetivo: confirmar o estado publico da release `v0.2.0`, revisar fila de
 PRs/issues, atualizar o diagnostico de progresso e escolher a proxima trilha
@@ -83,7 +170,7 @@ Estado do projeto:
   100/100 producao por faltar registry remoto real, SQLite/migracoes maduras,
   LSP editorial completo e playground hospedado.
 
-## Proximo passo recomendado
+### Historico - proximo passo recomendado na Fase 11.65
 
 Fase 11.66 - registry remoto MVP read-only para o package manager: implementar
 contrato de metadata, resolucao/download de dependencias declaradas,

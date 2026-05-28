@@ -817,18 +817,30 @@ fn resolve_package_import_path(
         )
     })?;
 
-    let ProjectDependencySource::Path(dependency_root) = dependency else {
-        let source_kind = match dependency {
-            ProjectDependencySource::Local => "local".to_string(),
-            ProjectDependencySource::Registry { package, version } => {
-                format!("registry:{}@{}", package, version)
+    let dependency_root = match dependency {
+        ProjectDependencySource::Path(dependency_root) => dependency_root,
+        ProjectDependencySource::Registry {
+            package,
+            version,
+            cache_path,
+        } => {
+            if !cache_path.join(package_manager::MANIFEST_FILE).is_file() {
+                return Err(format!(
+                    "dependencia '{}' usa registry:{}@{}, mas ainda nao esta instalada em {}; configure NEXUS_REGISTRY_URL e rode 'nexus install'",
+                    package_name,
+                    package,
+                    version,
+                    cache_path.display()
+                ));
             }
-            ProjectDependencySource::Path(_) => unreachable!(),
-        };
-        return Err(format!(
-            "dependencia '{}' usa '{}', mas o compilador resolve apenas path dependencies locais nesta fase",
-            package_name, source_kind
-        ));
+            cache_path
+        }
+        ProjectDependencySource::Local => {
+            return Err(format!(
+                "dependencia '{}' usa 'local', mas o compilador resolve apenas path ou registry dependencies instaladas nesta fase",
+                package_name
+            ));
+        }
     };
 
     let target = if let Some(module_path) = module_path {
