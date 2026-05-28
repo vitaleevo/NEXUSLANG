@@ -5,13 +5,14 @@ repositorio.
 
 ## Status atual
 
-Fase 11.61 concluida em 2026-05-28: o PR #2 da branch
-`codex/prepare-nexuslang-0.2.0-rc.2` para `main` foi criado, revisado,
-corrigido apos feedback automatizado valido, passou com duas jobs `quality` e
-CodeRabbit verdes, foi mergeado em `main` por
-`8c243bb62fd627421e914ccabc4d6caf8daf205a` e teve validacao pos-merge verde
-com quality gate completo e install publico do `v0.2.0-rc.2`. `v0.1.1`
-continua sendo a release stable/latest.
+Fase 11.62 concluida em 2026-05-28: foi decidido nao promover `0.2.0` stable
+imediatamente; o caminho escolhido foi hardening pre-stable curto. O PR #3
+documentou a decisao em `meta/STABLE_0_2_0_DECISION.md`, moveu o CI para
+actions Node 24 pinadas por SHA, passou com duas jobs `quality` e CodeRabbit
+verdes, foi mergeado em `main` por
+`e86d3c4121914d75d6736e29f5e842929dcd39f9` e teve quality gate local e CI
+remoto pos-merge verdes. `v0.1.1` continua stable/latest; `v0.2.0-rc.2`
+continua como public pre-release.
 
 ## Tarefas concluidas
 
@@ -79,6 +80,16 @@ continua sendo a release stable/latest.
 - [x] Rodar `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh` em `main` apos o
   merge.
 - [x] Rodar install publico do `v0.2.0-rc.2` apos o merge.
+- [x] Decidir explicitamente que `0.2.0` stable nao sera publicado antes de
+  hardening pre-stable.
+- [x] Criar `meta/STABLE_0_2_0_DECISION.md` com riscos e gates de stable.
+- [x] Atualizar GitHub Actions para refs `v6` Node 24 pinadas por SHA.
+- [x] Criar PR #3 para decisao/hardening de stable.
+- [x] Corrigir feedback/nitpick valido do CodeRabbit no PR #3.
+- [x] Observar checks finais do PR #3: duas jobs `quality` PASS e CodeRabbit
+  PASS.
+- [x] Mergear PR #3 em `main`.
+- [x] Rodar quality gate local e observar CI remoto pos-merge em `main`.
 
 ## Validacao executada
 
@@ -148,6 +159,19 @@ git switch main
 git pull --ff-only origin main
 NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
 NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.sh
+git ls-remote https://github.com/actions/checkout.git refs/tags/v6
+git ls-remote https://github.com/actions/setup-node.git refs/tags/v6
+git ls-remote https://github.com/actions/setup-python.git refs/tags/v6
+git ls-remote https://github.com/actions/upload-artifact.git refs/tags/v6
+git push -u origin codex/stable-0.2.0-hardening-decision
+gh pr checks 3 -R vitaleevo/NEXUSLANG --watch --interval 10 --fail-fast
+GitHub connector: merge PR #3
+git fetch origin main
+git switch main
+git pull --ff-only origin main
+git diff --check
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+gh run watch 26598079182 -R vitaleevo/NEXUSLANG --exit-status --interval 10
 ```
 
 Resultado: PASS para LSP, quality gate, package-release, validate-release-package,
@@ -177,17 +201,21 @@ validacao publica de install passou. Archive publico RC2:
 CodeRabbit foi corrigido em `4403e94`, checks finais do PR passaram, e o PR foi
 mergeado em `main` por `8c243bb62fd627421e914ccabc4d6caf8daf205a`. Pos-merge,
 o quality gate completo e o install publico do `v0.2.0-rc.2` passaram de novo.
+Na Fase 11.62, o stable `0.2.0` foi explicitamente adiado para hardening
+pre-stable, o PR #3 mergeou a decisao e CI Node 24 pinado por SHA em `main`,
+e o quality gate local mais CI remoto pos-merge passaram.
 
 ## Proxima fase recomendada
 
-Fase 11.62: decidir entre promocao controlada para `0.2.0` estavel ou um ciclo
-curto de hardening pre-stable, auditando riscos restantes antes de qualquer
-tag/release estavel.
+Fase 11.63: criar branch controlada de stable `0.2.0`, trocar a versao fonte,
+preparar release notes finais, rodar package validation e strict public-release
+dry-run antes de qualquer tag/release estavel.
 
 ## Arquivos para abrir primeiro na proxima fase
 
 - `MEMORIA_NEXUSLANG.md`
 - `meta/CURRENT_TASKS.md`
+- `meta/STABLE_0_2_0_DECISION.md`
 - `RELEASE_NOTES.md`
 - `GITHUB_RELEASE.md`
 - `scripts/release-dry-run-strict.sh`
@@ -200,5 +228,7 @@ tag/release estavel.
   define como contrato futuro.
 - O PR #2 ja foi mergeado e `main` esta alinhado ao RC2; nao promover stable
   sem decisao explicita de risco/producao.
-- GitHub Actions avisou sobre futura migracao de actions Node.js 20 para
-  Node.js 24; isso nao bloqueou o RC, mas deve entrar no hardening de CI.
+- O hardening de Actions Node 24 ja foi mergeado; se forem usados runners
+  self-hosted no futuro, manter Actions Runner `v2.327.1+`.
+- Nao publicar `v0.2.0` sem strict dry-run, assinatura e validacao publica de
+  install do artefato stable.

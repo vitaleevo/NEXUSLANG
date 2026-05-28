@@ -4,9 +4,101 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-28 (Fase 11.61 - PR #2 mergeado e validacao pos-merge verde)
+Ultima atualizacao: 2026-05-28 (Fase 11.62 - decisao stable 0.2.0 e hardening CI)
 
-## Etapa concluida: Fase 11.61 - PR #2 mergeado e validacao pos-merge verde
+## Etapa concluida: Fase 11.62 - decisao stable 0.2.0 e hardening CI
+
+Objetivo: decidir se `0.2.0` deveria ser promovido imediatamente para stable
+ou passar por hardening pre-stable, aplicar o hardening de CI pendente e manter
+o RC2 como pre-release publico ate os gates de stable.
+
+Foi feito:
+
+- Decidido explicitamente nao promover `0.2.0` stable nesta fase.
+- Criado `meta/STABLE_0_2_0_DECISION.md` com decisao, evidencia, riscos e
+  criterios de entrada para `v0.2.0`.
+- Atualizado `.github/workflows/ci.yml` para refs `v6` Node 24 de actions
+  oficiais, pinados por commit SHA.
+- Registrado que Node 24 nos actions e runtime do action (`runs.using:
+  node24`), separado do `node-version: 24` usado para validar o projeto.
+- Documentado requisito de self-hosted runner `v2.327.1+` para esses refs.
+- Atualizados `RELEASE.md`, `VERSIONING.md` e `meta/ROADMAP.md` para refletir
+  hardening pre-stable, sem mudar a versao fonte `0.2.0-rc.2`.
+- Criado PR #3 `https://github.com/vitaleevo/NEXUSLANG/pull/3`.
+- Corrigido feedback/nitpick valido do CodeRabbit em commits incrementais.
+- Observadas duas jobs `quality` PASS e CodeRabbit PASS no head final do PR.
+- Mergeado PR #3 em `main` com merge commit
+  `e86d3c4121914d75d6736e29f5e842929dcd39f9`.
+- Rodado quality gate completo em `main` apos o merge.
+- Observado GitHub Actions PASS em `main` para o merge commit
+  (`run 26598079182`).
+
+Arquivos principais:
+
+- `.github/workflows/ci.yml`
+- `meta/STABLE_0_2_0_DECISION.md`
+- `RELEASE.md`
+- `VERSIONING.md`
+- `meta/ROADMAP.md`
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+
+Verificacao executada:
+
+```bash
+cd <repo-root>
+git ls-remote https://github.com/actions/checkout.git refs/tags/v6
+git ls-remote https://github.com/actions/setup-node.git refs/tags/v6
+git ls-remote https://github.com/actions/setup-python.git refs/tags/v6
+git ls-remote https://github.com/actions/upload-artifact.git refs/tags/v6
+git diff --check
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+gh pr checks 3 -R vitaleevo/NEXUSLANG --watch --interval 10 --fail-fast
+GitHub connector: merge PR #3 com expected_head_sha 70be81681a8dbfb330ca6a251b00d7ba92f95ca6
+git fetch origin main
+git switch main
+git pull --ff-only origin main
+git diff --check
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+gh run watch 26598079182 -R vitaleevo/NEXUSLANG --exit-status --interval 10
+```
+
+Resultado:
+
+- Decisao de release: `0.2.0` stable nao foi publicado; seguir com hardening
+  pre-stable concluido e proxima branch controlada de stable.
+- PR #3: `MERGED`.
+- Merge commit em `main`: `e86d3c4121914d75d6736e29f5e842929dcd39f9`.
+- Checks finais do PR #3: duas jobs `quality` PASS; CodeRabbit PASS.
+- CI remoto no `main` pos-merge: PASS (`run 26598079182`).
+- Quality gate local pos-merge: PASS, incluindo fmt, check, clippy, testes,
+  smokes HTTP/auth/storage e validacao OpenAPI.
+- Latest stable continua `v0.1.1`.
+- Current public RC continua `v0.2.0-rc.2`.
+- Versao fonte continua `0.2.0-rc.2`.
+
+Estado do projeto:
+
+- Fase/trilha atual: hardening pre-stable do `0.2.0` concluido.
+- Solido agora: RC2 publico esta mergeado, validado e o CI ja usa actions
+  Node 24 pinadas por SHA.
+- Falta imediato: preparar uma branch controlada de stable `0.2.0`, com bump
+  de versao, release notes finais, pacote, strict dry-run e publicacao apenas
+  depois dos gates.
+- Distancia do fim: a trilha de release `0.2.0` esta quase no fim; o produto
+  completo ainda nao esta 100/100 producao por registry remoto, schema SQLite
+  fisico, features editoriais LSP e playground hospedado.
+
+## Proximo passo recomendado
+
+Fase 11.63 - branch controlada de stable `0.2.0`: criar branch a partir de
+`main`, trocar a versao fonte de `0.2.0-rc.2` para `0.2.0`, atualizar release
+notes/docs sem apagar limites conhecidos, rodar package/strict dry-run e so
+publicar `v0.2.0` se todos os gates passarem.
+
+AVISO: O proximo passo e criar/implementar branch controlada de stable `0.2.0` com bump de versao, release notes finais, package validation e strict public-release dry-run antes de qualquer publicacao. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e `meta/CURRENT_TASKS.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Historico: Fase 11.61 - PR #2 mergeado e validacao pos-merge verde
 
 Objetivo: levar a branch RC2 publicada para `main` por PR/review, corrigir o
 feedback automatizado valido e validar a linha pos-merge sem promover
@@ -57,7 +149,7 @@ Resultado:
 - Tag/release `v0.2.0-rc.2` continua sendo pre-release; stable/latest continua
   `v0.1.1`.
 
-Estado do projeto:
+Estado do projeto naquela fase:
 
 - Fase/trilha atual: RC2 publicado, revisado, mergeado em `main` e validado.
 - Solido agora: `main` esta alinhado ao RC2 publico e tem validacao local
@@ -69,13 +161,11 @@ Estado do projeto:
   features editoriais LSP, playground hospedado e hardening das Actions Node.js
   20.
 
-## Proximo passo recomendado
+### Historico - proximo passo recomendado na Fase 11.61
 
 Fase 11.62 - decisao controlada de stable `0.2.0` ou hardening pre-stable:
 auditar riscos restantes, decidir criterios de promocao e so criar uma release
 estavel se os gates de producao estiverem explicitamente aceites.
-
-AVISO: O proximo passo e criar/implementar decisao controlada de stable `0.2.0` ou hardening pre-stable do RC2. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e `meta/CURRENT_TASKS.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
 
 ## Historico: Fase 11.60 - RC2 publico pos-merge publicado e validado
 
