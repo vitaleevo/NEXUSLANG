@@ -29,17 +29,16 @@ auth, invoices, money, storage, tooling e pequenos servicos de negocio.
 
 ## Foco imediato
 
-A linha atual agora deve voltar para estabilizacao de release/producao. O LSP
-ja tem nucleo testavel, diagnostics multi-file opt-in, limpeza de batches
-stale, go-to-definition cross-file basico, semantic tokens MVP e document
-symbols MVP; o bloqueio pratico para aproximar o produto de 100% e organizar
-o worktree e preparar um proximo RC com escopos rastreados e quality gate
-limpa.
+A linha atual esta em estabilizacao de release/producao. O branch
+`codex/prepare-nexuslang-0.2.0-rc` ja organiza o trabalho pos-`v0.1.1` em
+commits por escopo para o RC local `0.2.0-rc.1`; a quality gate local ampla,
+o package local e `validate-release-package.sh` passaram. O foco imediato e
+push/PR/CI, seguido de strict public-release preflight com chave de assinatura.
 
 ## Trilhas proximas
 
-1. Release/producao: organizar worktree, separar mudancas por escopo e preparar
-   proximo RC sem descartar alteracoes locais.
+1. Release/producao: pushar branch, abrir PR ou fluxo equivalente, observar CI
+   verde e rodar strict public-release preflight antes de tag/publicacao.
 2. Diagnostics/tooling API: preservar JSON v1 enquanto melhora APIs internas
    para consumidores de editor.
 3. LSP/editor tooling: adicionar workspace symbols, formatting, rename ou code

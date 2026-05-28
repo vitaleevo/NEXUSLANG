@@ -23,6 +23,21 @@ Motivo do bloqueio: `scripts/release-dry-run-strict.sh` exige worktree limpo.
 O checkout atual tem mudancas locais amplas, incluindo fontes, docs, LSP,
 stdlib, scripts de release e WASM gerado.
 
+## Resultado da preparacao local
+
+Depois da F11.50/F11.51, a triagem foi executada na branch
+`codex/prepare-nexuslang-0.2.0-rc`:
+
+- trabalho local separado em commits por escopo;
+- versao local definida como `0.2.0-rc.1`;
+- quality gate com clippy aprovada;
+- pacote `dist/nexuslang-v0.2.0-rc.1-local-release.tar.gz` gerado;
+- checksum `.sha256` gerado ao lado do pacote;
+- `./scripts/validate-release-package.sh` aprovado em diretorio limpo.
+
+O bloqueio restante para release publica nao e mais worktree local sujo; agora
+e push/PR/CI verde, strict public-release dry-run e assinatura/publicacao.
+
 ## Agrupamento do worktree
 
 | Escopo | Arquivos principais | Acao recomendada |

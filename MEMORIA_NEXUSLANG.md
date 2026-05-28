@@ -4,7 +4,243 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-28 (Fase 11.49 - triagem de release/producao para RC)
+Ultima atualizacao: 2026-05-28 (Fase 11.51 - package/preflight do RC 0.2.0-rc.1)
+
+## Etapa concluida: Fase 11.51 - package/preflight do RC 0.2.0-rc.1
+
+Objetivo: gerar e validar o pacote local do RC `0.2.0-rc.1` a partir da branch
+de preparacao, conferindo artefato, checksum, smoke do pacote, auth/storage e
+assets do playground antes de qualquer push ou release publica.
+
+Foi feito:
+
+- Mantida a branch `codex/prepare-nexuslang-0.2.0-rc` como linha de
+  preparacao do RC.
+- Gerado o pacote local
+  `dist/nexuslang-v0.2.0-rc.1-local-release.tar.gz`.
+- Gerado o checksum
+  `dist/nexuslang-v0.2.0-rc.1-local-release.tar.gz.sha256`.
+- Rebuild do WASM durante `package-release.sh`, com artefato final de
+  477426 bytes em `nexuslang-src/web/nexuslang_playground.wasm`.
+- Validado o pacote em diretorio limpo com `validate-release-package.sh`,
+  incluindo checksum, paths seguros no tar, smoke do CLI/package manager,
+  stdlib, exemplo auth, smoke auth, smoke storage backup/restore, `node
+  --check` do playground e fetch HTTP de HTML/JS/WASM.
+- Mantido `v0.1.1` como ultima release publica; `0.2.0-rc.1` ainda e RC local,
+  nao publicado.
+
+Arquivos principais:
+
+- `dist/nexuslang-v0.2.0-rc.1-local-release.tar.gz`
+- `dist/nexuslang-v0.2.0-rc.1-local-release.tar.gz.sha256`
+- `nexuslang-src/web/nexuslang_playground.wasm`
+- `scripts/package-release.sh`
+- `scripts/validate-release-package.sh`
+- `RELEASE_NOTES.md`
+- `VERSIONING.md`
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo clippy -p nexus-lsp -- -D warnings
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+./scripts/package-release.sh
+./scripts/validate-release-package.sh
+git diff --check
+rg de marcadores pendentes no workspace, ignorando diretorios de build
+```
+
+Resultado:
+
+- `cargo check -p nexus-lsp` PASS.
+- `cargo test -p nexus-lsp` PASS com 23 testes.
+- `cargo clippy -p nexus-lsp -- -D warnings` PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh` PASS, incluindo fmt, check
+  all-targets com warnings como erro, clippy all-targets, testes Rust,
+  validacoes de policy/docs, `node --check`, smokes HTTP/auth/storage e
+  validacao OpenAPI.
+- `./scripts/package-release.sh` PASS.
+- `./scripts/validate-release-package.sh` PASS.
+- Pacote gerado: `nexuslang-v0.2.0-rc.1-local-release.tar.gz`.
+- Checksum gerado no arquivo `.sha256` ao lado do pacote.
+- `git diff --check` PASS.
+- Varredura de marcadores pendentes: PASS, sem ocorrencias reais fora dos
+  diretorios ignorados.
+
+Estado atual:
+
+- O RC local `0.2.0-rc.1` esta gerado e validado localmente.
+- A branch tem commits por escopo e package/preflight local aprovado.
+- Falta push da branch, abertura de PR ou observacao equivalente de CI remoto.
+- `release-dry-run-strict.sh` ainda nao deve ser tratado como concluido porque
+  depende de HEAD pushado, CI verde e chave de assinatura configurada.
+
+Estado do projeto:
+
+- Fase/trilha atual: release/producao, agora em pre-publicacao do RC.
+- Solido agora: build, testes, LSP, quality gate, pacote local, checksum,
+  smoke do pacote, auth/storage e assets do playground estao validados.
+- Falta imediato: push/PR/CI, depois strict public-release dry-run com chave
+  mantida, assinaturas e publicacao/tag se o CI passar.
+- Distancia do fim: a trilha de RC local esta quase pronta; a release publica
+  ainda nao esta concluida porque falta validacao remota e assinatura/publicacao.
+
+## Proximo passo recomendado
+
+Fase 11.52 - push/PR/CI e strict public-release preflight do RC: push da branch
+`codex/prepare-nexuslang-0.2.0-rc`, abrir PR ou fluxo equivalente, observar CI
+verde, entao rodar `NEXUS_RELEASE_SIGNING_KEY=<fingerprint>
+./scripts/release-dry-run-strict.sh` antes de tag/publicacao.
+
+AVISO: O proximo passo e criar/implementar push/PR/CI e strict public-release preflight do RC `0.2.0-rc.1`. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e `meta/CURRENT_TASKS.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Confirmar `git status --short --branch` limpo.
+- Pushar `codex/prepare-nexuslang-0.2.0-rc`.
+- Abrir PR ou registrar fluxo equivalente de revisao/CI.
+- Observar checks remotos ate CI verde.
+- Rodar strict dry-run com `NEXUS_RELEASE_SIGNING_KEY`.
+- So entao preparar tag/release publica.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+- `RELEASE_NOTES.md`
+- `VERSIONING.md`
+- `scripts/release-dry-run-strict.sh`
+- `scripts/sign-release-artifacts.sh`
+- `GITHUB_RELEASE.md`
+
+## Etapa concluida: Fase 11.50 - branch e commits do RC por escopo
+
+Objetivo: transformar o worktree amplo pos-`v0.1.1` em uma branch de RC
+rastreavel, com commits por escopo e validacao tecnica ampla antes do
+package/preflight.
+
+Foi feito:
+
+- Confirmado o branch `codex/prepare-nexuslang-0.2.0-rc` como linha de
+  preparacao do RC.
+- Atualizada a linha local para `0.2.0-rc.1`, mantendo `v0.1.1` como ultima
+  release publica validada.
+- Separado o trabalho local em commits convencionais por escopo:
+  - `8ec9321 docs: prepare 0.2.0 rc handoff`
+  - `71e1a3c refactor: modularize core diagnostics and checker`
+  - `9fce40b feat: harden runtime auth storage and openapi`
+  - `ac9f9ec feat: add local packages and stdlib workflows`
+  - `bf49b7c feat: add NexusLang LSP adapter`
+  - `9c2c606 feat: refresh playground wasm artifact`
+  - `1fae863 build: tighten release packaging gates`
+- Incluido o LSP como crate de workspace, com diagnostics/editor tooling,
+  semantic tokens e document symbols MVP ja rastreados.
+- Incluidos stdlib, exemplos multi-modulo, CLI `docs`/`test`, runtime
+  auth/storage/OpenAPI, playground WASM e gates de release/package.
+- Worktree ficou limpo no fim da etapa antes da atualizacao desta memoria.
+
+Arquivos principais:
+
+- `nexuslang-src/Cargo.toml`
+- `nexuslang-src/nexus-lsp/`
+- `nexuslang-src/src/`
+- `nexuslang-src/stdlib/`
+- `nexuslang-src/tests/`
+- `scripts/package-release.sh`
+- `scripts/quality-gate.sh`
+- `scripts/validate-release-package.sh`
+- `nexuslang-src/web/nexuslang_playground.wasm`
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang
+git diff --check
+git diff --cached --check
+
+cd /home/alexandre/Nesusang/nexuslang-src
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo clippy -p nexus-lsp -- -D warnings
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+git status --short --branch
+```
+
+Resultado:
+
+- `git diff --check` e `git diff --cached --check` PASS.
+- `cargo check -p nexus-lsp` PASS.
+- `cargo test -p nexus-lsp` PASS com 23 testes.
+- `cargo clippy -p nexus-lsp -- -D warnings` PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh` PASS, incluindo
+  `cargo fmt --check`, `cargo check --all-targets` com `-D warnings`,
+  `cargo clippy --all-targets -- -D warnings`, testes Rust, smokes HTTP/auth
+  e storage, validacao OpenAPI e validacoes de contratos.
+- `git status --short --branch` confirmou branch `codex/prepare-nexuslang-0.2.0-rc`
+  sem mudancas pendentes antes desta atualizacao de memoria.
+
+Estado atual:
+
+- A preparacao local do RC agora esta rastreada em branch propria e em commits
+  por escopo.
+- O worktree deixou de estar bloqueado por arquivos untracked/modificados
+  misturados.
+- Ainda nao foi executado nesta etapa o pacote final do RC
+  (`package-release.sh` + `validate-release-package.sh`) nem push/CI.
+- `scripts/release-dry-run-strict.sh` continua dependendo de branch pushado,
+  CI verde e chave de assinatura configurada.
+
+Estado do projeto:
+
+- Fase/trilha atual: release/producao, agora na transicao de "organizar
+  worktree" para "validar pacote RC".
+- Solido agora: core/checker/HIR, runtime/auth/storage/OpenAPI, package
+  manager/stdlib, CLI test/docs, LSP MVP e gates de qualidade passaram em
+  validacao local ampla.
+- Falta imediato: gerar pacote RC, validar pacote, confirmar manifest/checksum
+  e depois preparar push/PR/CI antes de qualquer release publica.
+- Distancia do fim: esta trilha de organizacao do RC esta quase no fim; o
+  produto completo ainda nao esta fechado porque registry remoto, hardening de
+  distribuicao e release publica assinada continuam como etapas separadas.
+
+## Proximo passo recomendado
+
+Fase 11.51 - package/preflight do RC `0.2.0-rc.1`: executar
+`./scripts/package-release.sh`, validar com
+`./scripts/validate-release-package.sh`, conferir que o worktree volta limpo e
+registrar os artefatos antes de push/PR/CI.
+
+AVISO: O proximo passo e criar/implementar package/preflight do RC `0.2.0-rc.1`. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e `meta/CURRENT_TASKS.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Confirmar `git status --short --branch` limpo no branch
+  `codex/prepare-nexuslang-0.2.0-rc`.
+- Rodar `./scripts/package-release.sh`.
+- Rodar `./scripts/validate-release-package.sh`.
+- Conferir arquivos de pacote, manifest e checksums gerados.
+- Decidir push/PR/CI; so depois disso avaliar `release-dry-run-strict.sh`.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+- `scripts/package-release.sh`
+- `scripts/validate-release-package.sh`
+- `scripts/release-dry-run-strict.sh`
+- `RELEASE_NOTES.md`
+- `VERSIONING.md`
 
 ## Etapa concluida: Fase 11.49 - triagem de release/producao para RC
 

@@ -5,6 +5,36 @@ the short English-named memory requested for architecture decisions.
 
 Last updated: 2026-05-28
 
+## 2026-05-28 - 0.2.0-rc.1 local RC packaging
+
+- The post-`v0.1.1` work is now organized on
+  `codex/prepare-nexuslang-0.2.0-rc` with scoped commits and source version
+  `0.2.0-rc.1`.
+- Local release packaging produced
+  `nexuslang-v0.2.0-rc.1-local-release.tar.gz` plus its `.sha256` checksum
+  file.
+- `validate-release-package.sh` validated the package in a clean temporary
+  directory, including CLI/package smoke, stdlib imports, auth smoke, storage
+  backup/restore smoke, playground JavaScript syntax, and HTTP asset fetches.
+- `v0.1.1` remains the latest published GitHub Release. The RC is not public
+  until push/PR/CI, strict release dry-run, signing, and publication pass.
+
+## 2026-05-28 - RC branch commits organized
+
+- `codex/prepare-nexuslang-0.2.0-rc` now carries the post-`v0.1.1` work as
+  scoped commits for a local `0.2.0-rc.1` candidate.
+- The branch includes docs/handoff, modular checker/diagnostics, runtime auth
+  storage/OpenAPI hardening, package manager + stdlib workflows, the
+  `nexus-lsp` adapter, refreshed playground WASM, and tighter release package
+  gates.
+- Local validation passed: `git diff --check`, `git diff --cached --check`,
+  `cargo check/test/clippy -p nexus-lsp`, and
+  `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`.
+- The immediate next step is package/preflight:
+  `./scripts/package-release.sh` followed by
+  `./scripts/validate-release-package.sh`, then push/PR/CI before any strict
+  public release dry-run.
+
 ## 2026-05-28 - Release RC triage
 
 - The local checkout is post-`v0.1.1` development on `main` at `bf37ed4`, with

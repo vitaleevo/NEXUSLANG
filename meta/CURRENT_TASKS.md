@@ -5,67 +5,76 @@ repositorio.
 
 ## Status atual
 
-Fase 11.49 concluida em 2026-05-28: a triagem de release/producao para o
-proximo RC foi registrada em `meta/RELEASE_RC_TRIAGE.md`. O checkout local
-continua bloqueado para RC publico porque tem 84 entradas pendentes, sendo 34
-arquivos modificados e 50 untracked.
+Fase 11.51 concluida em 2026-05-28: o RC local `0.2.0-rc.1` foi empacotado e
+validado em diretorio limpo. A branch `codex/prepare-nexuslang-0.2.0-rc` tem
+commits por escopo, quality gate local aprovada, pacote local gerado e
+`validate-release-package.sh` aprovado. Ainda falta push/PR/CI e strict
+public-release preflight antes de tag/publicacao.
 
 ## Tarefas concluidas
 
-- [x] Ler `MEMORIA_NEXUSLANG.md`, `RELEASE.md`, `VERSIONING.md`,
-  `PACKAGE_MANAGER.md`, `scripts/release-dry-run-strict.sh` e
-  `scripts/package-release.sh`.
-- [x] Confirmar branch `main`, HEAD `bf37ed4`, remote GitHub e versao local
-  `0.1.1`.
-- [x] Inventariar worktree: 84 entradas pendentes, 34 modificadas e 50
-  untracked.
-- [x] Agrupar mudancas por escopo: docs/memoria, contratos, LSP,
-  core/checker/HIR, runtime/auth/storage/OpenAPI, package manager/stdlib,
-  CLI/test runner, playground/WASM e release scripts.
-- [x] Registrar bloqueadores e sequencia de preparacao no arquivo
-  `meta/RELEASE_RC_TRIAGE.md`.
-- [x] Confirmar que strict preflight exige worktree limpo antes de RC publico.
-- [x] Nao apagar, reverter, stagear ou commitar mudancas locais.
+- [x] Criar branch `codex/prepare-nexuslang-0.2.0-rc`.
+- [x] Atualizar linha local para `0.2.0-rc.1`, mantendo `v0.1.1` como release
+  publica mais recente.
+- [x] Separar commits por escopo:
+  - `8ec9321 docs: prepare 0.2.0 rc handoff`
+  - `71e1a3c refactor: modularize core diagnostics and checker`
+  - `9fce40b feat: harden runtime auth storage and openapi`
+  - `ac9f9ec feat: add local packages and stdlib workflows`
+  - `bf49b7c feat: add NexusLang LSP adapter`
+  - `9c2c606 feat: refresh playground wasm artifact`
+  - `1fae863 build: tighten release packaging gates`
+- [x] Validar LSP com check, test e clippy estrito.
+- [x] Rodar quality gate ampla com clippy.
+- [x] Gerar pacote local `nexuslang-v0.2.0-rc.1-local-release.tar.gz`.
+- [x] Gerar checksum do pacote local.
+- [x] Validar pacote em diretorio limpo com `validate-release-package.sh`.
+- [x] Confirmar ausencia de marcadores pendentes reais fora dos diretorios
+  ignorados.
 
 ## Validacao executada
 
 ```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo clippy -p nexus-lsp -- -D warnings
+
 cd /home/alexandre/Nesusang
-git status --short
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+./scripts/package-release.sh
+./scripts/validate-release-package.sh
 git diff --check
+rg de marcadores pendentes no workspace, ignorando diretorios de build
 ```
 
-Resultado: PASS para `git diff --check`. `git status --short` confirmou o
-bloqueio de release: 84 entradas pendentes. A quality gate da fase 11.48 segue
-sendo a ultima validacao tecnica ampla; nesta fase a validacao foi de estado
-Git/docs.
+Resultado: PASS. O LSP passou com 23 testes. A quality gate passou com fmt,
+check all-targets com warnings como erro, clippy all-targets, testes Rust,
+smokes HTTP/auth/storage, validacao OpenAPI e contratos. O pacote
+`nexuslang-v0.2.0-rc.1-local-release.tar.gz` foi gerado com checksum `.sha256`
+ao lado do artefato e validado em diretorio limpo.
 
 ## Proxima fase recomendada
 
-Fase 11.50: preparar branch e commits do RC por escopo, sem descartar
-alteracoes locais: criar branch `codex/prepare-nexuslang-0.2.0-rc`, revisar
-staging por blocos, decidir versao alvo e atualizar release notes antes do
-package/preflight.
+Fase 11.52: push/PR/CI e strict public-release preflight do RC `0.2.0-rc.1`.
+Pushar a branch, abrir PR ou fluxo equivalente, observar CI verde, e so depois
+rodar `NEXUS_RELEASE_SIGNING_KEY=<fingerprint> ./scripts/release-dry-run-strict.sh`.
 
 ## Arquivos para abrir primeiro na proxima fase
 
 - `MEMORIA_NEXUSLANG.md`
-- `MEMORY.md`
 - `meta/CURRENT_TASKS.md`
-- `meta/RELEASE_RC_TRIAGE.md`
 - `RELEASE_NOTES.md`
 - `VERSIONING.md`
-- `nexuslang-src/Cargo.toml`
-- `scripts/package-release.sh`
-- `scripts/validate-release-package.sh`
+- `scripts/release-dry-run-strict.sh`
+- `scripts/sign-release-artifacts.sh`
+- `GITHUB_RELEASE.md`
 
 ## Riscos de compatibilidade
 
-- Nao descartar mudancas locais nao revisadas.
-- Nao cortar release com worktree sujo.
-- Nao rodar strict public-release preflight enquanto HEAD nao estiver limpo,
-  pushado e com CI verde.
+- Nao publicar release antes de push, CI verde, strict preflight e assinatura.
 - Nao prometer registry remoto real enquanto `PACKAGE_MANAGER.md` ainda o
   define como contrato futuro.
-- A triagem recomenda `0.2.0-rc.1`/`0.2.0` se o RC incluir LSP, stdlib,
-  package manager expandido e novas superficies de runtime/tooling.
+- `0.2.0-rc.1` e RC local ate publicacao; `v0.1.1` continua sendo a release
+  publica validada.
+- O strict preflight depende de chave de assinatura mantida e acesso GitHub/CI.
