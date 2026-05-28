@@ -145,3 +145,14 @@ The validated public archive SHA-256, rechecked against
 
 Earlier local-only draft artifacts may have different checksums; the value
 above is the checksum for the published `v0.2.0-rc.1` pre-release asset.
+
+The post-merge `0.2.0-rc.2` candidate starts from the validated `main` line
+after PR #1 and carries only the version/docs changes needed to publish the
+post-feedback code as a new signed public pre-release. It should remain a
+pre-release and must not replace `v0.1.1` as the latest stable release.
+
+Expected public RC2 validation command:
+
+```bash
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.sh
+```

@@ -1,3 +1,69 @@
+# NexusLang 0.2.0-rc.2 Release Notes
+
+Release type: public post-merge release candidate for the `0.2.0` line.
+
+This RC republishes the merged `0.2.0` candidate line after PR #1 landed in
+`main`. It keeps `v0.1.1` as the latest stable release and exists to make the
+post-feedback fixes available as a signed public pre-release artifact before any
+stable `0.2.0` decision.
+
+## 0.2.0-rc.2 Highlights
+
+- Version target updated to `0.2.0-rc.2`.
+- Includes the `0.2.0-rc.1` feature surface plus post-publication hardening from
+  automated PR feedback.
+- Multi-module merge now preserves dependency import aliases used by transitive
+  modules.
+- Checker/HIR hardening covers const reassignment guards, imported model aliases
+  on AST/HIR paths, stale symbol cleanup, route uniqueness by method/path,
+  recursive route array return validation, block-local scope isolation,
+  `print(...)` argument checking, and strict string concatenation.
+- Diagnostics preserve generic/specific lexer code separation and runtime
+  path/module metadata while keeping test `.err` sidecars deterministic.
+- LSP metadata is aligned to the crate version, same-document definitions handle
+  exported declarations, and diagnostics publication avoids holding the core
+  mutex across disk-backed multi-file work.
+- Release docs now separate the historical `v0.2.0-rc.1` artifact from the
+  current post-merge candidate.
+
+## 0.2.0-rc.2 Validation Summary
+
+This RC must be prepared from a clean branch that starts at the validated
+post-merge `main` line and must pass:
+
+```bash
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+./scripts/package-release.sh
+./scripts/validate-release-package.sh
+NEXUS_RELEASE_SIGNING_KEY=<fingerprint> ./scripts/release-dry-run-strict.sh
+```
+
+The `v0.2.0-rc.2` tag must be annotated and signed. The GitHub Release must be
+published as a public pre-release, not as the latest stable release. The
+`.sha256`, `.asc`, public key, and fingerprint assets attached to the
+pre-release are the source of truth for archive integrity.
+
+After publication, validate the public install path with:
+
+```bash
+NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.sh
+```
+
+## 0.2.0-rc.2 Known Limits
+
+- Registry dependencies are declarations only; there are still no remote
+  downloads, package publishing command, semantic version solver, or
+  transitive dependency solver.
+- LSP features remain MVP-level and do not yet include workspace symbols,
+  formatting, rename, code actions, or persistent source database indexing.
+- The playground is still a local/package asset, not a hosted public web
+  product.
+- SQLite physical schema remains experimental; JSON/SQLite behavior is tested
+  for supported flows, not a full production database migration system.
+- This RC should not be published from a dirty worktree.
+
+---
+
 # NexusLang 0.2.0-rc.1 Release Notes
 
 Release type: local/public release-candidate preparation for the `0.2.0`
