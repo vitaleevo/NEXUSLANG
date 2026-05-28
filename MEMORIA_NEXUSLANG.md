@@ -4,7 +4,124 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-28 (Fase 11.56 - pre-release publico e install validado)
+Ultima atualizacao: 2026-05-28 (Fase 11.57 - PR pronto e feedback automatizado corrigido)
+
+## Etapa concluida: Fase 11.57 - PR pronto e feedback automatizado corrigido
+
+Objetivo: revisar o PR #1/feedback automatizado do pre-release, tirar o PR de
+draft quando seguro, corrigir comentarios acionaveis antes de qualquer merge e
+confirmar que o RC continua passando no gate completo.
+
+Foi feito:
+
+- Marcado o PR #1 como pronto para revisao (`isDraft=false`), mantendo-o aberto
+  e mergeable.
+- Revisados comentarios do Codex/CodeRabbit no PR.
+- Corrigido o merge multi-modulo para preservar imports de dependencias, evitando
+  perda de aliases usados por modulos transitivos.
+- Endurecido checker/HIR com validacao de `print(...)`, concat somente entre
+  strings, escopos isolados em `if`/`while`/`for`, limpeza de estado stale em
+  scopes/simbolos, aliases de model em AST/HIR, filtros textuais assignable,
+  rotas chaveadas por metodo+path e validacao recursiva de arrays de retorno.
+- Endurecido diagnostics/tooling: lexer default generico, invalid-character
+  explicito, runtime multi-file preservando path/module metadata e test runner
+  mantendo `.err` deterministico sem path absoluto.
+- Atualizado `nexus-lsp` para versao `0.2.0-rc.1`, metadata do servidor via
+  `CARGO_PKG_VERSION`, go-to-definition local para `export fn/model` e
+  publicacao de diagnostics sem segurar o mutex durante IO de disco.
+- Atualizados README/GitHub release docs para URLs publicos do RC e checksum do
+  artefato publicado.
+
+Arquivos principais:
+
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/src/checker/*.rs`
+- `nexuslang-src/src/diagnostic/mod.rs`
+- `nexuslang-src/src/diagnostics/mod.rs`
+- `nexuslang-src/src/test_runner.rs`
+- `nexuslang-src/nexus-lsp/Cargo.toml`
+- `nexuslang-src/nexus-lsp/src/lib.rs`
+- `nexuslang-src/nexus-lsp/src/main.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/tests/cli.rs`
+- `README.md`
+- `GITHUB_RELEASE.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang
+gh pr ready 1
+gh pr view 1 --json number,title,state,isDraft,url,headRefName,baseRefName,mergeable,reviewDecision,statusCheckRollup
+gh api repos/vitaleevo/NEXUSLANG/pulls/1/comments
+sha256sum dist/nexuslang-v0.2.0-rc.1-local-release.tar.gz
+git diff --check
+
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p nexuslang --test core -- --nocapture
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p nexuslang --lib -- --nocapture
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- PR #1 esta pronto para revisao, aberto e mergeable.
+- Feedback automatizado acionavel foi corrigido localmente.
+- `nexus-lsp` passou 25/25 testes.
+- `core.rs` passou 266/266 testes.
+- Lib passou 78/78 testes.
+- Quality gate completo PASS, incluindo fmt/check/clippy, testes Rust, CLI,
+  package manager, smokes HTTP/auth/storage, OpenAPI externo e docs contracts.
+- Checksum publico/local revalidado para o archive publicado:
+  `3d1f376e81aa855c69db3da70674811098169d3aaec8d19cbf50fc36bcbe91d5`.
+
+Estado atual:
+
+- O RC publico `v0.2.0-rc.1` continua publicado como pre-release, nao latest.
+- O PR #1 nao foi mergeado.
+- Ha correcoes locais prontas para commit/push na branch
+  `codex/prepare-nexuslang-0.2.0-rc`.
+- Depois do push, e necessario observar CI/CodeRabbit novamente antes de
+  qualquer merge em `main`.
+
+Estado do projeto:
+
+- Fase/trilha atual: hardening final de PR/release.
+- Solido agora: feedback automatizado principal corrigido, gate local completo
+  verde, PR fora de draft e RC publico ja validado.
+- Falta imediato: commit/push das correcoes, aguardar CI/CodeRabbit no novo
+  head, revisar comentarios remanescentes/outdated e decidir merge.
+- Distancia do fim: esta trilha de RC esta no fim operacional; o produto
+  completo ainda nao esta 100/100 porque falta merge, validacao pos-merge e
+  decisao explicita sobre `0.2.0` estavel.
+
+## Proximo passo recomendado
+
+Fase 11.58 - push/CI pos-feedback e decisao final de merge: commitar/pushar as
+correcoes do feedback, observar CI e CodeRabbit no novo head do PR #1, confirmar
+comentarios resolvidos/outdated, e so entao decidir merge/pos-merge.
+
+AVISO: O proximo passo e criar/implementar push/CI pos-feedback e decisao final de merge do RC `0.2.0-rc.1`. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e `meta/CURRENT_TASKS.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Conferir `git status` e commitar as correcoes com Conventional Commit.
+- Pushar `codex/prepare-nexuslang-0.2.0-rc`.
+- Observar checks do PR #1 e nova rodada CodeRabbit.
+- Atualizar PR body se checksum/status ainda estiverem desatualizados.
+- Decidir merge apenas se CI e feedback ficarem sem bloqueadores.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+- PR `https://github.com/vitaleevo/NEXUSLANG/pull/1`
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/tests/core.rs`
 
 ## Etapa concluida: Fase 11.56 - pre-release publico e install validado
 

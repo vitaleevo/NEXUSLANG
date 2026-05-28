@@ -46,7 +46,7 @@ impl LanguageServer for Backend {
             },
             server_info: Some(ServerInfo {
                 name: "nexus-lsp".to_string(),
-                version: Some("0.1.0".to_string()),
+                version: Some(env!("CARGO_PKG_VERSION").to_string()),
             }),
         })
     }
@@ -153,11 +153,26 @@ impl LanguageServer for Backend {
 
 impl Backend {
     async fn publish_diagnostics(&self, uri: Url) {
-        let batches = {
-            let mut core = self.core.lock().unwrap();
-            core.diagnostic_publish_batches_for(&uri)
+        let mut diagnostic_core = {
+            let core = self.core.lock().unwrap();
+            core.clone()
         };
+
+        let batches = diagnostic_core.diagnostic_publish_batches_for(&uri);
         if let Some(batches) = batches {
+            let should_publish = {
+                let mut core = self.core.lock().unwrap();
+                if core.document_snapshot_matches(&uri, &diagnostic_core) {
+                    core.sync_diagnostic_publication_group_from(&uri, &diagnostic_core);
+                    true
+                } else {
+                    false
+                }
+            };
+            if !should_publish {
+                return;
+            }
+
             for batch in batches {
                 self.client
                     .publish_diagnostics(batch.uri, batch.diagnostics, batch.version)

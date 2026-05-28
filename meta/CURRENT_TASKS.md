@@ -5,10 +5,10 @@ repositorio.
 
 ## Status atual
 
-Fase 11.56 concluida em 2026-05-28: `v0.2.0-rc.1` foi publicado como
-pre-release publico e a validacao de install publico passou. O PR draft #1
-continua aberto e mergeable; nenhum merge foi feito e `v0.1.1` continua sendo a
-linha estavel/latest.
+Fase 11.57 concluida em 2026-05-28: o PR #1 saiu de draft, feedback
+automatizado acionavel foi corrigido localmente e o quality gate completo passou
+novamente. O PR continua aberto/mergeable; nenhum merge foi feito e `v0.1.1`
+continua sendo a linha estavel/latest.
 
 ## Tarefas concluidas
 
@@ -38,6 +38,12 @@ linha estavel/latest.
   `nexuslang-release-public-key.asc` e
   `nexuslang-release-signing-key.fingerprint`.
 - [x] Rodar install publico contra `v0.2.0-rc.1` com sucesso.
+- [x] Marcar PR #1 como pronto para revisao (`isDraft=false`).
+- [x] Revisar comentarios Codex/CodeRabbit do PR.
+- [x] Corrigir feedback acionavel de module loader, checker/HIR, diagnostics,
+  LSP, README e release docs.
+- [x] Rodar `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh` novamente com
+  sucesso apos as correcoes.
 
 ## Validacao executada
 
@@ -67,6 +73,12 @@ gh run watch 26586404432 --exit-status
 gh release edit v0.2.0-rc.1 --draft=false --prerelease --latest=false --verify-tag
 gh release upload v0.2.0-rc.1 dist/nexuslang-release-public-key.asc dist/nexuslang-release-signing-key.fingerprint
 NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh
+gh pr ready 1
+gh api repos/vitaleevo/NEXUSLANG/pulls/1/comments
+sha256sum dist/nexuslang-v0.2.0-rc.1-local-release.tar.gz
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p nexuslang --test core -- --nocapture
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
 ```
 
 Resultado: PASS para LSP, quality gate, package-release, validate-release-package,
@@ -77,13 +89,14 @@ usado pelo strict flow. Tag assinada PASS. Release draft/pre-release PASS.
 Publicacao do pre-release PASS. Install publico PASS depois de adicionar chave
 publica e fingerprint como assets. O archive publico validado tem SHA-256
 `3d1f376e81aa855c69db3da70674811098169d3aaec8d19cbf50fc36bcbe91d5` e
-1582178 bytes.
+1582178 bytes. A revisao de feedback automatizado tambem passou localmente:
+`nexus-lsp` 25/25, `core.rs` 266/266, lib 78/78 e quality gate completo PASS.
 
 ## Proxima fase recomendada
 
-Fase 11.57: revisar PR/feedback do pre-release e decidir merge. Conferir
-comentarios/checks do PR #1, resolver feedback se houver, decidir se o PR pode
-sair de draft, e preparar validacao pos-merge antes de qualquer `0.2.0`
+Fase 11.58: push/CI pos-feedback e decisao final de merge. Commitar/pushar as
+correcoes, observar CI/CodeRabbit no novo head do PR #1, confirmar comentarios
+resolvidos/outdated e preparar validacao pos-merge antes de qualquer `0.2.0`
 estavel.
 
 ## Arquivos para abrir primeiro na proxima fase
@@ -91,7 +104,6 @@ estavel.
 - `MEMORIA_NEXUSLANG.md`
 - `meta/CURRENT_TASKS.md`
 - `RELEASE_NOTES.md`
-- `scripts/validate-public-release-install.sh`
 - `GITHUB_RELEASE.md`
 - PR `https://github.com/vitaleevo/NEXUSLANG/pull/1`
 
@@ -100,7 +112,7 @@ estavel.
 - Nao promover para release estavel; este alvo continua RC/pre-release.
 - Nao prometer registry remoto real enquanto `PACKAGE_MANAGER.md` ainda o
   define como contrato futuro.
-- O PR ainda esta em draft; merge/main/`0.2.0` estavel precisam de revisao e
-  validacao propria.
+- O PR saiu de draft, mas ainda precisa de CI/CodeRabbit no novo head apos
+  push antes de qualquer merge/main/`0.2.0` estavel.
 - GitHub Actions avisou sobre futura migracao de actions Node.js 20 para
   Node.js 24; isso nao bloqueou o RC, mas deve entrar no hardening de CI.

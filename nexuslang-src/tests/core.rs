@@ -37,6 +37,53 @@ x = 2
 }
 
 #[test]
+fn print_call_arguments_are_type_checked() {
+    let err = check_source("print(missing)\n")
+        .expect_err("print call should validate arguments before returning void");
+    assert!(
+        err.contains("Variável 'missing' não definida"),
+        "err: {err}"
+    );
+}
+
+#[test]
+fn string_add_requires_two_strings() {
+    let err = check_source(r#"let message = "total: " + 1"#)
+        .expect_err("mixed string concatenation should be rejected");
+    assert!(err.contains("operação numérica inválida"), "err: {err}");
+}
+
+#[test]
+fn control_flow_body_bindings_do_not_leak() {
+    let err = check_source(
+        r#"
+fn value() -> int {
+    if true {
+        let local = 1
+    }
+    return local
+}
+"#,
+    )
+    .expect_err("if body local binding should not leak");
+    assert!(err.contains("Variável 'local' não definida"), "err: {err}");
+
+    let err = check_source(
+        r#"
+fn value() -> int {
+    let nums = [1]
+    for n in nums {
+        let inner = n
+    }
+    return inner
+}
+"#,
+    )
+    .expect_err("for body local binding should not leak");
+    assert!(err.contains("Variável 'inner' não definida"), "err: {err}");
+}
+
+#[test]
 fn diagnostic_code_and_severity_do_not_change_text_display() {
     let diagnostic = nexuslang::diagnostic::Diagnostic::new(DiagnosticStage::Checker, "erro")
         .with_code("NXL3999")
@@ -1558,6 +1605,19 @@ route GET /health {
 }
 
 #[test]
+fn route_array_return_type_validates_inner_type() {
+    let source = r#"
+route GET /bad {
+    return [nil]
+}
+"#;
+
+    let err = check_source(source).unwrap_err();
+    assert!(err.contains("valor HTTP concreto"), "err: {err}");
+    assert!(err.contains("nil"), "err: {err}");
+}
+
+#[test]
 fn route_model_create_requires_post() {
     let source = r#"
 model Customer {
@@ -2032,6 +2092,25 @@ route GET /customers/email_domain ?(term: string) {
     assert_eq!(
         response.body,
         r#"[{"name":"Ana Santos","email":"ana@sales.example.com"},{"name":"Dina Silva","email":"dina@example.com"}]"#
+    );
+}
+
+#[test]
+fn route_model_where_text_rejects_optional_value_for_required_field() {
+    let source = r#"
+model Customer {
+    name: string
+}
+
+route GET /customers/search ?(term: string?) {
+    return Customer::where_text("name", "contains", term)
+}
+"#;
+
+    let err = check_source(source).unwrap_err();
+    assert!(
+        err.contains("Customer::where_text() valor invalido para 'name'"),
+        "err: {err}"
     );
 }
 
@@ -7426,8 +7505,8 @@ print(10 / 0)
     assert_eq!(err.diagnostic.code.as_deref(), Some("NXL5001"));
     assert_eq!(err.diagnostic.severity, Some(DiagnosticSeverity::Error));
     assert!(err.diagnostic.message.contains("Divisão por zero"));
-    assert_eq!(err.path, None);
-    assert_eq!(err.module_id, None);
+    assert_eq!(err.path, Some(entry.canonicalize().unwrap()));
+    assert_eq!(err.module_id.map(|id| id.index()), Some(0));
     assert_eq!(err.source_range, None);
     assert_eq!(
         err.diagnostic.labels[0].message,
@@ -7453,8 +7532,9 @@ print(10 / 0)
     assert!(json.contains(r#""code":"NXL5001""#), "json: {json}");
     assert!(json.contains(r#""severity":"error""#), "json: {json}");
     assert!(json.contains(r#""stage":"runtime""#), "json: {json}");
-    assert!(json.contains(r#""path":null"#), "json: {json}");
-    assert!(json.contains(r#""module_id":null"#), "json: {json}");
+    assert!(json.contains(r#""path":"#), "json: {json}");
+    assert!(json.contains("main.nx"), "json: {json}");
+    assert!(json.contains(r#""module_id":0"#), "json: {json}");
     assert!(json.contains(r#""owner":null"#), "json: {json}");
     assert!(json.contains(r#""source_range":null"#), "json: {json}");
     assert!(
@@ -7958,8 +8038,8 @@ print(10 / 0)
         nexuslang::load_and_run_with_source_database_captured_diagnostic_report(&entry)
             .expect_err("runtime fixture should produce a diagnostic report");
     DiagnosticReportFixture {
+        primary_path: Some(entry.canonicalize().unwrap()),
         entry,
-        primary_path: None,
         source_database: Some(source_database),
         report: run_report.report,
         output: run_report.output,
@@ -8161,23 +8241,27 @@ fn diagnostic_report_tooling_example_consumes_runtime_fixture() {
     assert_eq!(snapshot.module_loader_count, 0);
     assert_eq!(snapshot.runtime_count, 1);
     assert_eq!(snapshot.error_count, 1);
-    assert!(snapshot.affected_paths.is_empty());
-    assert!(snapshot.affected_modules.is_empty());
+    let primary_path = fixture
+        .primary_path
+        .as_ref()
+        .expect("runtime fixture should have a primary source path");
+    assert_eq!(snapshot.affected_paths, vec![primary_path.clone()]);
+    assert_eq!(snapshot.affected_modules.len(), 1);
     assert_eq!(snapshot.group_sizes, vec![1]);
     assert_eq!(snapshot.output_lines, 1);
     assert_eq!(fixture.output, ["antes".to_string()]);
 
     let view = fixture.report.tooling_view();
     assert_eq!(view.summary.total, 1);
-    assert!(view.summary.paths.is_empty());
-    assert!(view.summary.module_ids.is_empty());
+    assert_eq!(view.summary.paths, vec![primary_path.clone()]);
+    assert_eq!(view.summary.module_ids.len(), 1);
     assert_eq!(view.groups.len(), 1);
     assert_eq!(fixture.report.tooling_items(), view.items);
     assert_eq!(view.items.len(), 1);
     assert_eq!(view.items[0].diagnostic_index, 0);
     assert_eq!(view.items[0].group_index, 0);
-    assert_eq!(view.items[0].path, None);
-    assert_eq!(view.items[0].module_id, None);
+    assert_eq!(view.items[0].path.as_ref(), Some(primary_path));
+    assert!(view.items[0].module_id.is_some());
     assert_eq!(view.items[0].stage, DiagnosticStage::Runtime);
     assert_eq!(view.items[0].severity, Some(DiagnosticSeverity::Error));
     assert_eq!(
@@ -8193,10 +8277,7 @@ fn diagnostic_report_tooling_example_consumes_runtime_fixture() {
     assert_eq!(source_view.groups, view.groups);
     assert_eq!(source_view.items.len(), 1);
     assert_eq!(source_view.items[0].item, view.items[0]);
-    assert!(
-        source_view.items[0].source_context.is_none(),
-        "runtime diagnostics do not carry a source owner yet"
-    );
+    assert!(source_view.items[0].source_context.is_none());
 
     let diagnostic = fixture.report.first().expect("fixture report should fail");
     assert_eq!(diagnostic.diagnostic.stage, DiagnosticStage::Runtime);
@@ -8834,38 +8915,77 @@ print(result)
 
     let resolutions = checker.checked_import_resolutions();
 
-    // main.nx has 1 import (lib_fn from lib.nx)
-    // lib.nx has 1 import (helper from helpers.nx)
-    // But lib.nx's imports are stripped from the merged program,
-    // so only main.nx's import remains.
+    // main.nx has 1 import (lib_fn from lib.nx).
+    // lib.nx has 1 import (helper from helpers.nx).
+    // Dependency imports stay in the merged program so dependency aliases and
+    // symbol references can still resolve after lowering.
     assert_eq!(
         resolutions.len(),
-        1,
-        "only main.nx's import should be in the merged program"
+        2,
+        "entry and dependency imports should be resolved in the merged program"
     );
 
     let hir = nexuslang::hir::lower_program(&program);
 
-    // Verify the resolution
-    let import_decl = hir
+    let import_decls: Vec<&nexuslang::hir::HirDecl<'_>> = hir
         .decls
         .iter()
-        .find(|d| d.kind == nexuslang::hir::HirDeclKind::Import)
-        .expect("should have one import decl");
-    let sym_ref = resolutions
-        .get(&import_decl.id)
-        .expect("import should be resolved");
+        .filter(|d| d.kind == nexuslang::hir::HirDeclKind::Import)
+        .collect();
+    assert_eq!(
+        import_decls.len(),
+        2,
+        "merged HIR should include entry and dependency imports"
+    );
 
     // Sorted dep order: helpers.nx → module 1, lib.nx → module 2
-    assert_eq!(sym_ref.module.index(), 2, "lib_fn is in lib.nx (module 2)");
+    let lib_import = import_decls
+        .iter()
+        .find(|d| d.name == Some("lib_fn"))
+        .expect("main import should be present");
+    let lib_sym_ref = resolutions
+        .get(&lib_import.id)
+        .expect("main import should be resolved");
+    assert_eq!(
+        lib_sym_ref.module.index(),
+        2,
+        "lib_fn is in lib.nx (module 2)"
+    );
 
-    let resolved_sym = hir
+    let resolved_lib_sym = hir
         .symbols
         .iter()
-        .find(|s| s.id == sym_ref.symbol)
-        .expect("resolved symbol should exist");
-    assert_eq!(resolved_sym.kind, nexuslang::hir::HirSymbolKind::Function);
-    assert_eq!(resolved_sym.name, "lib_fn");
+        .find(|s| s.id == lib_sym_ref.symbol)
+        .expect("resolved lib symbol should exist");
+    assert_eq!(
+        resolved_lib_sym.kind,
+        nexuslang::hir::HirSymbolKind::Function
+    );
+    assert_eq!(resolved_lib_sym.name, "lib_fn");
+
+    let helper_import = import_decls
+        .iter()
+        .find(|d| d.name == Some("helper"))
+        .expect("dependency import should be present");
+    let helper_sym_ref = resolutions
+        .get(&helper_import.id)
+        .expect("dependency import should be resolved");
+    assert_eq!(
+        helper_sym_ref.module.index(),
+        1,
+        "helper is in helpers.nx (module 1)"
+    );
+
+    let resolved_helper_sym = hir
+        .symbols
+        .iter()
+        .find(|s| s.id == helper_sym_ref.symbol)
+        .expect("resolved helper symbol should exist");
+    assert_eq!(
+        resolved_helper_sym.kind,
+        nexuslang::hir::HirSymbolKind::Function
+    );
+    assert_eq!(resolved_helper_sym.name, "helper");
 }
 
 #[test]
@@ -8938,6 +9058,69 @@ print(msg)
         result.is_ok(),
         "alias-imported function should pass checker: {:?}",
         result.err()
+    );
+}
+
+#[test]
+fn dependency_module_import_alias_is_preserved_during_merge() {
+    let dir = temp_dir("dependency_alias_preserved");
+    create_nx_file(
+        &dir,
+        "base.nx",
+        r#"
+export fn helper() -> string {
+    return "ok"
+}
+"#,
+    );
+    create_nx_file(
+        &dir,
+        "dep.nx",
+        r#"
+import helper as h from "./base.nx"
+
+export fn call_helper() -> string {
+    return h()
+}
+"#,
+    );
+    let entry = create_nx_file(
+        &dir,
+        "main.nx",
+        r#"
+import call_helper from "./dep.nx"
+
+print(call_helper())
+"#,
+    );
+
+    let (program, module_graph, decl_module_map) =
+        nexuslang::module_loader::load_program_full(&entry).expect("load should succeed");
+
+    let import_decl_count = program
+        .decls
+        .iter()
+        .filter(|decl| matches!(decl, nexuslang::ast::Decl::Import { .. }))
+        .count();
+    assert_eq!(
+        import_decl_count, 2,
+        "merged program should retain entry and dependency imports"
+    );
+
+    let mut checker = nexuslang::checker::Checker::new();
+    checker
+        .check_with_module_graph(&program, &module_graph, &decl_module_map)
+        .expect("dependency alias should resolve during checking");
+
+    let mut interp = nexuslang::interpreter::Interpreter::new_captured();
+    interp
+        .run(&program)
+        .expect("dependency alias should resolve at runtime");
+
+    assert!(
+        interp.output().contains(&"ok".to_string()),
+        "runtime output should include dependency alias result: {:?}",
+        interp.output()
     );
 }
 

@@ -74,12 +74,18 @@ end to end from a clean temporary directory:
 
 ## Build Or Validate A Local Package
 
-Build or download the public pre-release package artifacts for the current RC:
+Build locally or download the public pre-release package artifacts for the
+current RC:
 
 ```text
 nexuslang-v0.2.0-rc.1-local-release.tar.gz
 nexuslang-v0.2.0-rc.1-local-release.tar.gz.sha256
 ```
+
+Public RC artifact URLs:
+
+- https://github.com/vitaleevo/NEXUSLANG/releases/download/v0.2.0-rc.1/nexuslang-v0.2.0-rc.1-local-release.tar.gz
+- https://github.com/vitaleevo/NEXUSLANG/releases/download/v0.2.0-rc.1/nexuslang-v0.2.0-rc.1-local-release.tar.gz.sha256
 
 Verify the archive before extracting it:
 
@@ -90,7 +96,8 @@ sha256sum -c nexuslang-v0.2.0-rc.1-local-release.tar.gz.sha256
 For signed public artifacts, also verify the detached GPG signatures described
 in `SIGNING.md`.
 
-Maintainers can validate the public RC install path with:
+Maintainers can validate the public RC install path end to end with
+`scripts/validate-public-release-install.sh`:
 
 ```bash
 NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh

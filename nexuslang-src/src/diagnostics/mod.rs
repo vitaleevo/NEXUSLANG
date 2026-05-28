@@ -1008,15 +1008,48 @@ fn attach_checker_diagnostic(
     source_database: &module_loader::SourceDatabase,
     diagnostic: Diagnostic,
 ) -> module_loader::ModuleDiagnostic {
+    attach_program_diagnostic_or_entry(
+        program,
+        module_graph,
+        decl_module_map,
+        source_database,
+        diagnostic,
+    )
+}
+
+fn attach_program_diagnostic_or_entry(
+    program: &ast::Program,
+    module_graph: &module_loader::ModuleGraph,
+    decl_module_map: &[hir::HirModuleId],
+    source_database: &module_loader::SourceDatabase,
+    diagnostic: Diagnostic,
+) -> module_loader::ModuleDiagnostic {
     source_database
         .attach_program_diagnostic(program, decl_module_map, diagnostic.clone())
         .or_else(|| source_database.attach_diagnostic(module_graph.entry_id, diagnostic.clone()))
-        .unwrap_or(module_loader::ModuleDiagnostic {
+        .unwrap_or_else(|| module_loader::ModuleDiagnostic {
             module_id: module_graph.entry_id,
-            path: std::path::PathBuf::new(),
+            path: source_database
+                .module_path(module_graph.entry_id)
+                .map(Path::to_path_buf)
+                .unwrap_or_default(),
             diagnostic,
             source_range: None,
         })
+}
+
+fn attach_runtime_diagnostic(
+    checked: &CheckedMultiModuleProgram,
+    diagnostic: Diagnostic,
+) -> MultiModuleDiagnostic {
+    attach_program_diagnostic_or_entry(
+        &checked.program,
+        &checked.module_graph,
+        &checked.decl_module_map,
+        &checked.source_database,
+        diagnostic,
+    )
+    .into()
 }
 
 /// Check an already-loaded multi-file program and collect report-safe checker
@@ -1094,7 +1127,7 @@ pub fn load_and_run_with_source_database_diagnostic(
     let mut interp = Interpreter::new();
     interp
         .run(&checked.program)
-        .map_err(MultiModuleDiagnostic::from)
+        .map_err(|diagnostic| attach_runtime_diagnostic(&checked, diagnostic))
 }
 
 /// Load, check, and run a multi-module program while capturing program output.
@@ -1116,7 +1149,7 @@ pub fn load_and_run_with_source_database_captured_diagnostic(
     match interp.run(&checked.program) {
         Ok(()) => Ok(interp.output().to_vec()),
         Err(diagnostic) => Err(MultiModuleRunDiagnostic {
-            diagnostic: diagnostic.into(),
+            diagnostic: attach_runtime_diagnostic(&checked, diagnostic),
             output: interp.output().to_vec(),
         }),
     }
@@ -1138,7 +1171,9 @@ pub fn load_and_run_with_source_database_captured_diagnostic_report(
     match interp.run(&checked.program) {
         Ok(()) => Ok(interp.output().to_vec()),
         Err(diagnostic) => Err(MultiModuleRunDiagnosticReport {
-            report: MultiModuleDiagnosticReport::from_diagnostic(diagnostic.into()),
+            report: MultiModuleDiagnosticReport::from_diagnostic(attach_runtime_diagnostic(
+                &checked, diagnostic,
+            )),
             output: interp.output().to_vec(),
         }),
     }

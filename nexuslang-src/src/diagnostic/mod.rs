@@ -5,6 +5,7 @@ use crate::ast::Span;
 pub mod codes {
     pub const INPUT_GENERIC: &str = "NXL0001";
 
+    pub const LEXER_GENERIC: &str = "NXL1099";
     pub const LEXER_INVALID_CHARACTER: &str = "NXL1001";
     pub const LEXER_UNTERMINATED_STRING: &str = "NXL1002";
     pub const LEXER_INVALID_OPERATOR: &str = "NXL1003";
@@ -195,7 +196,7 @@ impl DiagnosticStage {
     pub fn default_code(self) -> &'static str {
         match self {
             DiagnosticStage::Input => codes::INPUT_GENERIC,
-            DiagnosticStage::Lexer => codes::LEXER_INVALID_CHARACTER,
+            DiagnosticStage::Lexer => codes::LEXER_GENERIC,
             DiagnosticStage::Parser => codes::PARSER_SYNTAX,
             DiagnosticStage::Checker => codes::CHECKER_TYPE,
             DiagnosticStage::ModuleLoader => codes::MODULE_LOADER_IO,

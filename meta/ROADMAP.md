@@ -31,16 +31,17 @@ auth, invoices, money, storage, tooling e pequenos servicos de negocio.
 
 A linha atual esta em estabilizacao de release/producao. O pre-release publico
 `v0.2.0-rc.1` esta publicado e passou validacao de install publico com
-assinatura, checksum, package smoke, auth, storage e assets HTTP. O PR draft
-`https://github.com/vitaleevo/NEXUSLANG/pull/1` continua aberto e mergeable.
-O foco imediato agora e revisar feedback/comentarios do PR e do pre-release,
-decidir se o PR pode sair de draft e preparar validacao pos-merge antes de
-qualquer `0.2.0` estavel.
+assinatura, checksum, package smoke, auth, storage e assets HTTP. O PR
+`https://github.com/vitaleevo/NEXUSLANG/pull/1` saiu de draft, segue aberto e
+mergeable, e o feedback automatizado acionavel foi corrigido localmente com
+quality gate completo verde. O foco imediato agora e pushar essas correcoes,
+observar CI/CodeRabbit no novo head e decidir merge apenas sem bloqueadores.
 
 ## Trilhas proximas
 
-1. Release/producao: revisar PR #1/feedback do pre-release, decidir draft/merge
-   e planejar validacao pos-merge antes de `0.2.0` estavel.
+1. Release/producao: push/CI pos-feedback do PR #1, revisar comentarios
+   remanescentes/outdated e planejar validacao pos-merge antes de `0.2.0`
+   estavel.
 2. Diagnostics/tooling API: preservar JSON v1 enquanto melhora APIs internas
    para consumidores de editor.
 3. LSP/editor tooling: adicionar workspace symbols, formatting, rename ou code

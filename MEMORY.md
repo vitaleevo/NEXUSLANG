@@ -5,6 +5,24 @@ the short English-named memory requested for architecture decisions.
 
 Last updated: 2026-05-28
 
+## 2026-05-28 - PR feedback hardening passed locally
+
+- PR #1 was marked ready for review (`isDraft=false`) and remains open,
+  mergeable, and unmerged.
+- Automated PR feedback was addressed locally across module loading, checker/HIR,
+  diagnostics, LSP metadata/diagnostics, README/release docs, and tests.
+- Dependency module imports are now retained during merged-program construction
+  so aliases used inside transitive modules survive checker and runtime paths.
+- Runtime multi-module diagnostics now preserve entry path/module metadata for
+  JSON/LSP tooling while `.err` sidecars stay deterministic by comparing the
+  core diagnostic text.
+- Local validation passed after the feedback fixes:
+  `CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p nexus-lsp`,
+  `CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p nexuslang --test core`,
+  and `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`.
+- Next work is committing/pushing the feedback fixes, watching CI/CodeRabbit on
+  the new PR head, and deciding merge only if no blockers remain.
+
 ## 2026-05-28 - Public RC pre-release validated
 
 - `v0.2.0-rc.1` is now published as a public GitHub pre-release, not as a

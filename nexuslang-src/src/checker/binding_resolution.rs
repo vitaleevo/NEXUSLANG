@@ -22,13 +22,15 @@ impl Checker {
         name: &str,
         ty: &Type,
     ) -> Result<(), String> {
-        if let Some((_legacy_ty, Some(symbol))) = scope.resolve(name) {
-            if let Some(existing) = self.checked_symbol_type(symbol) {
-                if scope.consts.contains(name) {
-                    return Err(format!("Constante '{}' não pode ser reatribuída", name));
+        if let Some((_legacy_ty, symbol)) = scope.resolve(name) {
+            if scope.consts.contains(name) {
+                return Err(format!("Constante '{}' não pode ser reatribuída", name));
+            }
+            if let Some(symbol) = symbol {
+                if let Some(existing) = self.checked_symbol_type(symbol) {
+                    return ensure_assignable(&existing, ty)
+                        .map_err(|e| format!("Tipo inválido ao atribuir '{}': {}", name, e));
                 }
-                return ensure_assignable(&existing, ty)
-                    .map_err(|e| format!("Tipo inválido ao atribuir '{}': {}", name, e));
             }
         }
 

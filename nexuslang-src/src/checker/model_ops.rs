@@ -1257,20 +1257,15 @@ impl Checker {
         }
 
         let actual = self.infer_checked_model_operation_arg(context, filter.value)?;
-        if text_filter_type_supported(&actual) {
-            Ok(())
-        } else {
-            Err(self.error(
+        ensure_assignable(&field_ty, &actual).map_err(|e| {
+            self.error(
                 filter.value.span(),
                 format!(
-                    "{}::{}() valor para '{}' deve ser string ou string?, encontrado {}",
-                    model,
-                    method,
-                    field,
-                    type_name(&actual)
+                    "{}::{}() valor invalido para '{}': {}",
+                    model, method, field, e
                 ),
-            ))
-        }
+            )
+        })
     }
 
     fn check_model_range_exprs(

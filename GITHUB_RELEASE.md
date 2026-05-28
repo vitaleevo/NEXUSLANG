@@ -136,8 +136,12 @@ Published RC assets include:
 - `nexuslang-release-public-key.asc`
 - `nexuslang-release-signing-key.fingerprint`
 
-The validated public archive SHA-256 is:
+The validated public archive SHA-256, rechecked against
+`dist/nexuslang-v0.2.0-rc.1-local-release.tar.gz` after publication, is:
 
 ```text
 3d1f376e81aa855c69db3da70674811098169d3aaec8d19cbf50fc36bcbe91d5
 ```
+
+Earlier local-only draft artifacts may have different checksums; the value
+above is the checksum for the published `v0.2.0-rc.1` pre-release asset.

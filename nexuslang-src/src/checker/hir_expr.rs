@@ -152,7 +152,11 @@ impl Checker {
             }
             hir::HirExprKind::Object { model, fields } => {
                 self.check_hir_object_fields(hir, model, fields, expr.span, scope)?;
-                Ok((Type::Model((*model).to_string()), self.model_symbol(model)))
+                let resolved_model = self.resolved_model_name(model);
+                Ok((
+                    Type::Model(resolved_model.to_string()),
+                    self.model_symbol(resolved_model),
+                ))
             }
             hir::HirExprKind::Ident { name } => {
                 let Some((ty, symbol)) = self.resolve_scope_binding(scope, name) else {
@@ -324,15 +328,22 @@ impl Checker {
             ));
         };
 
+        let resolved_model = self.resolved_model_name(&model);
         let model_fields = self
             .models
-            .get(&model)
+            .get(resolved_model)
             .ok_or_else(|| self.error(span, format!("Model '{}' nao encontrado", model)))?;
 
         model_fields
             .iter()
             .find(|candidate| candidate.name == field)
-            .map(|candidate| (candidate.ty.clone(), self.model_field_symbol(&model, field)))
+            .map(|candidate| {
+                (
+                    candidate.ty.clone(),
+                    self.model_field_symbol(resolved_model, field)
+                        .or_else(|| self.model_field_symbol(&model, field)),
+                )
+            })
             .ok_or_else(|| self.error(span, format!("Campo '{}.{}' nao existe", model, field)))
     }
 
@@ -389,7 +400,12 @@ impl Checker {
         span: Span,
     ) -> CheckResult<Type> {
         match name {
-            "print" => return Ok(Type::Void),
+            "print" => {
+                for arg in args {
+                    self.infer_hir_expr(hir, *arg, scope)?;
+                }
+                return Ok(Type::Void);
+            }
             "len" => {
                 if args.len() != 1 {
                     return Err(self.error(span, "len() recebe exatamente 1 argumento"));

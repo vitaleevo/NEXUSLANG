@@ -4,7 +4,7 @@ use crate::ast::{HttpMethod, QueryParam, RouteAuthGuard, Span, Stmt, Type};
 use crate::hir::{self, HirDeclId, HirProgram, HirRefId, HirScopeId, HirSymbolKind};
 
 use super::{ensure_assignable, type_name};
-use super::{resolver::ResolvedProgram, CheckResult, Checker, Scope};
+use super::{resolver::route_symbol_key, resolver::ResolvedProgram, CheckResult, Checker, Scope};
 
 impl Checker {
     pub(super) fn collect_route_declaration(
@@ -90,10 +90,11 @@ impl Checker {
             self.check_route_auth_guard(path, guard)?;
         }
 
+        let route_key = route_symbol_key(method, path);
         self.symbols.set_top_level(
             HirSymbolKind::Route,
-            path,
-            resolved.top_level_symbol(HirSymbolKind::Route, path),
+            &route_key,
+            resolved.top_level_symbol(HirSymbolKind::Route, &route_key),
         );
 
         Ok(())

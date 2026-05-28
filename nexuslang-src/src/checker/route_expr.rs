@@ -135,13 +135,10 @@ impl Checker {
         span: Span,
     ) -> CheckResult<()> {
         match ty {
-            Type::String
-            | Type::Int
-            | Type::Float
-            | Type::Bool
-            | Type::Money
-            | Type::Array(_)
-            | Type::Model(_) => Ok(()),
+            Type::String | Type::Int | Type::Float | Type::Bool | Type::Money | Type::Model(_) => {
+                Ok(())
+            }
+            Type::Array(inner) => self.ensure_route_return_type(path, inner, span),
             Type::Optional(inner) => self.ensure_route_return_type(path, inner, span),
             Type::Void | Type::Unknown | Type::Nil => Err(self.error(
                 span,

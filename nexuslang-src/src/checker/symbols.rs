@@ -18,6 +18,11 @@ pub(super) struct CheckerSymbols {
 
 impl CheckerSymbols {
     pub(super) fn index_hir(&mut self, hir: &HirProgram<'_>) {
+        self.functions.clear();
+        self.models.clear();
+        self.auths.clear();
+        self.workflows.clear();
+        self.routes.clear();
         self.exprs.clear();
         self.stmt_scopes.clear();
         self.stmt_binding_scopes.clear();

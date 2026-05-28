@@ -59,7 +59,11 @@ impl Checker {
                 span,
             } => {
                 self.check_object_fields(model, fields, *span, scope)?;
-                Ok((Type::Model(model.clone()), self.model_symbol(model)))
+                let resolved_model = self.resolved_model_name(model);
+                Ok((
+                    Type::Model(resolved_model.to_string()),
+                    self.model_symbol(resolved_model),
+                ))
             }
             Expr::Ident { name, span } => {
                 let Some((ty, symbol)) = self.resolve_scope_binding(scope, name) else {
@@ -154,9 +158,10 @@ impl Checker {
         span: Span,
         scope: &Scope,
     ) -> CheckResult<()> {
+        let resolved_model = self.resolved_model_name(model);
         let model_fields = self
             .models
-            .get(model)
+            .get(resolved_model)
             .ok_or_else(|| self.error(span, format!("Model '{}' nao encontrado", model)))?;
 
         let expected = model_fields
@@ -202,6 +207,13 @@ impl Checker {
         }
 
         Ok(())
+    }
+
+    pub(super) fn resolved_model_name<'a>(&'a self, model: &'a str) -> &'a str {
+        self.import_aliases
+            .get(model)
+            .map(String::as_str)
+            .unwrap_or(model)
     }
 
     fn infer_field_access(
@@ -278,7 +290,12 @@ impl Checker {
         span: Span,
     ) -> CheckResult<Type> {
         match name {
-            "print" => return Ok(Type::Void),
+            "print" => {
+                for arg in args {
+                    self.infer_expr_from_typed_hir_or_ast(arg, scope)?;
+                }
+                return Ok(Type::Void);
+            }
             "len" => {
                 if args.len() != 1 {
                     return Err(self.error(span, "len() recebe exatamente 1 argumento"));
@@ -385,7 +402,7 @@ pub(super) fn numeric_result(op: &BinOp, left: &Type, right: &Type) -> Result<Ty
     }
 
     match op {
-        BinOp::Add if *left == Type::String || *right == Type::String => Ok(Type::String),
+        BinOp::Add if *left == Type::String && *right == Type::String => Ok(Type::String),
         BinOp::Add | BinOp::Sub => match (left, right) {
             (Type::Money, Type::Money) => Ok(Type::Money),
             (Type::Int, Type::Int) => Ok(Type::Int),

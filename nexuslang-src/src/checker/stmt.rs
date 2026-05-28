@@ -113,9 +113,25 @@ impl Checker {
                     ensure_assignable(&Type::Bool, &cond_ty).map_err(|e| {
                         self.error(*span, format!("Condição de if inválida: {}", e))
                     })?;
-                    self.check_stmts(hir, then_body, scope, expected_return, decl, resolved)?;
+                    let mut then_scope = scope.clone();
+                    self.check_stmts(
+                        hir,
+                        then_body,
+                        &mut then_scope,
+                        expected_return,
+                        decl,
+                        resolved,
+                    )?;
                     if let Some(stmts) = else_body {
-                        self.check_stmts(hir, stmts, scope, expected_return, decl, resolved)?;
+                        let mut else_scope = scope.clone();
+                        self.check_stmts(
+                            hir,
+                            stmts,
+                            &mut else_scope,
+                            expected_return,
+                            decl,
+                            resolved,
+                        )?;
                     }
                     Ok(())
                 }
@@ -128,7 +144,8 @@ impl Checker {
                     ensure_assignable(&Type::Bool, &cond_ty).map_err(|e| {
                         self.error(*span, format!("Condição de while inválida: {}", e))
                     })?;
-                    self.check_stmts(hir, body, scope, expected_return, decl, resolved)
+                    let mut body_scope = scope.clone();
+                    self.check_stmts(hir, body, &mut body_scope, expected_return, decl, resolved)
                 }
                 Stmt::For {
                     var,
@@ -157,8 +174,9 @@ impl Checker {
                         *span,
                     );
                     self.produce_symbol_metadata(symbol, &item_ty);
-                    scope.define_with_symbol(var, item_ty, false, symbol);
-                    self.check_stmts(hir, body, scope, expected_return, decl, resolved)
+                    let mut body_scope = scope.clone();
+                    body_scope.define_with_symbol(var, item_ty, false, symbol);
+                    self.check_stmts(hir, body, &mut body_scope, expected_return, decl, resolved)
                 }
             }
         })();

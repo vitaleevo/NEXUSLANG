@@ -29,9 +29,13 @@ impl Scope {
         self.vars.insert(name.to_string(), ty);
         if is_const {
             self.consts.insert(name.to_string());
+        } else {
+            self.consts.remove(name);
         }
         if let Some(symbol) = symbol {
             self.symbols.insert(name.to_string(), symbol);
+        } else {
+            self.symbols.remove(name);
         }
     }
 

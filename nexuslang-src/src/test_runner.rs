@@ -818,7 +818,7 @@ fn first_line_diff(expected: &[String], actual: &[String]) -> Option<NexusLineDi
 }
 
 fn diagnostic_lines(diagnostic: &MultiModuleDiagnostic) -> Vec<String> {
-    expected_lines_from_source(&diagnostic.to_string())
+    expected_lines_from_source(&diagnostic.diagnostic.to_string())
 }
 
 fn serialize_output_lines(output: &[String]) -> String {

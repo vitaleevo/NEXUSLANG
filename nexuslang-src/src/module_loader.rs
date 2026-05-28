@@ -710,7 +710,8 @@ impl ModuleLoader {
 
     /// Build the merged program from all loaded modules.
     /// The entry module's declarations come first, followed by dependency
-    /// declarations in load order.
+    /// declarations in load order. Dependency imports are retained because
+    /// dependency declarations can reference their own local import aliases.
     fn build_merged_program(&self, entry_canon: &Path) -> Program {
         let (program, _) = self.build_merged_program_with_map(entry_canon);
         program
@@ -728,11 +729,7 @@ impl ModuleLoader {
         for (module_index, module_path) in module_paths.iter().enumerate() {
             if let Some(module) = self.loaded.get(module_path) {
                 let mod_id = HirModuleId(module_index);
-                let keep_imports = module_index == 0;
                 for decl in &module.program.decls {
-                    if !keep_imports && matches!(decl, Decl::Import { .. }) {
-                        continue;
-                    }
                     all_decls.push(decl.clone());
                     decl_module_map.push(mod_id);
                 }

@@ -84,7 +84,7 @@ impl DiagnosticPublishBatch {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct LspCore {
     documents: HashMap<Url, DocumentSnapshot>,
     diagnostic_publication_groups: HashMap<Url, HashSet<Url>>,
@@ -129,6 +129,37 @@ impl LspCore {
 
     pub fn diagnostics_for(&self, uri: &Url) -> Option<Vec<Diagnostic>> {
         self.document(uri).map(DocumentSnapshot::diagnostics)
+    }
+
+    pub fn document_snapshot_matches(&self, uri: &Url, other: &LspCore) -> bool {
+        let mut uris = other
+            .diagnostic_publication_groups
+            .get(uri)
+            .cloned()
+            .unwrap_or_default();
+        uris.insert(uri.clone());
+
+        uris.into_iter()
+            .all(|uri| self.document_text_and_version_match(&uri, other))
+    }
+
+    fn document_text_and_version_match(&self, uri: &Url, other: &LspCore) -> bool {
+        match (self.document(uri), other.document(uri)) {
+            (Some(current), Some(candidate)) => {
+                current.version() == candidate.version() && current.text() == candidate.text()
+            }
+            (None, None) => true,
+            _ => false,
+        }
+    }
+
+    pub fn sync_diagnostic_publication_group_from(&mut self, entry_uri: &Url, source: &LspCore) {
+        if let Some(group) = source.diagnostic_publication_groups.get(entry_uri) {
+            self.diagnostic_publication_groups
+                .insert(entry_uri.clone(), group.clone());
+        } else {
+            self.diagnostic_publication_groups.remove(entry_uri);
+        }
     }
 
     pub fn diagnostic_publish_batches_for(
@@ -1487,19 +1518,20 @@ pub fn find_definition_location(source: &str, name: &str) -> Option<(usize, usiz
     let lines: Vec<&str> = source.lines().collect();
     for (i, line) in lines.iter().enumerate() {
         let trimmed = line.trim_start();
-        let is_decl_keyword = trimmed.starts_with("model ")
-            || trimmed.starts_with("route ")
-            || trimmed.starts_with("auth ")
-            || trimmed.starts_with("workflow ")
-            || trimmed.starts_with("fn ");
+        let decl_line = trimmed.strip_prefix("export ").unwrap_or(trimmed);
+        let is_decl_keyword = decl_line.starts_with("model ")
+            || decl_line.starts_with("route ")
+            || decl_line.starts_with("auth ")
+            || decl_line.starts_with("workflow ")
+            || decl_line.starts_with("fn ");
 
         if is_decl_keyword {
-            let start = trimmed.find(' ')? + 1;
-            let end = trimmed[start..]
+            let start = decl_line.find(' ')? + 1;
+            let end = decl_line[start..]
                 .find(|c: char| c.is_whitespace() || c == '(' || c == '{')
                 .map(|p| start + p)
-                .unwrap_or(line.len());
-            if trimmed[start..end] == *name {
+                .unwrap_or(decl_line.len());
+            if decl_line[start..end] == *name {
                 let col = line.find(name)?;
                 return Some((i + 1, col + 1));
             }
@@ -2218,6 +2250,48 @@ import broken from "./lib.nx"
     }
 
     #[test]
+    fn lsp_core_diagnostic_snapshot_detects_changed_imported_document() {
+        let dir = temp_project_dir("lsp_core_snapshot_changed_import");
+        let lib_path = dir.join("lib.nx");
+        let main_path = dir.join("main.nx");
+        let lib_source = r#"
+export fn value() -> int {
+    return 1
+}
+"#;
+        let main_source = r#"
+import value from "./lib.nx"
+print(value())
+"#;
+        fs::write(&lib_path, lib_source).unwrap();
+        fs::write(&main_path, main_source).unwrap();
+
+        let main_uri = Url::from_file_path(main_path.canonicalize().unwrap()).unwrap();
+        let lib_uri = Url::from_file_path(lib_path.canonicalize().unwrap()).unwrap();
+        let mut core = LspCore::new();
+        core.open_document(main_uri.clone(), Some(1), main_source.to_string());
+        core.open_document(lib_uri.clone(), Some(1), lib_source.to_string());
+
+        let mut diagnostic_core = core.clone();
+        let mut group = std::collections::HashSet::new();
+        group.insert(main_uri.clone());
+        group.insert(lib_uri.clone());
+        diagnostic_core
+            .diagnostic_publication_groups
+            .insert(main_uri.clone(), group);
+
+        assert!(core.document_snapshot_matches(&main_uri, &diagnostic_core));
+
+        core.change_document(
+            lib_uri,
+            Some(2),
+            "export fn value() -> int { return 2 }\n".to_string(),
+        );
+
+        assert!(!core.document_snapshot_matches(&main_uri, &diagnostic_core));
+    }
+
+    #[test]
     fn lsp_core_goto_definition_resolves_import_alias_usage_to_exported_declaration() {
         let dir = temp_project_dir("lsp_core_cross_file_definition_alias");
         let lib_path = dir.join("cliente.nx");
@@ -2368,6 +2442,22 @@ let total = 10
         assert_eq!(find_definition_location(source, "Cliente"), Some((6, 7)));
         assert_eq!(find_definition_location(source, "total"), Some((10, 5)));
         assert_eq!(find_definition_location(source, "missing"), None);
+    }
+
+    #[test]
+    fn find_definition_location_finds_exported_declarations() {
+        let source = r#"
+export fn calcular() {
+  return 1
+}
+
+export model Cliente {
+  nome: String
+}
+"#;
+
+        assert_eq!(find_definition_location(source, "calcular"), Some((2, 11)));
+        assert_eq!(find_definition_location(source, "Cliente"), Some((6, 14)));
     }
 
     #[test]

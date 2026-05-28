@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use crate::ast::Span;
+use crate::ast::{HttpMethod, Span};
 use crate::hir::{HirDeclId, HirProgram, HirScopeId, HirSymbolId, HirSymbolKind};
 
-type TopLevelKey<'a> = (HirSymbolKind, &'a str);
+type TopLevelKey = (HirSymbolKind, String);
 type BindingKey<'a> = (HirDeclId, HirSymbolKind, &'a str, usize, usize);
 type ScopedBindingKey<'a> = (HirScopeId, HirSymbolKind, &'a str, usize, usize);
 type ScopedNameKey<'a> = (HirScopeId, &'a str);
@@ -17,7 +17,7 @@ struct ScopedBinding {
 
 #[derive(Debug, Default)]
 pub(super) struct ResolvedProgram<'a> {
-    top_level: HashMap<TopLevelKey<'a>, Vec<HirSymbolId>>,
+    top_level: HashMap<TopLevelKey, Vec<HirSymbolId>>,
     bindings: HashMap<BindingKey<'a>, HirSymbolId>,
     scoped_bindings: HashMap<ScopedBindingKey<'a>, HirSymbolId>,
     scoped_bindings_by_name: HashMap<ScopedNameKey<'a>, Vec<ScopedBinding>>,
@@ -29,7 +29,7 @@ pub(super) struct ResolvedProgram<'a> {
 impl<'a> ResolvedProgram<'a> {
     pub(super) fn top_level_symbol(&self, kind: HirSymbolKind, name: &str) -> Option<HirSymbolId> {
         self.top_level
-            .get(&(kind, name))
+            .get(&(kind, name.to_string()))
             .and_then(|symbols| symbols.first().copied())
     }
 
@@ -119,9 +119,11 @@ pub(super) fn resolve_program<'a>(hir: &'a HirProgram<'a>) -> ResolvedProgram<'a
             .push(symbol.id);
 
         if is_top_level_symbol(symbol.kind) {
+            let name =
+                top_level_symbol_name(hir, symbol).unwrap_or_else(|| symbol.name.to_string());
             resolved
                 .top_level
-                .entry((symbol.kind, symbol.name))
+                .entry((symbol.kind, name))
                 .or_default()
                 .push(symbol.id);
             continue;
@@ -189,6 +191,34 @@ fn is_top_level_symbol(kind: HirSymbolKind) -> bool {
     )
 }
 
+fn top_level_symbol_name(
+    hir: &HirProgram<'_>,
+    symbol: &crate::hir::HirSymbol<'_>,
+) -> Option<String> {
+    if symbol.kind != HirSymbolKind::Route {
+        return Some(symbol.name.to_string());
+    }
+
+    let decl = hir.decl(symbol.decl?)?;
+    let crate::hir::HirDeclBody::Route { method, path, .. } = &decl.body else {
+        return Some(symbol.name.to_string());
+    };
+    Some(route_symbol_key(method, path))
+}
+
+pub(super) fn route_symbol_key(method: &HttpMethod, path: &str) -> String {
+    format!("{} {}", route_method_name(method), path)
+}
+
+fn route_method_name(method: &HttpMethod) -> &'static str {
+    match method {
+        HttpMethod::Get => "GET",
+        HttpMethod::Post => "POST",
+        HttpMethod::Put => "PUT",
+        HttpMethod::Delete => "DELETE",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -241,7 +271,7 @@ route GET /customers/:name ?(limit: int = 10) {
             .top_level_symbol(HirSymbolKind::Function, "summarize")
             .is_some());
         assert!(resolved
-            .top_level_symbol(HirSymbolKind::Route, "/customers/:name")
+            .top_level_symbol(HirSymbolKind::Route, "GET /customers/:name")
             .is_some());
 
         for symbol in hir.symbols.iter().filter(|symbol| {

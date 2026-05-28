@@ -1985,8 +1985,10 @@ print(10 / 0)
         stdout.contains(r#""diagnostics":[{"code":"NXL5001""#),
         "stdout: {stdout}"
     );
+    assert!(stdout.contains(r#""groups":[{"path":"#), "stdout: {stdout}");
+    assert!(stdout.contains("main.nx"), "stdout: {stdout}");
     assert!(
-        stdout.contains(r#""groups":[{"path":null,"module_id":null,"diagnostic_indexes":[0]}]"#),
+        stdout.contains(r#""module_id":0,"diagnostic_indexes":[0]}]"#),
         "stdout: {stdout}"
     );
     assert!(stdout.contains("Divisão por zero"), "stdout: {stdout}");

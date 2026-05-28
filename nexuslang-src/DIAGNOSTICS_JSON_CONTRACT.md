@@ -346,6 +346,7 @@ Fields:
 | `NXL1001` | `lexer` | invalid character |
 | `NXL1002` | `lexer` | unterminated string |
 | `NXL1003` | `lexer` | invalid operator |
+| `NXL1099` | `lexer` | generic lexer error |
 | `NXL2001` | `parser` | generic syntax error |
 | `NXL2002` | `parser` | import syntax |
 | `NXL2003` | `parser` | export syntax |

@@ -433,7 +433,8 @@ impl Lexer {
                         format!("caractere invalido '{}'", ch),
                         line,
                         column,
-                    ))
+                    )
+                    .with_code(codes::LEXER_INVALID_CHARACTER))
                 }
             };
 
