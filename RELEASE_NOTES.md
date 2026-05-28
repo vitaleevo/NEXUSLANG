@@ -25,22 +25,20 @@ minor-line RC rather than a `0.1.x` patch.
 - Release packaging scripts updated to include new docs, stdlib, smokes, and
   validation assets.
 
-## 0.2.0-rc.1 Validation Plan
+## 0.2.0-rc.1 Validation Summary
 
-Before this RC can be tagged or published, run:
+This RC was prepared from a clean release branch and validated with:
 
 ```bash
 NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
 ./scripts/package-release.sh
 ./scripts/validate-release-package.sh
-```
-
-For public release readiness, after the branch is committed, pushed, and CI is
-green, run:
-
-```bash
 NEXUS_RELEASE_SIGNING_KEY=<fingerprint> ./scripts/release-dry-run-strict.sh
 ```
+
+The `v0.2.0-rc.1` tag is an annotated signed tag. The GitHub Release is kept as
+a draft pre-release until review/publication. The `.sha256` and `.asc` assets
+attached to the draft are the source of truth for archive integrity.
 
 ## 0.2.0-rc.1 Known Limits
 

@@ -4,7 +4,111 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-28 (Fase 11.54 - CI e strict dry-run do RC aprovados)
+Ultima atualizacao: 2026-05-28 (Fase 11.55 - tag e release draft do RC criados)
+
+## Etapa concluida: Fase 11.55 - tag e release draft do RC criados
+
+Objetivo: transformar o RC `0.2.0-rc.1` validado em um candidato de release
+rastreavel no GitHub, criando tag assinada e release draft/pre-release sem
+publicar release estavel.
+
+Foi feito:
+
+- Confirmado worktree limpo na branch `codex/prepare-nexuslang-0.2.0-rc`.
+- Confirmado que o head validado era
+  `75c5ef8fb8b67494d741d3231965d81ba1ef33b7`.
+- Confirmado que nao existia tag/release `v0.2.0-rc.1` antes da fase.
+- Criada tag anotada e assinada `v0.2.0-rc.1` com a chave NexusLang
+  `3237F7CC5CE2514FC9671BB93CB6808B55385273`.
+- Push da tag para `origin` concluido.
+- Criado GitHub Release draft para `v0.2.0-rc.1`, marcado como pre-release.
+- Anexados ao draft:
+  - `nexuslang-v0.2.0-rc.1-local-release.tar.gz`
+  - `nexuslang-v0.2.0-rc.1-local-release.tar.gz.sha256`
+  - `nexuslang-v0.2.0-rc.1-local-release.tar.gz.asc`
+  - `nexuslang-v0.2.0-rc.1-local-release.tar.gz.sha256.asc`
+- Confirmado que a tag remota aponta, quando expandida, para o commit validado.
+- Confirmado que a release aparece como `isDraft=true`, `isPrerelease=true` e
+  `isLatest=false`.
+- Atualizado `RELEASE_NOTES.md`, `GITHUB_RELEASE.md`, `MEMORY.md`,
+  `meta/CURRENT_TASKS.md` e `meta/ROADMAP.md`.
+
+Arquivos principais:
+
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+- `MEMORY.md`
+- `meta/ROADMAP.md`
+- `RELEASE_NOTES.md`
+- `GITHUB_RELEASE.md`
+- tag remota `v0.2.0-rc.1`
+- GitHub Release draft `v0.2.0-rc.1`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang
+git status --short --branch
+git tag -v v0.2.0-rc.1
+git push origin refs/tags/v0.2.0-rc.1
+git ls-remote --tags origin 'v0.2.0-rc.1^{}'
+gh release create v0.2.0-rc.1 --draft --prerelease --verify-tag ...
+gh release view v0.2.0-rc.1 --json tagName,isDraft,isPrerelease,isLatest,assets
+gh release list --limit 10 --json tagName,name,isDraft,isPrerelease,isLatest
+```
+
+Resultado:
+
+- Tag assinada PASS.
+- Push da tag PASS.
+- Release draft/pre-release PASS.
+- Assets anexados PASS.
+- `v0.2.0-rc.1` nao e `latest` e ainda nao e publica porque esta em draft.
+- Release judgement: RC draft pronto para revisao/publicacao como pre-release;
+  nao houve merge, release estavel ou publicacao final.
+
+Estado atual:
+
+- Branch RC e PR draft continuam existentes.
+- Tag assinada `v0.2.0-rc.1` existe no remoto e aponta para o head validado.
+- GitHub Release draft/pre-release existe com os quatro artefatos de release.
+- `v0.1.1` continua sendo a release publica/latest.
+- O draft ainda precisa ser revisado/publicado antes de qualquer validacao de
+  install publico.
+
+Estado do projeto:
+
+- Fase/trilha atual: release/producao, com RC em formato de release draft.
+- Solido agora: CI verde, strict dry-run aprovado, tag assinada, release draft
+  criado e assets assinados anexados.
+- Falta imediato: revisar/publicar o draft como pre-release e rodar validacao
+  publica de instalacao do RC.
+- Distancia do fim: a trilha RC esta no ultimo trecho operacional; o produto
+  completo ainda nao esta 100/100 porque o RC ainda nao foi publicado, validado
+  publicamente, revisado/mergeado e transformado em uma linha estavel.
+
+## Proximo passo recomendado
+
+Fase 11.56 - publicar o pre-release RC e validar install publico: revisar o
+draft `v0.2.0-rc.1`, publicar como pre-release se estiver aprovado, e rodar
+`NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.1 ./scripts/validate-public-release-install.sh`.
+
+AVISO: O proximo passo e criar/implementar publicacao do pre-release e validacao de install publico do RC `0.2.0-rc.1`. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e `meta/CURRENT_TASKS.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Revisar o draft `v0.2.0-rc.1` no GitHub.
+- Publicar o draft como pre-release, sem marcar como latest estavel.
+- Rodar validacao de install publico contra `v0.2.0-rc.1`.
+- Se passar, decidir merge do PR ou proxima rodada RC.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+- `GITHUB_RELEASE.md`
+- `scripts/validate-public-release-install.sh`
+- `RELEASE_NOTES.md`
 
 ## Etapa concluida: Fase 11.54 - CI e strict dry-run do RC aprovados
 

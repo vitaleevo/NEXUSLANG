@@ -34,13 +34,14 @@ A linha atual esta em estabilizacao de release/producao. O branch
 commits por escopo para o RC local `0.2.0-rc.1`; a quality gate local ampla,
 o package local e `validate-release-package.sh` passaram. O PR draft
 `https://github.com/vitaleevo/NEXUSLANG/pull/1` esta aberto, o CI remoto passou
-e o strict public-release dry-run passou com chave mantida. O foco imediato e
-decidir/criar tag e release draft ou pre-release do RC.
+e o strict public-release dry-run passou com chave mantida. A tag assinada
+`v0.2.0-rc.1` e o GitHub Release draft/pre-release existem. O foco imediato e
+revisar/publicar o pre-release e validar o install publico do RC.
 
 ## Trilhas proximas
 
-1. Release/producao: criar tag `v0.2.0-rc.1` e release draft/pre-release do RC
-   apenas a partir do head validado.
+1. Release/producao: revisar/publicar o pre-release `v0.2.0-rc.1` e rodar
+   validacao publica de instalacao do RC.
 2. Diagnostics/tooling API: preservar JSON v1 enquanto melhora APIs internas
    para consumidores de editor.
 3. LSP/editor tooling: adicionar workspace symbols, formatting, rename ou code

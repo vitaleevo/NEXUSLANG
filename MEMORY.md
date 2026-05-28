@@ -5,6 +5,18 @@ the short English-named memory requested for architecture decisions.
 
 Last updated: 2026-05-28
 
+## 2026-05-28 - RC draft release created
+
+- Signed annotated tag `v0.2.0-rc.1` was created with the NexusLang release key
+  and pushed to `origin`.
+- The tag points to validated commit `75c5ef8fb8b67494d741d3231965d81ba1ef33b7`
+  from `codex/prepare-nexuslang-0.2.0-rc`.
+- A GitHub Release draft was created for `v0.2.0-rc.1` as a pre-release, with
+  the local package archive, `.sha256`, and both detached `.asc` signatures
+  attached.
+- The draft is not public yet; `v0.1.1` remains the latest public stable
+  release until the RC draft is reviewed and published as a pre-release.
+
 ## 2026-05-28 - RC PR, CI, and strict dry-run passed
 
 - Branch `codex/prepare-nexuslang-0.2.0-rc` was pushed to
