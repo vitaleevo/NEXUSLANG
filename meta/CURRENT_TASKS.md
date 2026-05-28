@@ -5,14 +5,15 @@ repositorio.
 
 ## Status atual
 
-Fase 11.62 concluida em 2026-05-28: foi decidido nao promover `0.2.0` stable
-imediatamente; o caminho escolhido foi hardening pre-stable curto. O PR #3
-documentou a decisao em `meta/STABLE_0_2_0_DECISION.md`, moveu o CI para
-actions Node 24 pinadas por SHA, passou com duas jobs `quality` e CodeRabbit
-verdes, foi mergeado em `main` por
-`e86d3c4121914d75d6736e29f5e842929dcd39f9` e teve quality gate local e CI
-remoto pos-merge verdes. `v0.1.1` continua stable/latest; `v0.2.0-rc.2`
-continua como public pre-release.
+Fase 11.63 concluida em 2026-05-28: a branch controlada
+`codex/prepare-nexuslang-0.2.0-stable` foi criada a partir de `main`, a versao
+fonte foi promovida de `0.2.0-rc.2` para `0.2.0`, o WASM do playground foi
+reconstruido, os docs/notas finais foram atualizados mantendo limites
+conhecidos, e o PR #4 foi aberto:
+`https://github.com/vitaleevo/NEXUSLANG/pull/4`. O pacote local
+`nexuslang-v0.2.0-local-release.tar.gz` foi gerado e validado em ambiente
+limpo. `v0.2.0` ainda nao foi tagueado nem publicado; `v0.1.1` continua
+stable/latest e `v0.2.0-rc.2` continua como public pre-release.
 
 ## Tarefas concluidas
 
@@ -90,6 +91,19 @@ continua como public pre-release.
   PASS.
 - [x] Mergear PR #3 em `main`.
 - [x] Rodar quality gate local e observar CI remoto pos-merge em `main`.
+- [x] Criar branch `codex/prepare-nexuslang-0.2.0-stable`.
+- [x] Atualizar `nexuslang-src` e `nexus-lsp` para `0.2.0`.
+- [x] Atualizar `Cargo.lock`, release notes, README, release docs, versioning e
+  roadmap para stable `0.2.0`.
+- [x] Rebuildar o WASM do playground para o pacote `0.2.0`.
+- [x] Rodar `CARGO_TARGET_DIR=/tmp/nexuslang-target-stable cargo check --workspace --all-targets`.
+- [x] Rodar `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`.
+- [x] Gerar pacote local `nexuslang-v0.2.0-local-release.tar.gz`.
+- [x] Validar pacote local em ambiente limpo.
+- [x] Pushar branch stable.
+- [x] Criar PR #4 para review/merge controlado de `0.2.0`.
+- [x] Observar checks do PR #4 verdes.
+- [x] Rodar strict public-release dry-run no HEAD final da branch.
 
 ## Validacao executada
 
@@ -172,6 +186,16 @@ git pull --ff-only origin main
 git diff --check
 NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
 gh run watch 26598079182 -R vitaleevo/NEXUSLANG --exit-status --interval 10
+git switch -c codex/prepare-nexuslang-0.2.0-stable
+CARGO_TARGET_DIR=/tmp/nexuslang-target-stable cargo check --workspace --all-targets
+git diff --check
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+./scripts/package-release.sh
+./scripts/validate-release-package.sh dist/nexuslang-v0.2.0-local-release.tar.gz
+git push -u origin codex/prepare-nexuslang-0.2.0-stable
+gh pr create -R vitaleevo/NEXUSLANG --base main --head codex/prepare-nexuslang-0.2.0-stable
+gh pr checks 4 -R vitaleevo/NEXUSLANG --watch --interval 10 --fail-fast
+NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 ./scripts/release-dry-run-strict.sh
 ```
 
 Resultado: PASS para LSP, quality gate, package-release, validate-release-package,
@@ -203,13 +227,16 @@ mergeado em `main` por `8c243bb62fd627421e914ccabc4d6caf8daf205a`. Pos-merge,
 o quality gate completo e o install publico do `v0.2.0-rc.2` passaram de novo.
 Na Fase 11.62, o stable `0.2.0` foi explicitamente adiado para hardening
 pre-stable, o PR #3 mergeou a decisao e CI Node 24 pinado por SHA em `main`,
-e o quality gate local mais CI remoto pos-merge passaram.
+e o quality gate local mais CI remoto pos-merge passaram. Na Fase 11.63, a
+branch stable `0.2.0` foi preparada sem publicar tag/release, o pacote local
+stable validou e o PR #4 foi aberto para review controlado.
 
 ## Proxima fase recomendada
 
-Fase 11.63: criar branch controlada de stable `0.2.0`, trocar a versao fonte,
-preparar release notes finais, rodar package validation e strict public-release
-dry-run antes de qualquer tag/release estavel.
+Fase 11.64: revisar e mergear PR #4 somente com checks verdes, depois criar a
+tag assinada `v0.2.0`, publicar GitHub Release stable com pacote/checksum/
+assinaturas/chave, e rodar validacao publica de install:
+`NEXUS_PUBLIC_RELEASE_TAG=v0.2.0 ./scripts/validate-public-release-install.sh`.
 
 ## Arquivos para abrir primeiro na proxima fase
 
@@ -219,7 +246,8 @@ dry-run antes de qualquer tag/release estavel.
 - `RELEASE_NOTES.md`
 - `GITHUB_RELEASE.md`
 - `scripts/release-dry-run-strict.sh`
-- Release publico `https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0-rc.2`
+- PR #4 `https://github.com/vitaleevo/NEXUSLANG/pull/4`
+- Release publico RC2 `https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0-rc.2`
 
 ## Riscos de compatibilidade
 
@@ -230,5 +258,5 @@ dry-run antes de qualquer tag/release estavel.
   sem decisao explicita de risco/producao.
 - O hardening de Actions Node 24 ja foi mergeado; se forem usados runners
   self-hosted no futuro, manter Actions Runner `v2.327.1+`.
-- Nao publicar `v0.2.0` sem strict dry-run, assinatura e validacao publica de
-  install do artefato stable.
+- Nao publicar `v0.2.0` sem PR #4 verde/mergeado, strict dry-run no HEAD de
+  release, assinatura e validacao publica de install do artefato stable.

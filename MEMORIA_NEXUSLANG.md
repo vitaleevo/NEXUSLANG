@@ -4,9 +4,110 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-28 (Fase 11.62 - decisao stable 0.2.0 e hardening CI)
+Ultima atualizacao: 2026-05-28 (Fase 11.63 - branch stable 0.2.0 preparada)
 
-## Etapa concluida: Fase 11.62 - decisao stable 0.2.0 e hardening CI
+## Etapa concluida: Fase 11.63 - branch stable 0.2.0 preparada
+
+Objetivo: criar a branch controlada de stable `0.2.0`, trocar a versao fonte
+de `0.2.0-rc.2` para `0.2.0`, atualizar release notes/docs finais, validar
+pacote local e rodar o strict public-release dry-run antes de qualquer
+publicacao de tag/release.
+
+Foi feito:
+
+- Criada a branch `codex/prepare-nexuslang-0.2.0-stable` a partir de `main`.
+- Atualizado `nexuslang-src/Cargo.toml` de `0.2.0-rc.2` para `0.2.0`.
+- Atualizado `nexuslang-src/nexus-lsp/Cargo.toml` de `0.2.0-rc.2` para
+  `0.2.0`.
+- Atualizado `nexuslang-src/Cargo.lock` para `nexuslang` e `nexus-lsp`
+  `0.2.0`.
+- Reconstruido o WASM do playground para o pacote stable.
+- Atualizados `RELEASE_NOTES.md`, `README.md`, `RELEASE.md`,
+  `VERSIONING.md`, `GITHUB_RELEASE.md` e `meta/ROADMAP.md` para a linha
+  stable, mantendo explicitamente os limites conhecidos de registry remoto,
+  SQLite fisico, LSP/editor e playground hospedado.
+- Gerado e validado o pacote local
+  `dist/nexuslang-v0.2.0-local-release.tar.gz`.
+- Criado PR #4:
+  `https://github.com/vitaleevo/NEXUSLANG/pull/4`.
+- Nenhuma tag `v0.2.0` foi criada e nenhuma GitHub Release stable foi
+  publicada nesta etapa.
+
+Arquivos principais:
+
+- `nexuslang-src/Cargo.toml`
+- `nexuslang-src/nexus-lsp/Cargo.toml`
+- `nexuslang-src/Cargo.lock`
+- `nexuslang-src/web/nexuslang_playground.wasm`
+- `RELEASE_NOTES.md`
+- `README.md`
+- `RELEASE.md`
+- `VERSIONING.md`
+- `GITHUB_RELEASE.md`
+- `meta/ROADMAP.md`
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+
+Verificacao executada:
+
+```bash
+cd <repo-root>
+git switch -c codex/prepare-nexuslang-0.2.0-stable
+CARGO_TARGET_DIR=/tmp/nexuslang-target-stable cargo check --workspace --all-targets
+git diff --check
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+./scripts/package-release.sh
+./scripts/validate-release-package.sh dist/nexuslang-v0.2.0-local-release.tar.gz
+git push -u origin codex/prepare-nexuslang-0.2.0-stable
+gh pr create -R vitaleevo/NEXUSLANG --base main --head codex/prepare-nexuslang-0.2.0-stable
+gh pr checks 4 -R vitaleevo/NEXUSLANG --watch --interval 10 --fail-fast
+NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 ./scripts/release-dry-run-strict.sh
+```
+
+Resultado:
+
+- Source version: `0.2.0`.
+- CLI/package smoke mostrou `NexusLang v0.2.0`.
+- Quality gate local: PASS, incluindo fmt, check, clippy, testes Rust, smokes
+  HTTP/auth/storage, playground JS e validacao OpenAPI.
+- Package local stable: PASS.
+- Archive local stable validado:
+  `dist/nexuslang-v0.2.0-local-release.tar.gz`.
+- Tamanho do archive local: 1594423 bytes.
+- SHA-256 local inicial: `34b62bc0d6b20bfd5f1f4838d1b3918bcf8f209b7fb86ac31385b8d8479d9186`.
+- WASM rebuild: 479716 bytes.
+- PR #4 aberto para review.
+- Strict public-release dry-run: PASS no HEAD final da branch antes de qualquer
+  tag/release.
+
+Estado atual:
+
+- A branch stable `0.2.0` existe e contem o bump final de versao.
+- `v0.1.1` continua sendo a release stable/latest publicada.
+- `v0.2.0-rc.2` continua sendo o ultimo pre-release publico.
+- `v0.2.0` ainda nao foi publicado.
+
+Estado do projeto:
+
+- Fase/trilha atual: promocao controlada de `0.2.0` stable.
+- Solido agora: a base RC2, o hardening de CI e o pacote local `0.2.0` estao
+  preparados e validados localmente.
+- Falta imediato: revisar/mergear PR #4, criar tag assinada `v0.2.0`, publicar
+  GitHub Release stable com assets e rodar validacao publica de install.
+- Distancia do fim: a trilha de release `0.2.0` esta no ultimo trecho; o
+  produto completo ainda tem riscos conhecidos em registry remoto, SQLite
+  fisico/migracoes, LSP editorial e playground hospedado.
+
+## Proximo passo recomendado
+
+Fase 11.64 - review/merge e publicacao controlada do stable `v0.2.0`: revisar
+PR #4, mergear somente se checks e review estiverem verdes, criar tag assinada
+`v0.2.0`, publicar GitHub Release stable com pacote/checksum/assinaturas/chave,
+e rodar `NEXUS_PUBLIC_RELEASE_TAG=v0.2.0 ./scripts/validate-public-release-install.sh`.
+
+AVISO: O proximo passo e criar/implementar review/merge do PR #4 e publicacao controlada da tag/release `v0.2.0` com validacao publica de install pos-release. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e `meta/CURRENT_TASKS.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Historico: Fase 11.62 - decisao stable 0.2.0 e hardening CI
 
 Objetivo: decidir se `0.2.0` deveria ser promovido imediatamente para stable
 ou passar por hardening pre-stable, aplicar o hardening de CI pendente e manter
@@ -89,7 +190,7 @@ Estado do projeto:
   completo ainda nao esta 100/100 producao por registry remoto, schema SQLite
   fisico, features editoriais LSP e playground hospedado.
 
-## Proximo passo recomendado
+### Historico - proximo passo recomendado na Fase 11.62
 
 Fase 11.63 - branch controlada de stable `0.2.0`: criar branch a partir de
 `main`, trocar a versao fonte de `0.2.0-rc.2` para `0.2.0`, atualizar release
