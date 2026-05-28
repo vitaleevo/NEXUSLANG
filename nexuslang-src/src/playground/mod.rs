@@ -74,10 +74,10 @@ pub fn run_playground_json(source: &str) -> String {
     let warnings_json = warnings_json(&warnings);
 
     let mut interpreter = Interpreter::new_captured();
-    if let Err(message) = interpreter.run(&program) {
+    if let Err(diagnostic) = interpreter.run(&program) {
         return response_json(ResponseParts {
             ok: false,
-            diagnostic: Diagnostic::new(DiagnosticStage::Runtime, message),
+            diagnostic,
             token_count,
             decl_count,
             warning_count: warnings.len(),
@@ -390,6 +390,21 @@ fn decl_json(decl: &Decl) -> String {
                 ),
             ),
         ]),
+        Decl::Import { import } => object_json(&[
+            ("kind", json_string("Import")),
+            ("name", json_string(&import.name)),
+            (
+                "summary",
+                json_string(&format!("import {} from {:?}", import.name, import.source)),
+            ),
+            ("children", string_vec_json(Vec::new())),
+        ]),
+        Decl::Export { decl: _inner, .. } => object_json(&[
+            ("kind", json_string("Export")),
+            ("name", json_string("export")),
+            ("summary", json_string("export")),
+            ("children", string_vec_json(vec!["exported".to_string()])),
+        ]),
         Decl::Statement(stmt) => object_json(&[
             ("kind", json_string("Statement")),
             ("name", json_string(stmt_kind(stmt))),
@@ -479,7 +494,11 @@ fn erp_json(program: &Program) -> String {
                     ("items", items.len().to_string()),
                 ]));
             }
-            Decl::Function { .. } | Decl::Auth { .. } | Decl::Statement(_) => {}
+            Decl::Function { .. }
+            | Decl::Auth { .. }
+            | Decl::Import { .. }
+            | Decl::Export { .. }
+            | Decl::Statement(_) => {}
         }
     }
 
