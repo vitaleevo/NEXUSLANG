@@ -5,13 +5,15 @@ repositorio.
 
 ## Status atual
 
-Fase 11.65 concluida em 2026-05-28: a triagem pos-release confirmou que
-`v0.2.0` esta publicada como stable/latest, nao draft e nao pre-release, com
-assets essenciais, checksum, assinaturas, chave publica, fingerprint e install
-publico ja validados. Nao ha PRs nem issues abertas. A proxima trilha escolhida
-e package registry remoto MVP read-only para fechar a maior lacuna pos-stable
-do package manager, sem incluir publish, auth, solver semantico completo ou
-registry central hospedado nesta fase.
+Fase 11.66 concluida em 2026-05-28 na branch
+`codex/package-registry-readonly-mvp`: o package manager agora tem registry
+read-only MVP por `NEXUS_REGISTRY_URL`, com metadata `nexus-package.toml`,
+download/leitura de archive `.tar`, SHA-256 opcional, extracao segura, cache em
+`.nexus/packages/<pacote>`, lockfile com checksum/resolved_path e imports de
+registry dependencies instaladas. Sem `NEXUS_REGISTRY_URL`, o comportamento
+contrato/marker anterior continua. Ainda nao foram adicionados publish, auth,
+solver semantico completo, dependencias transitivas, HTTPS ou registry central.
+PR #5 esta aberto em `https://github.com/vitaleevo/NEXUSLANG/pull/5`.
 
 ## Tarefas concluidas
 
@@ -120,6 +122,22 @@ registry central hospedado nesta fase.
 - [x] Atualizar memoria e tarefas atuais para Fase 11.66.
 - [x] Rodar `git diff --check`.
 - [x] Rodar `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`.
+- [x] Criar branch `codex/package-registry-readonly-mvp`.
+- [x] Implementar `NEXUS_REGISTRY_URL` para registry read-only.
+- [x] Implementar metadata `nexus-package.toml`.
+- [x] Implementar download/leitura de archive `.tar` de registry.
+- [x] Implementar SHA-256 opcional por package.
+- [x] Implementar extracao segura bloqueando path traversal, caminhos absolutos
+  e links.
+- [x] Atualizar lockfile com `resolved_path`, `registry_package` e
+  `checksum`.
+- [x] Permitir imports de registry dependencies instaladas no cache.
+- [x] Preservar modo contrato/marker quando `NEXUS_REGISTRY_URL` nao existe.
+- [x] Cobrir package manager com testes de sucesso, HTTP simples, checksum
+  invalido, path traversal, metadata invalido e pacote inexistente.
+- [x] Atualizar `PACKAGE_MANAGER.md`, roadmaps, memoria e tarefas atuais.
+- [x] Criar PR #5 para review:
+  `https://github.com/vitaleevo/NEXUSLANG/pull/5`.
 
 ## Validacao executada
 
@@ -233,6 +251,11 @@ gh issue list -R vitaleevo/NEXUSLANG --state open --limit 20 --json number,title
 gh run list -R vitaleevo/NEXUSLANG --branch main --limit 8 --json databaseId,status,conclusion,headSha,workflowName,createdAt,url
 git diff --check
 NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+git switch -c codex/package-registry-readonly-mvp
+cargo fmt
+CARGO_TARGET_DIR=/tmp/nexuslang-target-registry cargo test -p nexuslang --test cli_package_manager -- --nocapture
+CARGO_TARGET_DIR=/tmp/nexuslang-target-registry cargo check --workspace --all-targets
+CARGO_TARGET_DIR=/tmp/nexuslang-target-registry cargo clippy --workspace --all-targets -- -D warnings
 ```
 
 Resultado: PASS para LSP, quality gate, package-release, validate-release-package,
@@ -274,34 +297,32 @@ validacao publica de install passou. Archive publico stable:
 confirmou `v0.2.0` como stable/latest, PRs abertas 0, issues abertas 0 e CI
 remoto recente da `main` verde. `git diff --check` e o quality gate local com
 clippy tambem passaram. A proxima trilha escolhida e package registry remoto
-MVP read-only.
+MVP read-only. Na Fase 11.66, o registry read-only foi implementado em branch
+controlada com metadata, `.tar`, checksum, extracao segura, lockfile, cache e
+imports instalados. Os testes focados do package manager passaram 12/12,
+incluindo registry HTTP simples e falhas de seguranca.
 
 ## Proxima fase recomendada
 
-Fase 11.66: package registry remoto MVP read-only. Implementar contrato de
-metadata, resolucao/download de dependencias `registry:<pacote>@<versao>`,
-cache local seguro em `.nexus/packages`, checksum quando informado pelo
-metadata, lockfile deterministico e testes de falha/sucesso. Nao implementar
-publish, auth, solver semantico completo, dependencias transitivas ou registry
-central hospedado nesta fase.
+Fase 11.67: review/merge do PR #5 do registry remoto MVP read-only. Revisar
+feedback automatizado, confirmar CI, mergear em `main` apenas com checks verdes
+e rodar validacao pos-merge focada no package manager.
 
 ## Arquivos para abrir primeiro na proxima fase
 
 - `MEMORIA_NEXUSLANG.md`
 - `meta/CURRENT_TASKS.md`
-- `meta/POST_RELEASE_0_2_0_TRIAGE.md`
 - `PACKAGE_MANAGER.md`
 - `nexuslang-src/src/package_manager.rs`
 - `nexuslang-src/src/module_loader.rs`
 - `nexuslang-src/tests/cli_package_manager.rs`
+- PR #5 `https://github.com/vitaleevo/NEXUSLANG/pull/5`
 
 ## Riscos de compatibilidade
 
 - `v0.2.0` ja foi publicado; futuras correcoes devem usar nova versao/tag, nao
   substituir assets sem novo gate explicito.
-- Registry remoto da proxima fase deve ser read-only e pequeno; nao misturar
-  publish, autenticacao ou solver completo.
 - Extracao de archives deve bloquear path traversal e validar checksums quando
   o metadata fornecer hash.
-- `PACKAGE_MANAGER.md` ainda define o registry como contrato futuro; atualizar
-  a doc junto com a implementacao.
+- Registry read-only atual nao tem HTTPS, assinatura de pacote, publish, auth,
+  dependencias transitivas nem solver semantico completo.

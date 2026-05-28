@@ -3,8 +3,23 @@ use std::env;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+use sha2::{Digest, Sha256};
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::io::{Read, Write};
+#[cfg(not(target_arch = "wasm32"))]
+use std::net::{TcpStream, ToSocketAddrs};
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Duration;
+
 pub const MANIFEST_FILE: &str = "nexus.toml";
 pub const LOCK_FILE: &str = "nexus.lock";
+pub const REGISTRY_ENV: &str = "NEXUS_REGISTRY_URL";
+const REGISTRY_METADATA_FILE: &str = "nexus-package.toml";
+#[cfg(not(target_arch = "wasm32"))]
+const REGISTRY_HTTP_CONNECT_TIMEOUT_SECS: u64 = 5;
+#[cfg(not(target_arch = "wasm32"))]
+const REGISTRY_HTTP_IO_TIMEOUT_SECS: u64 = 15;
 
 #[derive(Debug, Clone)]
 struct NexusManifest {
@@ -47,7 +62,11 @@ pub struct ProjectManifest {
 pub enum ProjectDependencySource {
     Local,
     Path(PathBuf),
-    Registry { package: String, version: String },
+    Registry {
+        package: String,
+        version: String,
+        cache_path: PathBuf,
+    },
 }
 
 impl ProjectManifest {
@@ -74,8 +93,8 @@ pub struct PackageReport {
 pub fn install_current_dir() -> Result<PackageReport, String> {
     let root = project_root_or_current()?;
     let (manifest, manifest_created) = load_or_create_manifest(&root)?;
-    write_lockfile(&root, &manifest)?;
     sync_local_packages(&root, &manifest)?;
+    write_lockfile(&root, &manifest)?;
 
     Ok(PackageReport {
         root,
@@ -106,8 +125,8 @@ pub fn add_dependency_current_dir(
         .unwrap_or(true);
 
     write_manifest(&root, &manifest)?;
-    write_lockfile(&root, &manifest)?;
     sync_local_packages(&root, &manifest)?;
+    write_lockfile(&root, &manifest)?;
 
     Ok(PackageReport {
         root,
@@ -123,8 +142,8 @@ pub fn add_dependency_current_dir(
 pub fn update_current_dir() -> Result<PackageReport, String> {
     let root = project_root_or_current()?;
     let (manifest, manifest_created) = load_or_create_manifest(&root)?;
-    write_lockfile(&root, &manifest)?;
     sync_local_packages(&root, &manifest)?;
+    write_lockfile(&root, &manifest)?;
 
     Ok(PackageReport {
         root,
@@ -404,6 +423,9 @@ fn write_lockfile(root: &Path, manifest: &NexusManifest) -> Result<(), String> {
                 escape_string(&registry_package)
             ));
         }
+        if let Some(checksum) = metadata.checksum {
+            output.push_str(&format!("checksum = \"{}\"\n", escape_string(&checksum)));
+        }
         output.push('\n');
     }
 
@@ -417,6 +439,12 @@ fn sync_local_packages(root: &Path, manifest: &NexusManifest) -> Result<(), Stri
 
     for (name, source) in &manifest.dependencies {
         let package_dir = packages_dir.join(name);
+        if let DependencySource::Registry(registry) = source {
+            if sync_registry_package(&packages_dir, name, registry)? {
+                continue;
+            }
+        }
+
         fs::create_dir_all(&package_dir).map_err(|e| e.to_string())?;
         let metadata = lock_metadata(root, name, source)?;
         let marker = format!(
@@ -430,6 +458,582 @@ fn sync_local_packages(root: &Path, manifest: &NexusManifest) -> Result<(), Stri
     }
 
     Ok(())
+}
+
+fn sync_registry_package(
+    packages_dir: &Path,
+    package_name: &str,
+    registry: &RegistryDependency,
+) -> Result<bool, String> {
+    let Some(base) = registry_base_from_env()? else {
+        return Ok(false);
+    };
+
+    let metadata = load_registry_metadata(&base, registry)?;
+    let archive = read_registry_resource(&base.archive_resource(registry, &metadata.archive)?)?;
+    if let Some(expected) = &metadata.sha256 {
+        let actual = sha256_hex(&archive);
+        if &actual != expected {
+            return Err(format!(
+                "Checksum invalido para registry package '{}': esperado {}, obtido {}",
+                package_name, expected, actual
+            ));
+        }
+    }
+
+    let package_dir = packages_dir.join(package_name);
+    if package_dir.exists() {
+        validate_cache_child(packages_dir, &package_dir)?;
+        fs::remove_dir_all(&package_dir).map_err(|e| e.to_string())?;
+    }
+    fs::create_dir_all(&package_dir).map_err(|e| e.to_string())?;
+    extract_tar_archive(&archive, &package_dir)?;
+    validate_cached_registry_package(&package_dir, package_name, registry)?;
+
+    let checksum_line = metadata
+        .sha256
+        .as_ref()
+        .map(|checksum| format!("checksum=sha256:{}\n", checksum))
+        .unwrap_or_default();
+    let marker = format!(
+        "name={}\nkind=registry\nsource=registry:{}@{}\nversion={}\nregistry_url={}\n{}managed_by=nexus\n",
+        package_name,
+        registry.package,
+        registry.version,
+        registry.version,
+        base.display(),
+        checksum_line
+    );
+    fs::write(package_dir.join("PACKAGE.txt"), marker).map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
+fn validate_cached_registry_package(
+    package_dir: &Path,
+    package_name: &str,
+    registry: &RegistryDependency,
+) -> Result<(), String> {
+    let manifest_path = package_dir.join(MANIFEST_FILE);
+    if !manifest_path.is_file() {
+        return Err(format!(
+            "Registry package '{}' precisa conter {} na raiz do archive",
+            package_name, MANIFEST_FILE
+        ));
+    }
+
+    let source = fs::read_to_string(&manifest_path).map_err(|e| e.to_string())?;
+    let manifest = parse_manifest(&source)?;
+    if manifest.name != package_name {
+        return Err(format!(
+            "Registry package '{}' contem pacote '{}'",
+            package_name, manifest.name
+        ));
+    }
+    if manifest.version != registry.version {
+        return Err(format!(
+            "Registry package '{}' esta na versao '{}', esperado '{}'",
+            package_name, manifest.version, registry.version
+        ));
+    }
+
+    Ok(())
+}
+
+fn registry_lock_checksum(registry: &RegistryDependency) -> Result<Option<String>, String> {
+    let Some(base) = registry_base_from_env()? else {
+        return Ok(None);
+    };
+    let metadata = load_registry_metadata(&base, registry)?;
+    Ok(metadata
+        .sha256
+        .map(|checksum| format!("sha256:{}", checksum)))
+}
+
+fn registry_resolved_path(root: &Path, package_name: &str) -> Option<String> {
+    registry_base_from_env().ok().flatten().map(|_| {
+        root.join(".nexus")
+            .join("packages")
+            .join(package_name)
+            .display()
+            .to_string()
+    })
+}
+
+#[derive(Debug, Clone)]
+enum RegistryBase {
+    Local(PathBuf),
+    Http(String),
+}
+
+#[derive(Debug, Clone)]
+enum RegistryResource {
+    Local(PathBuf),
+    Http(String),
+}
+
+#[derive(Debug)]
+struct RegistryPackageMetadata {
+    name: String,
+    version: String,
+    archive: String,
+    sha256: Option<String>,
+}
+
+fn registry_base_from_env() -> Result<Option<RegistryBase>, String> {
+    match env::var(REGISTRY_ENV) {
+        Ok(value) => {
+            let value = value.trim();
+            if value.is_empty() {
+                Ok(None)
+            } else {
+                RegistryBase::parse(value).map(Some)
+            }
+        }
+        Err(env::VarError::NotPresent) => Ok(None),
+        Err(e) => Err(format!("{} invalido: {}", REGISTRY_ENV, e)),
+    }
+}
+
+impl RegistryBase {
+    fn parse(value: &str) -> Result<Self, String> {
+        if let Some(path) = value.strip_prefix("file://") {
+            if path.trim().is_empty() {
+                return Err(format!("{} file:// precisa de caminho", REGISTRY_ENV));
+            }
+            Ok(Self::Local(PathBuf::from(path)))
+        } else if value.starts_with("http://") {
+            Ok(Self::Http(value.trim_end_matches('/').to_string()))
+        } else if value.starts_with("https://") {
+            Err(format!(
+                "{} ainda nao suporta HTTPS neste MVP; use file:// ou http://",
+                REGISTRY_ENV
+            ))
+        } else {
+            Ok(Self::Local(PathBuf::from(value)))
+        }
+    }
+
+    fn metadata_resource(&self, registry: &RegistryDependency) -> RegistryResource {
+        match self {
+            Self::Local(root) => RegistryResource::Local(
+                root.join(&registry.package)
+                    .join(&registry.version)
+                    .join(REGISTRY_METADATA_FILE),
+            ),
+            Self::Http(base) => RegistryResource::Http(format!(
+                "{}/{}/{}/{}",
+                base, registry.package, registry.version, REGISTRY_METADATA_FILE
+            )),
+        }
+    }
+
+    fn archive_resource(
+        &self,
+        registry: &RegistryDependency,
+        archive: &str,
+    ) -> Result<RegistryResource, String> {
+        validate_registry_archive_path(archive)?;
+        Ok(match self {
+            Self::Local(root) => RegistryResource::Local(
+                root.join(&registry.package)
+                    .join(&registry.version)
+                    .join(archive),
+            ),
+            Self::Http(base) => RegistryResource::Http(format!(
+                "{}/{}/{}/{}",
+                base, registry.package, registry.version, archive
+            )),
+        })
+    }
+
+    fn display(&self) -> String {
+        match self {
+            Self::Local(path) => path.display().to_string(),
+            Self::Http(url) => url.clone(),
+        }
+    }
+}
+
+fn load_registry_metadata(
+    base: &RegistryBase,
+    registry: &RegistryDependency,
+) -> Result<RegistryPackageMetadata, String> {
+    let source = read_registry_resource(&base.metadata_resource(registry))?;
+    let source = String::from_utf8(source).map_err(|e| {
+        format!(
+            "{} de registry package '{}@{}' nao e UTF-8 valido: {}",
+            REGISTRY_METADATA_FILE, registry.package, registry.version, e
+        )
+    })?;
+    parse_registry_metadata(&source, registry)
+}
+
+fn parse_registry_metadata(
+    source: &str,
+    registry: &RegistryDependency,
+) -> Result<RegistryPackageMetadata, String> {
+    let mut keys = BTreeSet::new();
+    let mut name = None;
+    let mut version = None;
+    let mut archive = None;
+    let mut sha256 = None;
+
+    for (index, raw_line) in source.lines().enumerate() {
+        let line_number = index + 1;
+        let line_without_comment = raw_line.split('#').next().unwrap_or("");
+        let line = line_without_comment.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with('[') {
+            return Err(format!(
+                "{} nao aceita secoes; linha {} invalida",
+                REGISTRY_METADATA_FILE, line_number
+            ));
+        }
+
+        let (key, raw_value) = line.split_once('=').ok_or_else(|| {
+            format!(
+                "Linha {} invalida em {}",
+                line_number, REGISTRY_METADATA_FILE
+            )
+        })?;
+        let key = key.trim();
+        ensure_unique_key(&mut keys, key, line_number)?;
+        let value = parse_registry_string_value(raw_value.trim(), line_number)?;
+
+        match key {
+            "name" => {
+                validate_package_name(&value)?;
+                name = Some(value);
+            }
+            "version" => {
+                validate_version(&value)?;
+                version = Some(value);
+            }
+            "archive" => {
+                validate_registry_archive_path(&value)?;
+                archive = Some(value);
+            }
+            "sha256" => {
+                validate_sha256(&value)?;
+                sha256 = Some(value.to_ascii_lowercase());
+            }
+            _ => {
+                return Err(format!(
+                    "Chave '{}' desconhecida em {} na linha {}",
+                    key, REGISTRY_METADATA_FILE, line_number
+                ));
+            }
+        }
+    }
+
+    let metadata = RegistryPackageMetadata {
+        name: name.ok_or_else(|| format!("{} precisa de name", REGISTRY_METADATA_FILE))?,
+        version: version.ok_or_else(|| format!("{} precisa de version", REGISTRY_METADATA_FILE))?,
+        archive: archive.ok_or_else(|| format!("{} precisa de archive", REGISTRY_METADATA_FILE))?,
+        sha256,
+    };
+
+    if metadata.name != registry.package {
+        return Err(format!(
+            "Registry metadata declara pacote '{}', esperado '{}'",
+            metadata.name, registry.package
+        ));
+    }
+    if metadata.version != registry.version {
+        return Err(format!(
+            "Registry metadata declara versao '{}', esperado '{}'",
+            metadata.version, registry.version
+        ));
+    }
+
+    Ok(metadata)
+}
+
+fn parse_registry_string_value(raw: &str, line_number: usize) -> Result<String, String> {
+    if !raw.starts_with('"') || !raw.ends_with('"') || raw.len() < 2 {
+        return Err(format!(
+            "Linha {} invalida em {}: use valores entre aspas",
+            line_number, REGISTRY_METADATA_FILE
+        ));
+    }
+    Ok(raw[1..raw.len() - 1]
+        .replace("\\\"", "\"")
+        .replace("\\\\", "\\"))
+}
+
+fn validate_registry_archive_path(path: &str) -> Result<(), String> {
+    let archive_path = Path::new(path);
+    let valid = !path.trim().is_empty()
+        && !archive_path.is_absolute()
+        && !archive_path.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        });
+
+    if valid {
+        Ok(())
+    } else {
+        Err(format!(
+            "Archive de registry invalido: '{}'. Use caminho relativo dentro do registry.",
+            path
+        ))
+    }
+}
+
+fn validate_sha256(value: &str) -> Result<(), String> {
+    let valid = value.len() == 64 && value.chars().all(|ch| ch.is_ascii_hexdigit());
+    if valid {
+        Ok(())
+    } else {
+        Err(format!(
+            "SHA-256 invalido em {}: '{}'",
+            REGISTRY_METADATA_FILE, value
+        ))
+    }
+}
+
+fn read_registry_resource(resource: &RegistryResource) -> Result<Vec<u8>, String> {
+    match resource {
+        RegistryResource::Local(path) => fs::read(path)
+            .map_err(|e| format!("Falha ao ler registry resource {}: {}", path.display(), e)),
+        RegistryResource::Http(url) => fetch_http_url(url),
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn fetch_http_url(url: &str) -> Result<Vec<u8>, String> {
+    let without_scheme = url
+        .strip_prefix("http://")
+        .ok_or_else(|| format!("Registry URL HTTP invalida: {}", url))?;
+    let (authority, path) = without_scheme
+        .split_once('/')
+        .map(|(authority, path)| (authority, format!("/{}", path)))
+        .unwrap_or((without_scheme, "/".to_string()));
+    if authority.is_empty() {
+        return Err(format!("Registry URL HTTP sem host: {}", url));
+    }
+
+    let address = if authority.contains(':') {
+        authority.to_string()
+    } else {
+        format!("{}:80", authority)
+    };
+    let resolved_addresses = address
+        .to_socket_addrs()
+        .map_err(|e| format!("Falha ao resolver host de registry {}: {}", url, e))?
+        .collect::<Vec<_>>();
+    if resolved_addresses.is_empty() {
+        return Err(format!(
+            "Falha ao resolver host de registry {}: sem endereco",
+            url
+        ));
+    }
+    let connect_timeout = Duration::from_secs(REGISTRY_HTTP_CONNECT_TIMEOUT_SECS);
+    let io_timeout = Some(Duration::from_secs(REGISTRY_HTTP_IO_TIMEOUT_SECS));
+    let mut last_error = None;
+    let mut stream = None;
+    for socket_addr in resolved_addresses {
+        match TcpStream::connect_timeout(&socket_addr, connect_timeout) {
+            Ok(candidate) => {
+                stream = Some(candidate);
+                break;
+            }
+            Err(error) => last_error = Some(error),
+        }
+    }
+    let mut stream = stream.ok_or_else(|| {
+        let error = last_error
+            .map(|error| error.to_string())
+            .unwrap_or_else(|| "sem endereco disponivel".to_string());
+        format!(
+            "Falha ao conectar {} em ate {}s: {}",
+            url, REGISTRY_HTTP_CONNECT_TIMEOUT_SECS, error
+        )
+    })?;
+    stream
+        .set_read_timeout(io_timeout)
+        .map_err(|e| format!("Falha ao configurar timeout de leitura para {}: {}", url, e))?;
+    stream
+        .set_write_timeout(io_timeout)
+        .map_err(|e| format!("Falha ao configurar timeout de escrita para {}: {}", url, e))?;
+    let request = format!(
+        "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nUser-Agent: nexuslang-package-manager\r\n\r\n",
+        path, authority
+    );
+    stream.write_all(request.as_bytes()).map_err(|e| {
+        format!(
+            "Falha ao requisitar {} em ate {}s: {}",
+            url, REGISTRY_HTTP_IO_TIMEOUT_SECS, e
+        )
+    })?;
+
+    let mut response = Vec::new();
+    stream.read_to_end(&mut response).map_err(|e| {
+        format!(
+            "Falha ao ler resposta de {} em ate {}s: {}",
+            url, REGISTRY_HTTP_IO_TIMEOUT_SECS, e
+        )
+    })?;
+    let header_end = find_subsequence(&response, b"\r\n\r\n")
+        .ok_or_else(|| format!("Resposta HTTP invalida de {}", url))?;
+    let headers = String::from_utf8_lossy(&response[..header_end]);
+    let status_line = headers.lines().next().unwrap_or("");
+    if !status_line.contains(" 200 ") {
+        return Err(format!(
+            "Registry resource {} retornou status HTTP '{}'",
+            url, status_line
+        ));
+    }
+    if headers.lines().any(|line| {
+        line.to_ascii_lowercase()
+            .starts_with("transfer-encoding: chunked")
+    }) {
+        return Err(format!(
+            "Registry resource {} usa chunked encoding, ainda nao suportado neste MVP",
+            url
+        ));
+    }
+
+    Ok(response[header_end + 4..].to_vec())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn fetch_http_url(url: &str) -> Result<Vec<u8>, String> {
+    Err(format!(
+        "Registry HTTP nao esta disponivel no target wasm32: {}",
+        url
+    ))
+}
+
+fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    digest.iter().map(|byte| format!("{:02x}", byte)).collect()
+}
+
+fn extract_tar_archive(archive: &[u8], package_dir: &Path) -> Result<(), String> {
+    let mut offset = 0usize;
+    while offset + 512 <= archive.len() {
+        let header = &archive[offset..offset + 512];
+        offset += 512;
+        if header.iter().all(|byte| *byte == 0) {
+            return Ok(());
+        }
+
+        let path = tar_entry_path(header)?;
+        let size = parse_tar_octal(&header[124..136])?;
+        let typeflag = header[156];
+        let data_end = offset
+            .checked_add(size)
+            .ok_or_else(|| "Archive tar contem tamanho invalido".to_string())?;
+        if data_end > archive.len() {
+            return Err("Archive tar terminou antes do fim de uma entrada".to_string());
+        }
+
+        let Some(relative_path) = safe_tar_entry_path(&path)? else {
+            offset = next_tar_offset(data_end);
+            continue;
+        };
+        let target = package_dir.join(&relative_path);
+        match typeflag {
+            0 | b'0' => {
+                if let Some(parent) = target.parent() {
+                    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                }
+                fs::write(&target, &archive[offset..data_end]).map_err(|e| e.to_string())?;
+            }
+            b'5' => {
+                fs::create_dir_all(&target).map_err(|e| e.to_string())?;
+            }
+            b'1' | b'2' => {
+                return Err(format!("Archive tar contem link nao suportado: {}", path));
+            }
+            other => {
+                return Err(format!(
+                    "Archive tar contem tipo de entrada nao suportado '{}' em {}",
+                    other as char, path
+                ));
+            }
+        }
+
+        offset = next_tar_offset(data_end);
+    }
+
+    Err("Archive tar sem bloco final vazio".to_string())
+}
+
+fn next_tar_offset(data_end: usize) -> usize {
+    let remainder = data_end % 512;
+    if remainder == 0 {
+        data_end
+    } else {
+        data_end + (512 - remainder)
+    }
+}
+
+fn tar_entry_path(header: &[u8]) -> Result<String, String> {
+    let name = tar_field_string(&header[0..100])?;
+    let prefix = tar_field_string(&header[345..500])?;
+    if prefix.is_empty() {
+        Ok(name)
+    } else if name.is_empty() {
+        Ok(prefix)
+    } else {
+        Ok(format!("{}/{}", prefix, name))
+    }
+}
+
+fn tar_field_string(field: &[u8]) -> Result<String, String> {
+    let end = field
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(field.len());
+    std::str::from_utf8(&field[..end])
+        .map(|value| value.trim().to_string())
+        .map_err(|e| format!("Archive tar contem nome UTF-8 invalido: {}", e))
+}
+
+fn parse_tar_octal(field: &[u8]) -> Result<usize, String> {
+    let end = field
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(field.len());
+    let text = std::str::from_utf8(&field[..end])
+        .map_err(|e| format!("Archive tar contem tamanho invalido: {}", e))?
+        .trim();
+    if text.is_empty() {
+        return Ok(0);
+    }
+    usize::from_str_radix(text, 8)
+        .map_err(|_| format!("Archive tar contem tamanho octal invalido: {}", text))
+}
+
+fn safe_tar_entry_path(path: &str) -> Result<Option<PathBuf>, String> {
+    let mut normalized = PathBuf::new();
+    for component in Path::new(path).components() {
+        match component {
+            Component::Normal(part) => normalized.push(part),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err(format!("Archive tar contem caminho inseguro: {}", path));
+            }
+        }
+    }
+
+    if normalized.as_os_str().is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(normalized))
+    }
 }
 
 fn source_from_request(
@@ -523,6 +1127,7 @@ fn lock_metadata(
             version: "local".to_string(),
             resolved_path: None,
             registry_package: None,
+            checksum: None,
         }),
         DependencySource::Path(path) => {
             validate_path_dependency(root, package_name, path)?;
@@ -541,13 +1146,15 @@ fn lock_metadata(
                 version: dependency_manifest.version,
                 resolved_path: Some(resolved_path),
                 registry_package: None,
+                checksum: None,
             })
         }
         DependencySource::Registry(registry) => Ok(LockMetadata {
             kind: "registry",
             version: registry.version.clone(),
-            resolved_path: None,
+            resolved_path: registry_resolved_path(root, package_name),
             registry_package: Some(registry.package.clone()),
+            checksum: registry_lock_checksum(registry)?,
         }),
     }
 }
@@ -557,6 +1164,7 @@ struct LockMetadata {
     version: String,
     resolved_path: Option<String>,
     registry_package: Option<String>,
+    checksum: Option<String>,
 }
 
 impl ProjectManifest {
@@ -576,6 +1184,7 @@ impl ProjectManifest {
                     DependencySource::Registry(registry) => ProjectDependencySource::Registry {
                         package: registry.package,
                         version: registry.version,
+                        cache_path: root.join(".nexus").join("packages").join(&name),
                     },
                 };
                 (name, public_source)

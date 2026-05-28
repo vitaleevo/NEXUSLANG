@@ -84,4 +84,8 @@ Nao incluir nesta fase:
 
 ## Proximo aviso
 
-AVISO: O proximo passo e criar/implementar Fase 11.66 - registry remoto MVP read-only para o package manager, com contrato de registry, resolucao/download de dependencias declaradas, cache local seguro e testes sem publicar pacotes nem adicionar solver semantico completo. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, `meta/CURRENT_TASKS.md`, `meta/POST_RELEASE_0_2_0_TRIAGE.md` e `PACKAGE_MANAGER.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+Fase 11.66 foi implementada na branch `codex/package-registry-readonly-mvp`
+e publicada no PR #5: `https://github.com/vitaleevo/NEXUSLANG/pull/5`.
+O proximo passo operacional passou a ser review/merge controlado desse PR.
+
+AVISO: O proximo passo e criar/implementar Fase 11.67 - review/merge do PR #5 do registry remoto MVP read-only, com CI verde e validacao pos-merge do package manager antes de iniciar SQLite/migracoes ou outra trilha. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, `meta/CURRENT_TASKS.md`, `PACKAGE_MANAGER.md` e o PR #5 `https://github.com/vitaleevo/NEXUSLANG/pull/5` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.

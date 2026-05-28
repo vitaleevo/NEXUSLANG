@@ -16,8 +16,9 @@ auth, invoices, money, storage, tooling e pequenos servicos de negocio.
   estruturados.
 - Primitivas ERP: `model`, `workflow`, `route`, `auth`, `invoice`, `money`.
 - Storage JSON/SQLite e contratos de operacoes estaticas para model/auth.
-- Package manager local MVP com `nexus.toml`, `nexus.lock` e dependencias de
-  caminho.
+- Package manager MVP com `nexus.toml`, `nexus.lock`, dependencias de caminho
+  e registry read-only via `NEXUS_REGISTRY_URL`, incluindo metadata, checksum,
+  extracao segura e cache local para imports instalados.
 - Playground WebAssembly e crate inicial `nexus-lsp` para integracao com
   editores, agora com nucleo testavel em `src/lib.rs` e adapter fino em
   `src/main.rs`, incluindo diagnostics multi-file opt-in via `SourceDatabase`
@@ -31,27 +32,27 @@ auth, invoices, money, storage, tooling e pequenos servicos de negocio.
 
 A release stable `v0.2.0` ja foi publicada com tag assinada, GitHub Release,
 assets assinados, checksum, strict public-release dry-run e validacao publica
-de install. A triagem pos-release confirmou que nao ha PRs nem issues abertas
-e que a `main` esta com CI verde. A proxima linha de produto escolhida e
-package registry remoto MVP read-only, porque o package manager ja tem contrato
-`registry:<pacote>@<versao>`, mas ainda nao baixa dependencias remotas.
+de install. A Fase 11.66 implementou o package registry remoto MVP read-only
+em branch controlada e abriu o PR #5. O foco imediato agora e review/merge
+desse PR e validacao pos-merge antes de abrir a proxima trilha de produto.
 
 ## Trilhas proximas
 
-1. Package registry remoto MVP: implementar leitura/download de dependencias
-   `registry:<pacote>@<versao>` com contrato de metadata, cache seguro,
-   checksum e testes, sem publish/auth/solver completo nesta fase.
+1. Review/merge do registry remoto MVP read-only: revisar PR #5, confirmar CI,
+   mergear em `main` e rodar validacao pos-merge do package manager.
 2. SQLite/migracoes: desenhar introspeccao de schema, dry-run e migracoes sem
    quebrar dados persistidos.
-3. LSP/editor tooling: adicionar workspace symbols, formatting, rename ou code
+3. Registry hardening posterior: avaliar HTTPS, assinaturas, dependencias
+   transitivas, publish/auth e solver em fases separadas.
+4. LSP/editor tooling: adicionar workspace symbols, formatting, rename ou code
    actions apenas em fases separadas.
-4. Diagnostics/tooling API: preservar JSON v1 enquanto melhora APIs internas
+5. Diagnostics/tooling API: preservar JSON v1 enquanto melhora APIs internas
    para consumidores de editor.
-5. HIR/checker: continuar migracoes pequenas para contratos HIR tipados,
+6. HIR/checker: continuar migracoes pequenas para contratos HIR tipados,
    mantendo compatibilidade de mensagens.
-6. Playground/docs: demonstrar apenas recursos suportados e manter exemplos
+7. Playground/docs: demonstrar apenas recursos suportados e manter exemplos
    executaveis.
-7. Release hardening: smoke tests, contratos publicos, instalacao e artefatos
+8. Release hardening: smoke tests, contratos publicos, instalacao e artefatos
    assinados.
 
 ## Nao objetivos atuais

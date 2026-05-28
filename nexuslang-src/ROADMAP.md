@@ -49,8 +49,14 @@ playground.
 - `nexus install`, `nexus add <package>`, `nexus add <package> --path <dir>`,
   `nexus add <package> --registry <package@version>`, and `nexus update`
   provide the first package-manager MVP using `nexus.toml`, `nexus.lock`, and
-  `.nexus/packages/`. Local `path:` dependencies can now feed package-name
-  imports in the module graph; registry dependencies remain declarations only.
+  `.nexus/packages/`. Local `path:` dependencies can feed package-name imports
+  in the module graph. Registry dependencies can now be installed read-only
+  when `NEXUS_REGISTRY_URL` points at a filesystem, `file://`, or plain
+  `http://` registry, with metadata validation, optional SHA-256 verification,
+  safe tar extraction, lockfile checksum/resolved-path metadata, and
+  package-name imports from the installed cache. Registry publish, auth,
+  HTTPS, transitive dependencies, and semantic version solving remain out of
+  scope.
 - Supported ERP primitives: `model`, `workflow`, `route`, `auth`, `invoice`,
   `money`.
 - Supported language primitives: functions, `let`, `const`, `if`, `while`,
