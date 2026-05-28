@@ -29,19 +29,20 @@ auth, invoices, money, storage, tooling e pequenos servicos de negocio.
 
 ## Foco imediato
 
-A linha atual esta em estabilizacao de release/producao. O pre-release publico
-`v0.2.0-rc.1` esta publicado e passou validacao de install publico com
-assinatura, checksum, package smoke, auth, storage e assets HTTP. O PR
+A linha atual esta em estabilizacao de release/producao. O merge deste PR nao
+publica tag/release: o pre-release publico `v0.2.0-rc.1` ja foi publicado em uma
+fase anterior da trilha e passou validacao de install publico com assinatura,
+checksum, package smoke, auth, storage e assets HTTP. O PR
 `https://github.com/vitaleevo/NEXUSLANG/pull/1` saiu de draft, segue aberto e
-mergeable, e o feedback automatizado acionavel foi corrigido localmente com
-quality gate completo verde. O foco imediato agora e pushar essas correcoes,
-observar CI/CodeRabbit no novo head e decidir merge apenas sem bloqueadores.
+mergeable, e agora contem correcoes pos-publicacao que nao pertencem ao tag nem
+aos assets publicados de `v0.2.0-rc.1`. O foco imediato e concluir a revisao do
+PR no head atual e, se o merge for aprovado, planejar um novo artefato/tag RC
+ou uma validacao pos-merge explicita antes de qualquer `0.2.0` estavel.
 
 ## Trilhas proximas
 
-1. Release/producao: push/CI pos-feedback do PR #1, revisar comentarios
-   remanescentes/outdated e planejar validacao pos-merge antes de `0.2.0`
-   estavel.
+1. Release/producao: concluir revisao do PR #1 no head pos-feedback, decidir
+   merge e planejar novo RC/validacao pos-merge antes de `0.2.0` estavel.
 2. Diagnostics/tooling API: preservar JSON v1 enquanto melhora APIs internas
    para consumidores de editor.
 3. LSP/editor tooling: adicionar workspace symbols, formatting, rename ou code
