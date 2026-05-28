@@ -33,13 +33,14 @@ A linha atual esta em estabilizacao de release/producao. O branch
 `codex/prepare-nexuslang-0.2.0-rc` ja organiza o trabalho pos-`v0.1.1` em
 commits por escopo para o RC local `0.2.0-rc.1`; a quality gate local ampla,
 o package local e `validate-release-package.sh` passaram. O PR draft
-`https://github.com/vitaleevo/NEXUSLANG/pull/1` esta aberto. O foco imediato e
-observar CI, seguido de strict public-release preflight com chave de assinatura.
+`https://github.com/vitaleevo/NEXUSLANG/pull/1` esta aberto, o CI remoto passou
+e o strict public-release dry-run passou com chave mantida. O foco imediato e
+decidir/criar tag e release draft ou pre-release do RC.
 
 ## Trilhas proximas
 
-1. Release/producao: observar CI verde no PR draft e rodar strict
-   public-release preflight antes de tag/publicacao.
+1. Release/producao: criar tag `v0.2.0-rc.1` e release draft/pre-release do RC
+   apenas a partir do head validado.
 2. Diagnostics/tooling API: preservar JSON v1 enquanto melhora APIs internas
    para consumidores de editor.
 3. LSP/editor tooling: adicionar workspace symbols, formatting, rename ou code

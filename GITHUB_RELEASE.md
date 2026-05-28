@@ -110,6 +110,16 @@ and validated with:
 NEXUS_RELEASE_SIGNING_KEY="3237F7CC5CE2514FC9671BB93CB6808B55385273" ./scripts/release-dry-run-strict.sh
 ```
 
+The `0.2.0-rc.1` candidate is being prepared from PR:
+
+```text
+https://github.com/vitaleevo/NEXUSLANG/pull/1
+```
+
+For this RC line, the branch was pushed, GitHub Actions `NexusLang Quality Gate`
+passed, and strict public-release dry-run passed with the maintained signing key
+above. No `v0.2.0-rc.1` tag or GitHub Release has been published yet.
+
 After the GitHub Release is published, validate the public install path:
 
 ```bash

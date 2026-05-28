@@ -4,13 +4,13 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-28 (Fase 11.53 - PR draft do RC criado)
+Ultima atualizacao: 2026-05-28 (Fase 11.54 - CI e strict dry-run do RC aprovados)
 
-## Etapa concluida: Fase 11.53 - PR draft do RC criado
+## Etapa concluida: Fase 11.54 - CI e strict dry-run do RC aprovados
 
-Objetivo: iniciar o fluxo remoto do RC `0.2.0-rc.1` depois do package/preflight
-local, pushando a branch de preparacao, abrindo PR draft e deixando a proxima
-etapa limitada a CI/strict preflight, sem publicar release.
+Objetivo: completar os gates remotos e locais do RC `0.2.0-rc.1` depois da
+criacao do PR draft, observando CI verde e rodando strict public-release
+dry-run com chave mantida, sem publicar tag/release.
 
 Foi feito:
 
@@ -24,16 +24,23 @@ Foi feito:
 - PR draft criado pelo conector GitHub:
   `https://github.com/vitaleevo/NEXUSLANG/pull/1`.
 - Verificado que `gh` esta instalado, mas `gh auth status` falha porque nao ha
-  sessao GitHub CLI autenticada.
-- O bloqueio de `gh` nao impediu a criacao do PR pelo conector, mas ainda
-  bloqueia o fluxo local estrito que depende de `gh auth login`.
-- CI remoto ainda precisa ser observado no PR antes de qualquer tag/release.
+  sessao GitHub CLI autenticada no ambiente PowerShell.
+- Verificado que o `gh` dentro do WSL esta autenticado como `vitaleevo`.
+- CI remoto `NexusLang Quality Gate` do PR concluiu com sucesso.
+- Strict public-release preflight passou com a chave mantida
+  `3237F7CC5CE2514FC9671BB93CB6808B55385273`.
+- Strict public-release dry-run completo passou, incluindo quality gate,
+  empacotamento, validacao do pacote, assinatura por chave existente e segunda
+  validacao em Docker.
+- Nenhuma tag, publicacao de release ou merge foi feito nesta etapa.
 
 Arquivos principais:
 
 - `MEMORIA_NEXUSLANG.md`
 - `meta/CURRENT_TASKS.md`
 - `MEMORY.md`
+- `meta/ROADMAP.md`
+- `GITHUB_RELEASE.md`
 - branch remota `origin/codex/prepare-nexuslang-0.2.0-rc`
 - PR draft `https://github.com/vitaleevo/NEXUSLANG/pull/1`
 
@@ -47,6 +54,9 @@ gh --version
 gh auth status
 git push -u origin codex/prepare-nexuslang-0.2.0-rc
 GitHub connector: create draft pull request
+GitHub Actions: NexusLang Quality Gate
+NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 ./scripts/release-dry-run-strict.sh --preflight-only
+NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 ./scripts/release-dry-run-strict.sh
 ```
 
 Resultado:
@@ -54,11 +64,13 @@ Resultado:
 - `git status --short --branch` PASS antes do push.
 - `git push -u origin codex/prepare-nexuslang-0.2.0-rc` PASS.
 - PR draft criado: `https://github.com/vitaleevo/NEXUSLANG/pull/1`.
-- `gh --version` PASS.
-- `gh auth status` FAIL: `You are not logged into any GitHub hosts`.
+- CI remoto do PR PASS.
+- Strict preflight PASS.
+- Strict dry-run PASS.
+- `gh --version` PASS; `gh auth status` no PowerShell ainda falha, mas o `gh`
+  do WSL esta autenticado e foi suficiente para o strict flow.
 - Release judgement: pronto localmente, branch pushada e PR draft aberto;
-  bloqueado para publicacao ate CI verde, strict preflight e chave de assinatura
-  mantida.
+  pronto para preparar tag/release candidate. Publicacao ainda nao foi feita.
 
 Estado atual:
 
@@ -66,35 +78,35 @@ Estado atual:
 - PR draft existe em `https://github.com/vitaleevo/NEXUSLANG/pull/1`.
 - RC local `0.2.0-rc.1` ja passou LSP checks, quality gate, package-release e
   validate-release-package.
-- Ainda nao ha CI observado, strict dry-run assinado, tag ou release
-  publica.
+- CI remoto e strict dry-run estao aprovados.
+- Ainda nao ha tag, merge ou release publica.
 
 Estado do projeto:
 
-- Fase/trilha atual: release/producao, com PR draft aberto para o RC.
-- Solido agora: branch pushada, PR criado e artefatos locais validados.
-- Falta imediato: observar CI do PR, autenticar `gh` para o fluxo local estrito,
-  depois rodar strict public-release preflight com chave mantida.
+- Fase/trilha atual: release/producao, com PR draft aberto e gates principais
+  aprovados.
+- Solido agora: branch pushada, PR criado, CI verde, strict dry-run aprovado e
+  artefatos assinados localmente.
+- Falta imediato: decidir/criar tag `v0.2.0-rc.1` e preparar release
+  pre-release/draft no GitHub, sem publicar final estavel antes de revisao.
 - Distancia do fim: RC local esta pronto; publicacao ainda esta bloqueada por
-  CI/assinatura/autenticacao, nao por build/test local.
+  decisao de tag/release, nao por build/test local.
 
 ## Proximo passo recomendado
 
-Fase 11.54 - observar CI/rodar strict preflight do RC `0.2.0-rc.1`: acompanhar
-os checks do PR draft, autenticar `gh` se necessario para o fluxo local estrito,
-e so depois rodar strict public-release preflight.
+Fase 11.55 - preparar tag/release draft do RC `0.2.0-rc.1`: criar tag
+`v0.2.0-rc.1` somente se o PR/head atual continuar aprovado, anexar artefatos
+assinados e publicar como pre-release/draft conforme politica do projeto.
 
-AVISO: O proximo passo e criar/implementar observacao de CI e strict public-release preflight do RC `0.2.0-rc.1`. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e `meta/CURRENT_TASKS.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+AVISO: O proximo passo e criar/implementar tag e release draft/pre-release do RC `0.2.0-rc.1`. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e `meta/CURRENT_TASKS.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
 
 Plano inicial da proxima etapa:
 
-- Abrir/acompanhar `https://github.com/vitaleevo/NEXUSLANG/pull/1`.
-- Observar CI remoto ate passar para o head atual do PR.
-- Rodar `gh auth login` se o fluxo local precisar consultar Actions/strict
-  release via GitHub CLI.
-- Se CI passar, rodar `NEXUS_RELEASE_SIGNING_KEY=<fingerprint>
-  ./scripts/release-dry-run-strict.sh`.
-- So depois preparar tag/publicacao.
+- Confirmar que o head do PR ainda e o commit validado.
+- Criar tag `v0.2.0-rc.1` apontando para o head validado.
+- Anexar pacote, checksum e assinaturas de `dist/`.
+- Criar release como `--prerelease` e preferencialmente `--draft` se houver
+  revisao humana antes da publicacao.
 
 Arquivos para investigar/abrir primeiro na proxima etapa:
 

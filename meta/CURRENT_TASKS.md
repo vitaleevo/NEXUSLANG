@@ -5,12 +5,11 @@ repositorio.
 
 ## Status atual
 
-Fase 11.53 concluida em 2026-05-28: a branch
-`codex/prepare-nexuslang-0.2.0-rc` foi pushada para `origin` e o PR draft
-`https://github.com/vitaleevo/NEXUSLANG/pull/1` foi criado pelo conector
-GitHub. O `gh` local ainda nao esta autenticado, entao o fluxo local estrito
-continua dependente de `gh auth login`. O RC local `0.2.0-rc.1` ja passou
-quality gate, package-release e validate-release-package.
+Fase 11.54 concluida em 2026-05-28: a branch
+`codex/prepare-nexuslang-0.2.0-rc` foi pushada para `origin`, o PR draft
+`https://github.com/vitaleevo/NEXUSLANG/pull/1` foi criado, o CI remoto
+`NexusLang Quality Gate` passou e o strict public-release dry-run passou com
+chave GPG mantida. Nenhuma tag, merge ou release publica foi criada ainda.
 
 ## Tarefas concluidas
 
@@ -23,8 +22,12 @@ quality gate, package-release e validate-release-package.
   `git push -u origin codex/prepare-nexuslang-0.2.0-rc`.
 - [x] Criar PR draft para `main`:
   `https://github.com/vitaleevo/NEXUSLANG/pull/1`.
-- [x] Confirmar bloqueio do fluxo local via CLI: `gh auth status` falha por
-  falta de login.
+- [x] Observar CI remoto `NexusLang Quality Gate` verde no PR.
+- [x] Confirmar chave GPG mantida
+  `3237F7CC5CE2514FC9671BB93CB6808B55385273`.
+- [x] Rodar strict public-release preflight.
+- [x] Rodar strict public-release dry-run completo.
+- [x] Confirmar que nenhuma tag/release foi publicada automaticamente.
 
 ## Validacao executada
 
@@ -43,19 +46,22 @@ rg de marcadores pendentes no workspace, ignorando diretorios de build
 git push -u origin codex/prepare-nexuslang-0.2.0-rc
 gh auth status
 GitHub connector: create draft pull request
+GitHub Actions: NexusLang Quality Gate
+NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 ./scripts/release-dry-run-strict.sh --preflight-only
+NEXUS_RELEASE_SIGNING_KEY=3237F7CC5CE2514FC9671BB93CB6808B55385273 ./scripts/release-dry-run-strict.sh
 ```
 
 Resultado: PASS para LSP, quality gate, package-release, validate-release-package,
 diff check, varredura de marcadores, push da branch e criacao do PR draft.
-`gh auth status` falhou porque nao ha sessao GitHub CLI autenticada; por isso
-CI/strict public-release preflight ficam para a proxima fase.
+CI remoto PASS. Strict preflight PASS. Strict dry-run PASS. O `gh` no
+PowerShell ainda nao esta autenticado, mas o `gh` no WSL esta autenticado e foi
+usado pelo strict flow.
 
 ## Proxima fase recomendada
 
-Fase 11.54: observar CI e rodar strict public-release preflight do RC
-`0.2.0-rc.1`. Acompanhar os checks do PR draft ate CI verde, autenticar `gh`
-se o fluxo local precisar consultar Actions, e depois rodar strict preflight
-com chave mantida.
+Fase 11.55: preparar tag/release draft ou pre-release do RC `0.2.0-rc.1`.
+Confirmar o head validado, criar tag `v0.2.0-rc.1`, anexar pacote/checksum/
+assinaturas e publicar como draft/pre-release conforme politica do projeto.
 
 ## Arquivos para abrir primeiro na proxima fase
 
@@ -63,11 +69,12 @@ com chave mantida.
 - `meta/CURRENT_TASKS.md`
 - `RELEASE_NOTES.md`
 - `scripts/release-dry-run-strict.sh`
+- `scripts/sign-release-artifacts.sh`
 - `GITHUB_RELEASE.md`
 
 ## Riscos de compatibilidade
 
-- Nao publicar tag/release antes de PR/CI verde, strict preflight e assinatura.
+- Nao publicar release estavel; este alvo e RC/pre-release.
 - Nao prometer registry remoto real enquanto `PACKAGE_MANAGER.md` ainda o
   define como contrato futuro.
-- `0.2.0-rc.1` continua RC em PR draft ate CI, strict preflight e publicacao.
+- `0.2.0-rc.1` continua RC em PR draft ate decisao de tag/release.
