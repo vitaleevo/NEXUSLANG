@@ -1,6 +1,11 @@
+[workspace]
+members = ["nexus-lsp"]
+default-members = ["."]
+resolver = "2"
+
 [package]
 name = "nexuslang"
-version = "0.1.1"
+version = "0.2.0-rc.1"
 edition = "2021"
 description = "NexusLang — ERP-first programming language"
 authors = ["NexusLang Team"]
@@ -15,12 +20,12 @@ path = "src/lib.rs"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
+sha2 = "0.10"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 argon2 = { version = "0.5", features = ["std"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
-sha2 = "0.10"
 
 [profile.release]
 opt-level = "z"

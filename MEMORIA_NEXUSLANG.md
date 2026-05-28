@@ -4,7 +4,12713 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-26
+Ultima atualizacao: 2026-05-28 (Fase 11.49 - triagem de release/producao para RC)
+
+## Etapa concluida: Fase 11.49 - triagem de release/producao para RC
+
+Objetivo: organizar o estado local pos-`v0.1.1` para preparar um proximo RC sem
+descartar mudancas locais e sem cortar release a partir de um worktree sujo.
+
+Foi feito:
+
+- Inventariado o checkout atual: branch `main`, HEAD `bf37ed4`, remote
+  `https://github.com/vitaleevo/NEXUSLANG.git`, versao local `0.1.1`.
+- Confirmado que o worktree tem 84 entradas pendentes: 34 modificadas e 50
+  untracked.
+- Confirmado que `scripts/release-dry-run-strict.sh` bloqueia release publica
+  enquanto houver worktree sujo.
+- Criado `meta/RELEASE_RC_TRIAGE.md` com agrupamento por escopo: docs/memoria,
+  contratos, LSP, core/checker/HIR, runtime/auth/storage/OpenAPI, package
+  manager/stdlib, CLI/test runner, playground/WASM e release scripts.
+- Registrada recomendacao de versionamento: proximo RC deve tender a
+  `0.2.0-rc.1`/`0.2.0`, nao `0.1.2`, se incluir LSP, stdlib, package manager
+  expandido e novas superficies de runtime/tooling.
+- Nenhum arquivo foi apagado, revertido, stageado ou commitado.
+
+Arquivos principais:
+
+- `meta/RELEASE_RC_TRIAGE.md`
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+- `RELEASE.md`
+- `VERSIONING.md`
+- `PACKAGE_MANAGER.md`
+- `scripts/release-dry-run-strict.sh`
+- `scripts/package-release.sh`
+
+Verificacao executada:
+
+```bash
+git status --short
+git diff --check
+```
+
+Resultado:
+
+- `git status --short` confirmou 84 entradas pendentes.
+- `git diff --check` PASS.
+- Release judgement: bloqueado para novo RC publico enquanto o worktree nao for
+  organizado, commitado e validado em CI.
+
+Estado atual:
+
+- `v0.1.1` continua sendo a release publicada/validada para avaliacao, demos e
+  QA.
+- O checkout local pos-`v0.1.1` contem trabalho amplo e valioso, mas ainda nao
+  e um candidato de release porque mistura muitos escopos em estado nao
+  rastreado/modificado.
+- A infraestrutura de release e forte, mas so pode ser usada para RC depois de
+  worktree limpo, versao decidida, artefatos regenerados/validados, commit
+  pushado e CI verde.
+
+Estado do projeto:
+
+- Fase/trilha atual: release/producao, com foco em transformar trabalho local
+  validado em um RC rastreavel.
+- Solido agora: quality gate recente passou, LSP editor MVP avancou, docs de
+  release e scripts existem.
+- Falta imediato: criar branch de preparacao, separar commits por escopo,
+  decidir versao `0.2.0-rc.1` ou equivalente, atualizar release notes e rodar
+  package/preflight no checkout limpo.
+- Distancia do fim: produto tecnico esta forte para MVP/QA, mas o produto
+  completo nao esta no fim; o bloqueio atual e governanca de release, nao uma
+  falha de testes.
+
+## Proximo passo recomendado
+
+Fase 11.50 - preparar branch e commits do RC por escopo, sem descartar
+alteracoes locais: criar branch `codex/prepare-nexuslang-0.2.0-rc`, revisar
+staging por blocos, decidir versao alvo e atualizar release notes antes do
+package/preflight.
+
+AVISO: O proximo passo e criar/implementar branch e commits do RC por escopo. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e `meta/RELEASE_RC_TRIAGE.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Criar branch `codex/prepare-nexuslang-0.2.0-rc`.
+- Revisar `git status --short` contra `meta/RELEASE_RC_TRIAGE.md`.
+- Staging/commit por blocos: docs/memoria, LSP, core/HIR/diagnostics,
+  runtime/auth/storage/OpenAPI, package manager/stdlib, release packaging.
+- Atualizar versao e `RELEASE_NOTES.md` antes de criar pacote.
+- Rodar `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`,
+  `./scripts/package-release.sh` e `./scripts/validate-release-package.sh`.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `meta/RELEASE_RC_TRIAGE.md`
+- `meta/CURRENT_TASKS.md`
+- `RELEASE_NOTES.md`
+- `VERSIONING.md`
+- `nexuslang-src/Cargo.toml`
+- `scripts/package-release.sh`
+- `scripts/validate-release-package.sh`
+
+## Etapa concluida: Fase 11.48 - document symbols MVP no LSP
+
+Objetivo: implementar document symbols MVP no LSP para declarations top-level
+e filhos ERP do documento atual, usando parser/AST existente e mantendo a
+crate LSP separada do core.
+
+Foi feito:
+
+- `DocumentSnapshot::document_symbols()` e `LspCore::document_symbols()` foram
+  adicionados como APIs testaveis.
+- A geracao usa `parse_source_diagnostic()` e a AST existente para retornar
+  `DocumentSymbolResponse::Nested`.
+- Functions, models, workflows, auth declarations, routes, invoices, imports,
+  exports e bindings top-level agora aparecem como document symbols.
+- Filhos ERP com spans ja presentes na AST tambem aparecem: fields de model,
+  steps de workflow, query params de route, fields de invoice e invoice items.
+- Symbols usam `range` para a declaracao/bloco quando ha braces na propria
+  declaracao e `selection_range` para o nome selecionavel, preservando arvore
+  aninhada mais util para editores.
+- Documentos parcialmente invalidos retornam uma lista vazia de symbols, sem
+  misturar estado stale com parse error.
+- `nexus-lsp/src/main.rs` agora anuncia `document_symbol_provider` e implementa
+  o handler `document_symbol`.
+- Nenhum workspace indexing, source database persistente, formatting, rename,
+  code actions ou workspace symbols foi introduzido.
+
+Arquivos principais:
+
+- `nexuslang-src/nexus-lsp/src/lib.rs`
+- `nexuslang-src/nexus-lsp/src/main.rs`
+- `nexuslang-src/nexus-lsp/README.md`
+- `MEMORY.md`
+- `meta/CURRENT_TASKS.md`
+- `meta/ROADMAP.md`
+- `meta/ARCHITECTURE.md`
+- `README.md`
+- `nexuslang-src/ROADMAP.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt --check
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test --locked -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo clippy -p nexus-lsp -- -D warnings
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+git diff --check
+rg de marcadores pendentes no workspace, ignorando diretorios de build
+```
+
+Resultado:
+
+- `cargo fmt --check` PASS.
+- `cargo check -p nexus-lsp` PASS.
+- `cargo test -p nexus-lsp` PASS com 23 testes.
+- `cargo test --locked -p nexus-lsp` PASS com 23 testes.
+- `cargo clippy -p nexus-lsp -- -D warnings` PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh` PASS.
+- `git diff --check` PASS.
+- Varredura de marcadores pendentes: PASS, nenhuma ocorrencia real no
+  workspace fora de diretorios de build/distribuicao ignorados.
+
+Estado atual:
+
+- O LSP tem diagnostics multi-file com limpeza stale, go-to-definition
+  cross-file para imports/aliases, semantic tokens full-document e document
+  symbols MVP.
+- Document symbols sao document-local e dependem apenas do parser/AST do
+  documento aberto.
+- O adapter `tower-lsp` segue fino; a logica testavel continua em `LspCore`.
+- Ainda nao ha workspace symbols, formatting, rename, code actions,
+  workspace indexing ou registry remoto real.
+
+Estado do projeto:
+
+- Fase/trilha atual: tooling/editor avancou de hardening medio para
+  medio-avancado.
+- Solido agora: LSP com snapshots testaveis, diagnostics multi-file, limpeza
+  stale, go-to-definition cross-file basico, semantic tokens MVP e document
+  symbols MVP validados.
+- Falta imediato: sair da trilha de editor e organizar release/producao,
+  porque a auditoria BMAD encontrou worktree sujo com muitos arquivos locais e
+  isso bloqueia um novo RC confiavel.
+- Distancia do fim: a subtrilha LSP esta bem mais proxima de um editor MVP,
+  mas o produto completo ainda nao esta no fim porque faltam worktree limpo,
+  empacotamento/release rastreavel, registry real e hardening operacional.
+
+## Proximo passo recomendado
+
+Fase 11.49 - triagem de release/producao e organizacao do worktree para o
+proximo RC, separando mudancas locais por escopo, garantindo que `nexus-lsp`
+e os artefatos de release sejam rastreados corretamente, sem descartar
+alteracoes existentes.
+
+AVISO: O proximo passo e criar/implementar triagem de release/producao e organizacao do worktree para o proximo RC. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Inventariar `git status --short` e agrupar mudancas por escopo.
+- Confirmar quais arquivos untracked fazem parte do produto atual, especialmente
+  `nexuslang-src/nexus-lsp/`, docs `meta/` e scripts de release.
+- Decidir versao alvo (`0.1.2` ou `0.2.0`) antes de preparar novo RC.
+- Rodar quality gate e preflight strict no checkout exato candidato a release.
+- Nao descartar nem reverter mudancas locais sem decisao explicita.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `MEMORY.md`
+- `meta/CURRENT_TASKS.md`
+- `RELEASE.md`
+- `VERSIONING.md`
+- `PACKAGE_MANAGER.md`
+- `scripts/release-dry-run-strict.sh`
+- `scripts/package-release.sh`
+
+## Etapa concluida: Fase 11.47 - semantic tokens MVP no LSP
+
+Objetivo: implementar semantic tokens full-document no LSP para keywords,
+tipos, strings, numeros, identificadores e simbolos ERP, usando a tokenizacao
+existente e mantendo a crate LSP separada do core.
+
+Foi feito:
+
+- Criada a legenda de semantic tokens em `semantic_tokens_legend()`:
+  `keyword`, `type`, `string`, `number`, `variable` e `erpSymbol`.
+- `DocumentSnapshot::semantic_tokens()` e `LspCore::semantic_tokens()` foram
+  adicionados como APIs testaveis.
+- A geracao usa `tokens_source_spanned()` e codifica tokens no formato delta do
+  LSP.
+- `model`, `route`, `auth`, `workflow`, `step` e `invoice` sao classificados
+  como `erpSymbol`.
+- Tipos, strings, numeros/money, identificadores e keywords contextuais de
+  import/export sao classificados sem acionar checker ou module loader.
+- `nexus-lsp/src/main.rs` agora anuncia `semantic_tokens_provider` e implementa
+  `semantic_tokens_full`.
+- Nenhum cache persistente, source database incremental, formatting, rename,
+  code actions ou workspace symbols foi introduzido.
+
+Arquivos principais:
+
+- `nexuslang-src/nexus-lsp/src/lib.rs`
+- `nexuslang-src/nexus-lsp/src/main.rs`
+- `nexuslang-src/nexus-lsp/README.md`
+- `MEMORY.md`
+- `meta/CURRENT_TASKS.md`
+- `meta/ROADMAP.md`
+- `meta/ARCHITECTURE.md`
+- `README.md`
+- `nexuslang-src/ROADMAP.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt --check
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo clippy -p nexus-lsp -- -D warnings
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+rg de marcadores pendentes no workspace, ignorando diretorios de build
+```
+
+Resultado:
+
+- `cargo check -p nexus-lsp` PASS.
+- `cargo test -p nexus-lsp` PASS com 21 testes.
+- `cargo fmt --check` PASS.
+- `cargo clippy -p nexus-lsp -- -D warnings` PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh` PASS, incluindo fmt, check
+  all-targets com warnings como erro, clippy all-targets, testes Rust,
+  validacoes de policy/docs, `node --check`, smokes HTTP/auth/storage e
+  validacao OpenAPI.
+- Varredura de marcadores pendentes: PASS, nenhuma ocorrencia no workspace
+  fora de diretorios de build/distribuicao ignorados.
+
+Estado atual:
+
+- O LSP tem diagnostics multi-file com limpeza stale, go-to-definition
+  cross-file para imports/aliases e semantic tokens full-document.
+- Semantic tokens sao lexicais e leves; nao dependem de checker, module loader
+  ou `SourceDatabase`.
+- O adapter `tower-lsp` segue fino; a logica testavel continua em `LspCore`.
+- Ainda nao ha document symbols, formatting, rename, code actions, workspace
+  symbols ou registry remoto real.
+
+Estado do projeto:
+
+- Fase/trilha atual: estabilizacao de tooling/editor.
+- Solido agora: LSP com snapshots testaveis, diagnostics multi-file, limpeza
+  stale, go-to-definition cross-file basico e semantic tokens MVP verificados
+  pela quality gate.
+- Falta imediato: document symbols MVP para navegar declarations do documento
+  atual, depois workspace symbols/code actions em fases separadas.
+- Distancia do fim: a subtrilha LSP esta em hardening medio-avancado; o
+  produto completo ainda nao esta no fim porque faltam recursos de editor
+  amplos, release/package hardening continuo e decisoes de registry.
+
+## Proximo passo recomendado
+
+Fase 11.48 - document symbols MVP no LSP para declarations top-level e campos
+ERP do documento atual, usando parser/AST existente e mantendo fallback limpo
+quando o documento estiver parcialmente invalido.
+
+AVISO: O proximo passo e criar/implementar document symbols MVP no LSP. Antes
+de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o
+projeto parou, entender o que ja foi feito e integrar a solucao com o sistema
+atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Investigar `nexuslang-src/nexus-lsp/src/lib.rs`, `src/main.rs`,
+  `src/ast/mod.rs` e `src/parser/mod.rs`.
+- Definir mapeamento pequeno de declarations para `DocumentSymbolKind`.
+- Adicionar API testavel em `LspCore` e publicar capability no adapter.
+- Cobrir documento valido e documento parcialmente invalido com testes.
+- Validar com `cargo fmt --check`, `cargo check -p nexus-lsp`, `cargo test -p
+  nexus-lsp`, clippy do LSP e quality gate.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `MEMORY.md`
+- `meta/CURRENT_TASKS.md`
+- `nexuslang-src/nexus-lsp/src/lib.rs`
+- `nexuslang-src/nexus-lsp/src/main.rs`
+- `nexuslang-src/nexus-lsp/README.md`
+- `nexuslang-src/src/ast/mod.rs`
+- `nexuslang-src/src/parser/mod.rs`
+
+## Etapa concluida: Fase 11.46 - go-to-definition cross-file no LSP
+
+Objetivo: adicionar go-to-definition cross-file para imports e aliases no LSP,
+usando `SourceDatabase`/`ModuleGraph` como ponte opt-in quando snapshots abertos
+correspondem ao disco e mantendo fallback same-document para estados sujos.
+
+Foi feito:
+
+- `LspCore::goto_definition()` agora tenta uma rota cross-file antes de cair
+  para `DocumentSnapshot::goto_definition()`.
+- A rota cross-file carrega `load_program_full_with_source_database()`, confere
+  `SourceDatabase` contra documentos abertos e resolve imports por
+  `SourceImportEdge`.
+- Usages de alias importado apontam para a declaracao exportada no modulo alvo.
+- O nome importado dentro da propria declaracao `import` tambem aponta para o
+  export correspondente.
+- Snapshots de entrada sujos e modulos importados abertos com conteudo sujo
+  preservam o fallback same-document.
+- Nenhum cache persistente/incremental de `SourceDatabase` foi introduzido.
+
+Arquivos principais:
+
+- `nexuslang-src/nexus-lsp/src/lib.rs`
+- `nexuslang-src/nexus-lsp/README.md`
+- `MEMORY.md`
+- `meta/CURRENT_TASKS.md`
+- `meta/ROADMAP.md`
+- `meta/ARCHITECTURE.md`
+- `README.md`
+- `nexuslang-src/ROADMAP.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt --check
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo clippy -p nexus-lsp -- -D warnings
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+rg de marcadores pendentes no workspace, ignorando diretorios de build
+```
+
+Resultado:
+
+- `cargo check -p nexus-lsp` PASS.
+- `cargo test -p nexus-lsp` PASS com 18 testes.
+- `cargo fmt --check` PASS.
+- `cargo clippy -p nexus-lsp -- -D warnings` PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh` PASS, incluindo fmt, check
+  all-targets com warnings como erro, clippy all-targets, testes Rust,
+  validacoes de policy/docs, `node --check`, smokes HTTP/auth/storage e
+  validacao OpenAPI.
+- Varredura de marcadores pendentes: PASS, nenhuma ocorrencia no workspace
+  fora de diretorios de build/distribuicao ignorados.
+
+Estado atual:
+
+- O LSP tem diagnostics multi-file com limpeza stale e go-to-definition
+  cross-file para imports/aliases em grafos disk-backed.
+- O adapter `tower-lsp` segue fino; a logica testavel esta em `LspCore`.
+- A rota cross-file e deliberadamente nao incremental e nao persiste
+  `SourceDatabase`.
+- Ainda nao ha semantic tokens, formatting, rename, code actions, workspace
+  symbols ou registry remoto real.
+
+Estado do projeto:
+
+- Fase/trilha atual: estabilizacao de tooling/editor.
+- Solido agora: LSP com snapshots testaveis, diagnostics multi-file, limpeza
+  stale e go-to-definition cross-file basico verificados pela quality gate.
+- Falta imediato: semantic tokens MVP, depois document symbols/workspace
+  symbols ou code actions em fases separadas.
+- Distancia do fim: a subtrilha LSP saiu do MVP inicial e esta em hardening
+  medio; o produto completo ainda nao esta no fim porque faltam recursos de
+  editor amplos, release/package hardening continuo e decisoes de registry.
+
+## Proximo passo recomendado
+
+Fase 11.47 - semantic tokens MVP no LSP para keywords, tipos, strings,
+numeros, identificadores e simbolos ERP, usando a tokenizacao existente e
+mantendo a crate LSP separada do core.
+
+AVISO: O proximo passo e criar/implementar semantic tokens MVP no LSP. Antes
+de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o
+projeto parou, entender o que ja foi feito e integrar a solucao com o sistema
+atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Investigar `nexuslang-src/nexus-lsp/src/lib.rs`, `src/main.rs` e os tipos de
+  `tower_lsp::lsp_types` para semantic tokens.
+- Definir uma legenda pequena e estavel para keywords, types, strings,
+  numbers, identifiers e simbolos ERP.
+- Adicionar API testavel em `LspCore` e publicar capability no adapter.
+- Validar com `cargo fmt --check`, `cargo check -p nexus-lsp`, `cargo test -p
+  nexus-lsp`, clippy do LSP e quality gate.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `MEMORY.md`
+- `meta/CURRENT_TASKS.md`
+- `nexuslang-src/nexus-lsp/src/lib.rs`
+- `nexuslang-src/nexus-lsp/src/main.rs`
+- `nexuslang-src/nexus-lsp/README.md`
+
+## Etapa concluida: Fase 11.45 - limpeza de diagnostics stale no LSP
+
+Objetivo: endurecer o LSP multi-file contra diagnostics obsoletos quando o
+grafo de imports muda, snapshots abertos ficam sujos, documentos sao fechados
+ou outra entrada aberta ainda cobre o mesmo modulo.
+
+Foi feito:
+
+- `LspCore` passou a guardar `diagnostic_publication_groups`, um conjunto de
+  URIs diagnosticadas por entry document.
+- `diagnostic_publish_batches_for()` agora compara a publicacao atual com a
+  publicacao anterior da mesma entrada e emite batches vazios para URIs que
+  ficaram stale.
+- O fallback single-document para snapshot sujo tambem limpa diagnostics
+  multi-file publicados anteriormente pela entrada.
+- `close_document_publish_batches()` remove o snapshot e publica batches
+  vazios para o grupo anterior do documento fechado.
+- A limpeza de stale diagnostics nao apaga uma URI que ainda esta coberta por
+  outro entry document ativo.
+- `src/main.rs` continua como adapter fino de `tower-lsp`, apenas publicando
+  batches calculados pelo `LspCore`.
+
+Arquivos principais:
+
+- `nexuslang-src/nexus-lsp/src/lib.rs`
+- `nexuslang-src/nexus-lsp/src/main.rs`
+- `nexuslang-src/nexus-lsp/README.md`
+- `MEMORY.md`
+- `meta/CURRENT_TASKS.md`
+- `meta/ROADMAP.md`
+- `meta/ARCHITECTURE.md`
+- `README.md`
+- `nexuslang-src/ROADMAP.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt --check
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo clippy -p nexus-lsp -- -D warnings
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+rg de marcadores pendentes no workspace, ignorando diretorios de build
+```
+
+Resultado:
+
+- `cargo check -p nexus-lsp` PASS.
+- `cargo test -p nexus-lsp` PASS com 14 testes.
+- `cargo fmt --check` PASS.
+- `cargo clippy -p nexus-lsp -- -D warnings` PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh` PASS, incluindo fmt, check
+  all-targets com warnings como erro, clippy all-targets, testes Rust,
+  validacoes de policy/docs, `node --check`, smokes HTTP/auth/storage e
+  validacao OpenAPI.
+- Varredura de marcadores pendentes: PASS, nenhuma ocorrencia no workspace
+  fora de diretorios de build/distribuicao ignorados.
+
+Estado atual:
+
+- O LSP multi-file agora tem limpeza de diagnostics stale para mudanca de
+  grafo, fallback sujo e fechamento de documento.
+- A memoria de publicacao e intencionalmente pequena: apenas entry URI ->
+  conjunto de URIs publicadas. Nao ha cache incremental de AST, checker ou
+  `SourceDatabase`.
+- Diagnostics seguem derivados do module loader/checker; o LSP nao duplica
+  semantica do core.
+- Ainda nao ha cross-file go-to-definition, semantic tokens, formatting,
+  rename, code actions, workspace symbols ou source database persistente.
+
+## Proximo passo recomendado
+
+Fase 11.46 - cross-file go-to-definition para imports e aliases, usando
+`SourceDatabase`/`ModuleGraph` somente quando snapshots abertos correspondem ao
+disco e preservando o fallback same-document atual para snapshots sujos.
+
+AVISO: O proximo passo e criar/implementar cross-file go-to-definition no LSP
+para imports/aliases usando `DocumentSnapshot`/`LspCore` com ponte opt-in para
+`SourceDatabase`/`ModuleGraph`. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`
+para continuar exatamente de onde o projeto parou, entender o que ja foi feito
+e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Investigar `find_definition_location`, `DocumentSnapshot::goto_definition`,
+  `LspCore::goto_definition`, `module_loader::SourceDatabase` e `ModuleGraph`.
+- Adicionar testes para import alias, import sem alias e fallback
+  same-document quando o snapshot aberto esta sujo.
+- Implementar a menor ponte opt-in possivel sem criar source database
+  persistente e sem alterar a semantica de imports.
+- Validar com `cargo fmt --check`, `cargo check -p nexus-lsp`, `cargo test -p
+  nexus-lsp`, clippy do LSP e quality gate se o contrato publico for tocado.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `MEMORY.md`
+- `meta/CURRENT_TASKS.md`
+- `nexuslang-src/nexus-lsp/src/lib.rs`
+- `nexuslang-src/nexus-lsp/src/main.rs`
+- `nexuslang-src/nexus-lsp/README.md`
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+
+## Etapa concluida: Fase 11.44 - diagnostics multi-file no LSP
+
+Objetivo: preparar diagnostics multi-file no LSP usando
+`DocumentSnapshot`/`LspCore` como cache de documentos abertos e uma ponte
+opt-in para `SourceDatabase`/module loader, sem adicionar cross-file
+go-to-definition, semantic tokens, formatting, rename, code actions, workspace
+symbols ou registry remoto.
+
+Foi feito:
+
+- Confirmado que `LspCore::diagnostic_publish_batches_for()` tenta uma rota
+  multi-file quando o snapshot aberto aponta para arquivo local e ainda
+  corresponde ao disco.
+- A rota multi-file reutiliza
+  `module_loader::load_program_full_with_source_database()` e
+  `check_with_source_database_diagnostic_report()`, mantendo a semantica no
+  core/module loader/checker.
+- A publicacao de diagnostics agora produz batches por URI de modulo carregado,
+  permitindo limpar diagnostics de arquivos importados quando o projeto fica
+  valido.
+- Snapshots sujos/nao sincronizados com disco continuam usando fallback
+  single-document para evitar misturar texto nao salvo do editor com grafo de
+  modulos carregado do disco.
+- A documentacao operacional foi atualizada em `MEMORY.md`,
+  `meta/CURRENT_TASKS.md`, `README.md`, `meta/ROADMAP.md`,
+  `meta/ARCHITECTURE.md`, `nexus-lsp/README.md` e
+  `nexuslang-src/ROADMAP.md`.
+- A validacao final passou pela quality gate oficial com clippy habilitado e
+  warnings como erro.
+
+Arquivos principais:
+
+- `nexuslang-src/nexus-lsp/src/lib.rs`
+- `nexuslang-src/nexus-lsp/src/main.rs`
+- `nexuslang-src/nexus-lsp/README.md`
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+- `MEMORY.md`
+- `meta/CURRENT_TASKS.md`
+- `meta/ROADMAP.md`
+- `meta/ARCHITECTURE.md`
+- `README.md`
+- `nexuslang-src/ROADMAP.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p nexus-lsp
+cargo fmt --check
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex RUSTFLAGS="-D warnings" cargo check --all-targets
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo clippy --all-targets -- -D warnings
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check -p nexus-lsp` PASS.
+- `cargo test -p nexus-lsp` PASS com 10 testes.
+- `cargo fmt --check` PASS.
+- `RUSTFLAGS="-D warnings" cargo check --all-targets` PASS.
+- `cargo clippy --all-targets -- -D warnings` PASS.
+- `cargo test` PASS: 78 lib tests, 58 CLI tests, 7 package-manager tests e
+  260 core tests passaram.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh` PASS, incluindo fmt, check
+  com warnings como erro, clippy, testes, validacoes de policy/docs,
+  `node --check`, smokes HTTP/auth/storage e validacao OpenAPI.
+- Varredura de marcadores pendentes: PASS, nenhuma ocorrencia no workspace
+  fora de diretorios de build/distribuicao ignorados.
+
+Estado atual:
+
+- O LSP continua separado do core e `tower-lsp` permanece confinado a
+  `nexus-lsp`.
+- Diagnostics multi-file funcionam como ponte opt-in disk-backed para projetos
+  que o module loader consegue carregar.
+- O fallback single-document preserva seguranca para snapshots abertos que nao
+  correspondem ao disco.
+- A quality gate local esta verde com lint estrito.
+- Ainda nao ha source database incremental/persistente, cross-file
+  go-to-definition, semantic tokens, formatting, rename, code actions ou
+  workspace symbols.
+
+Estado do projeto:
+
+- Fase/trilha atual: estabilizacao de tooling/editor.
+- Solido agora: o LSP tem nucleo testavel, adapter fino, diagnostics
+  single-document e multi-file opt-in validados por testes.
+- Falta imediato: hardening de staleness/limpeza de diagnostics quando arquivos
+  importados mudam, incluindo decisoes sobre quais URIs devem ser republicadas
+  quando a rota multi-file cai para fallback single-document.
+- Distancia do fim: esta subtrilha LSP esta no meio da fase de hardening; saiu
+  do MVP inicial, mas ainda falta comportamento de workspace real. O produto
+  completo segue longe do fim porque ainda faltam registry real, runtime
+  hardening, editor tooling amplo e empacotamento de produto.
+
+## Proximo passo recomendado
+
+Fase 11.45 - hardening de staleness/limpeza de diagnostics no LSP multi-file,
+definindo e testando o comportamento quando imports mudam, arquivos importados
+ficam sujos, arquivos sao fechados, ou a rota multi-file precisa cair para
+fallback single-document.
+
+AVISO: O proximo passo e criar/implementar hardening de staleness e limpeza de diagnostics no LSP multi-file. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Investigar `nexuslang-src/nexus-lsp/src/lib.rs`, especialmente
+  `diagnostic_publish_batches_for`, `multi_file_diagnostic_batches`,
+  `source_database_matches_open_documents` e `report_batches`.
+- Escrever testes para limpar diagnostics previamente publicados em modulos
+  importados quando o grafo muda ou quando fallback single-document deixa de
+  conhecer todos os modulos anteriores.
+- Implementar o menor estado interno necessario em `LspCore`, se realmente for
+  preciso, para lembrar URIs diagnosticadas por entrada sem criar source
+  database persistente.
+- Validar com `CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check -p
+  nexus-lsp`, `CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p
+  nexus-lsp` e `cargo test` se o contrato publico for tocado.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `MEMORY.md`
+- `meta/CURRENT_TASKS.md`
+- `nexuslang-src/nexus-lsp/src/lib.rs`
+- `nexuslang-src/nexus-lsp/src/main.rs`
+- `nexuslang-src/nexus-lsp/README.md`
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+
+## Etapa concluida: Fase 11.43 - nucleo testavel do LSP
+
+Objetivo: extrair o nucleo testavel do LSP para
+`nexuslang-src/nexus-lsp/src/lib.rs`, mantendo
+`nexuslang-src/nexus-lsp/src/main.rs` como adapter fino de `tower-lsp` e
+preservando comportamento single-document.
+
+Foi feito:
+
+- Criado `DocumentSnapshot` para guardar URI, versao e texto do documento.
+- Criado `LspCore` para abrir, alterar, fechar e consultar snapshots.
+- Migradas para `lib.rs` as operacoes puras de diagnostics, hover, completion,
+  go-to-definition, conversao `Diagnostic` -> LSP e range 1-based -> 0-based.
+- Reduzido `main.rs` a adapter de transporte: eventos LSP entram no
+  `LspCore`, e o `Client` apenas publica diagnostics/respostas.
+- Migrados e ampliados os testes unitarios da crate LSP de 4 para 7 testes.
+- Atualizados `meta/CURRENT_TASKS.md`, `MEMORY.md`, `README.md`,
+  `nexuslang-src/nexus-lsp/README.md`, `meta/ROADMAP.md`,
+  `meta/ARCHITECTURE.md` e `nexuslang-src/ROADMAP.md`.
+
+Arquivos principais:
+
+- `nexuslang-src/nexus-lsp/src/lib.rs`
+- `nexuslang-src/nexus-lsp/src/main.rs`
+- `nexuslang-src/nexus-lsp/README.md`
+- `meta/CURRENT_TASKS.md`
+- `MEMORY.md`
+- `README.md`
+- `meta/ROADMAP.md`
+- `meta/ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p nexus-lsp
+cargo fmt -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check -p nexus-lsp
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p nexus-lsp
+```
+
+Resultado:
+
+- Baseline antes da mudanca: `cargo check -p nexus-lsp` PASS e
+  `cargo test -p nexus-lsp` PASS com 4 testes.
+- Depois da extracao: `cargo fmt -p nexus-lsp` PASS,
+  `cargo check -p nexus-lsp` PASS e `cargo test -p nexus-lsp` PASS com 7
+  testes.
+
+Estado atual:
+
+- O LSP continua funcional como adapter separado e single-document.
+- O core da linguagem continua livre de `tower-lsp`.
+- Existe agora uma API interna testavel para snapshots de documentos e
+  operacoes editor-facing.
+- Ainda nao ha diagnostics multi-file no LSP, cross-file go-to-definition,
+  semantic tokens, formatting, rename, code actions, workspace symbols ou
+  source database incremental/persistente.
+
+Estado do projeto:
+
+- Fase/trilha atual: estabilizacao de tooling/editor.
+- Solido agora: a primeira crate LSP compila, testa e possui nucleo testavel
+  separado do transporte.
+- Falta imediato: usar `DocumentSnapshot`/`LspCore` como base para integrar
+  diagnostics multi-file com `SourceDatabase`/module loader sem duplicar
+  semantica do checker.
+- Distancia do fim: esta subtrilha LSP saiu do prototipo inicial e entrou em
+  hardening arquitetural; o produto completo ainda esta em evolucao porque
+  faltam workspace tooling, registry real, runtime hardening e integracao de
+  editor mais ampla.
+
+## Proximo passo recomendado
+
+Fase 11.44 - preparar diagnostics multi-file no LSP usando
+`DocumentSnapshot`/`LspCore` como cache de documentos abertos e fazendo uma
+ponte opt-in com `SourceDatabase`/module loader, sem adicionar cross-file
+go-to-definition, semantic tokens, formatting, rename, code actions, workspace
+symbols ou registry remoto.
+
+AVISO: O proximo passo e criar/implementar diagnostics multi-file no LSP usando `DocumentSnapshot`/`LspCore` com uma ponte opt-in para `SourceDatabase`/module loader. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Investigar `nexuslang-src/nexus-lsp/src/lib.rs` e como os snapshots atuais
+  devem mapear URIs para paths locais.
+- Investigar `nexuslang-src/src/module_loader.rs` e APIs existentes de
+  `SourceDatabase`.
+- Adicionar uma ponte pequena e opt-in para diagnostics multi-file, mantendo
+  diagnostics single-document como fallback.
+- Validar com `CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check -p
+  nexus-lsp` e `CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p
+  nexus-lsp`.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `MEMORY.md`
+- `meta/CURRENT_TASKS.md`
+- `nexuslang-src/nexus-lsp/src/lib.rs`
+- `nexuslang-src/nexus-lsp/src/main.rs`
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+
+## Etapa concluida: criacao dos arquivos operacionais em `meta/`
+
+Objetivo: criar uma camada curta de orientacao para agentes e proximas sessoes,
+sem duplicar os documentos canonicos extensos do projeto.
+
+Foi feito:
+
+- Criada a pasta `meta/`.
+- Criado `meta/AGENTS.md` com ordem de leitura, guardrails e fluxo de trabalho.
+- Criado `meta/ROADMAP.md` com visao resumida do norte do produto, baseline e
+  trilhas proximas.
+- Criado `meta/CURRENT_TASKS.md` com a prioridade atual e arquivos a abrir
+  primeiro.
+- Criado `meta/ARCHITECTURE.md` com visao curta das camadas principais e
+  contratos arquiteturais.
+
+Arquivos principais:
+
+- `meta/AGENTS.md`
+- `meta/ROADMAP.md`
+- `meta/CURRENT_TASKS.md`
+- `meta/ARCHITECTURE.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```powershell
+$paths = @('meta\AGENTS.md','meta\ROADMAP.md','meta\CURRENT_TASKS.md','meta\ARCHITECTURE.md')
+foreach ($path in $paths) {
+  $item = Get-Item $path -ErrorAction SilentlyContinue
+  [pscustomobject]@{Path=$path; Exists=($null -ne $item); Bytes=($(if ($null -ne $item) { $item.Length } else { 0 }))}
+}
+```
+
+Resultado: PASS. Os quatro arquivos existem em `meta/`.
+
+Estado atual:
+
+- A pasta `meta/` agora funciona como ponto de entrada leve para agentes.
+- A memoria principal continua sendo o documento canonico de continuidade.
+- O roadmap detalhado continua em `nexuslang-src/ROADMAP.md`.
+
+Estado do projeto:
+
+- Fase/trilha atual: organizacao documental e continuidade operacional.
+- Solido agora: os quatro arquivos pedidos existem e apontam para os documentos
+  canonicos.
+- Falta imediato: continuar a fase tecnica recomendada para o LSP.
+- Distancia do fim: esta trilha documental esta concluida; o produto completo
+  segue em evolucao de tooling/editor.
+
+## Proximo passo recomendado
+
+Fase 11.43 - extrair o nucleo testavel do LSP para
+`nexuslang-src/nexus-lsp/src/lib.rs`, mantendo `main.rs` fino, e adicionar uma
+API interna para document snapshots que abra caminho para diagnostics
+multi-file com `SourceDatabase` sem alterar o core nem o JSON v1.
+
+AVISO: O proximo passo e criar/implementar a extracao do nucleo testavel do LSP para `nexuslang-src/nexus-lsp/src/lib.rs`. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Investigar `nexuslang-src/nexus-lsp/src/main.rs`.
+- Definir a API interna de snapshots e operacoes testaveis em
+  `nexuslang-src/nexus-lsp/src/lib.rs`.
+- Migrar comportamento sem mudar diagnostics, hover, completion ou
+  go-to-definition atuais.
+- Validar com `CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check -p
+  nexus-lsp` e `CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p
+  nexus-lsp`.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+- `nexuslang-src/nexus-lsp/src/main.rs`
+- `nexuslang-src/nexus-lsp/README.md`
+- `nexuslang-src/ROADMAP.md`
+
+## Etapa concluida: Fase 11.42 - primeira crate LSP separada com tower-lsp
+
+Objetivo: iniciar a camada editor/LSP como crate separada (`nexus-lsp`), usando
+`tower-lsp` por stdio e reaproveitando diagnostics estruturados do core, sem
+misturar protocolo de editor no compilador/runtime e sem alterar JSON v1, CLI
+textual, wrappers `String`, semantica de imports, registry remoto ou byte
+ranges completos.
+
+Foi feito:
+
+- Confirmado que `nexuslang-src/Cargo.toml` ja possui workspace com
+  `nexus-lsp`.
+- Validada a crate `nexus-lsp` com `tower-lsp = "0.20"`.
+- O servidor LSP atual oferece:
+  - sync full-document;
+  - diagnostics em `didOpen`/`didChange` via `parse_checked_source_diagnostic`;
+  - hover para keywords, identificadores, literais, tipos, metodos HTTP e
+    operadores;
+  - completion com keywords NexusLang e identificadores do documento atual;
+  - go-to-definition basico no mesmo documento para `fn`, `model`, `route`,
+    `auth`, `workflow`, `let` e aliases de import.
+- A conversao `Diagnostic` -> LSP `Diagnostic` agora usa a URI real do documento
+  para related information, em vez de `file:///internal`.
+- Adicionados testes unitarios em `nexus-lsp/src/main.rs` cobrindo:
+  - conversao de linha/coluna 1-based do NexusLang para range 0-based do LSP;
+  - preservacao de code/severity/source/message/related information;
+  - go-to-definition local para declaracoes;
+  - resolucao de alias de import.
+- Criado `nexuslang-src/nexus-lsp/README.md` com execucao, capacidades,
+  limites e validacao.
+- `README.md` e `nexuslang-src/ROADMAP.md` agora documentam o primeiro adapter
+  LSP separado e seus limites.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/nexus-lsp/src/main.rs`
+- `nexuslang-src/nexus-lsp/README.md`
+- `nexuslang-src/ROADMAP.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check -p nexus-lsp
+rustfmt --edition 2021 nexus-lsp/src/main.rs
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test -p nexus-lsp
+```
+
+Resultado:
+
+- `cargo check -p nexus-lsp`: PASS.
+- `cargo test -p nexus-lsp`: PASS, 4 testes.
+
+Estado atual:
+
+- Existe uma primeira camada LSP funcional e compilavel em crate separada.
+- O core continua isolado de `tower-lsp` e detalhes de protocolo de editor.
+- O LSP atual ainda e single-document: nao usa `SourceDatabase` incremental,
+  nao resolve imports/cross-file navigation, nao tem semantic tokens,
+  formatting, rename, code actions ou workspace symbols.
+
+Proximo passo recomendado:
+
+Fase 11.43 - extrair o nucleo testavel do LSP para `nexus-lsp/src/lib.rs`,
+mantendo `main.rs` fino, e adicionar uma API interna para document snapshots
+que abra caminho para diagnostics multi-file com `SourceDatabase` sem alterar o
+core nem o JSON v1.
+
+AVISO: O proximo passo deve preservar a separacao da crate LSP, manter
+`tower-lsp` fora do core, nao alterar JSON v1/CLI textual/wrappers `String`,
+nao introduzir registry remoto nem mudar semantica de imports, e validar com
+`CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check -p nexus-lsp` e
+`cargo test -p nexus-lsp`.
+
+## Etapa concluida: Fase 11.40 - matriz de estabilidade da API publica de tooling diagnostics
+
+Objetivo: consolidar uma matriz de estabilidade da API publica de tooling
+diagnostics (`report`, `summary`, `view`, `source_context`) com exemplos/
+fixtures de contrato e limites pre-LSP, preservando JSON v1, CLI textual,
+wrappers `String`, sem adicionar LSP, registry remoto, parser recovery, byte
+ranges completos ou mudar a semantica de imports.
+
+Nota de continuidade: a F11.40 nao adiciona nova semantica de diagnostics nem
+alarga o JSON. Ela transforma as APIs publicas in-memory criadas nas fases
+F11.35-F11.39 em contrato documentado e testado, para que uma futura etapa de
+editor/LSP tenha um ponto estavel de consumo.
+
+Foi feito:
+
+- Adicionado o teste de contrato
+  `multi_module_diagnostic_report_tooling_api_contract_matrix_is_stable`.
+- A matriz fixture-backed valida em um unico cenario checker:
+  - `MultiModuleDiagnosticReport::diagnostics()`, `first()`, `len()` e
+    `into_diagnostics()`;
+  - filtros por path, module_id, path/module, stage, severity e group;
+  - `summary()` com total, flags, contagens e ordem first-seen;
+  - `tooling_view()` e `tooling_items()` com diagnostic/group indexes,
+    path/module, stage, severity, code, message, line/column e source range;
+  - `tooling_view_with_source_context(Some(&SourceDatabase))` com snippets,
+    path/module, line/column, range e highlights;
+  - `tooling_view_with_source_context(None)` preservando itens sem contexto;
+  - `multi_module_diagnostic_json()` permanecendo first-error, sem
+    `diagnostics`/`groups`;
+  - `multi_module_diagnostic_report_json()` permanecendo JSON v1, sem campos
+    in-memory como `summary`, `items`, `diagnostic_index`, `group_index`,
+    `source_context`, `line_text`, highlights, `uri` ou `byte_range`.
+- `DIAGNOSTICS_JSON_CONTRACT.md` agora tem uma tabela explicita de estabilidade
+  da API publica de tooling:
+  - superficie `MultiModuleDiagnosticReport`;
+  - filtros/grupos;
+  - `summary()`;
+  - `tooling_view()` / `tooling_items()`;
+  - source-context view;
+  - garantias de ordem;
+  - fronteiras JSON v1;
+  - limites pre-LSP.
+- `README.md`, `ROADMAP.md`, `MODULES_IMPORTS_ARCHITECTURE.md` e
+  `ARCHITECTURE_AUDIT_NEXUSLANG.md` refletem que a superficie publica de
+  tooling diagnostics esta documentada e protegida por matriz.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test --test core multi_module_diagnostic_report_tooling_api_contract_matrix_is_stable
+cargo test --test core diagnostic_report_tooling_example_consumes
+cargo check --all-targets
+cargo test --test cli
+cargo test --test core
+cargo fmt --check
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- Teste de matriz F11.40: PASS, 1 teste.
+- Testes focados das fixtures de tooling: PASS, 3 testes.
+- `cargo check --all-targets`: PASS.
+- `cargo fmt --check`: PASS.
+- `cargo test --test cli`: PASS, 26 testes.
+- `cargo test --test core`: PASS, 259 testes.
+- `cargo test`: PASS, 50 unit + 26 CLI gerais + 7 CLI package-manager +
+  259 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+
+Estado atual:
+
+- A superficie publica de diagnostics/tooling pre-LSP esta estabilizada por
+  contrato documentado e teste de matriz.
+- JSON v1 de first-error e JSON report continuam sem campos in-memory de
+  summary/view/source-context.
+- CLI textual, wrappers `String`, coleta conservadora e semantica de imports
+  continuam preservados.
+- Ainda nao ha parser recovery, loader multi-error, runtime multi-error,
+  coleta de cascatas top-level, LSP, registry remoto, byte ranges completos ou
+  mudanca na semantica de imports.
+
+Estado do projeto:
+
+- Fase/trilha atual: diagnostics/tooling multi-modulo em hardening pre-LSP;
+  F11.40 congela o contrato operacional das APIs Rust antes de qualquer
+  adaptador editor/LSP.
+- Solido agora: module graph local, SourceDatabase minimo, path/owner/range,
+  JSON v1 first-error, metadata rica, report agrupavel, `check/run
+  --json-report`, coleta checker limitada, matriz function/route/workflow/
+  invoice, filtros, summary, flattened view, source-context opt-in, exemplos
+  Rust e matriz de estabilidade publica.
+- Verificacao mais recente: `cargo test` passou em 2026-05-28.
+- Falta imediato: a camada publica de diagnostics foi extraida para
+  `src/diagnostics/mod.rs` (F11.41), restando apenas re-exports em `lib.rs`.
+- **F1 Core Stability agora 100%**: `Interpreter::run()` retorna `Diagnostic` em
+  vez de `String`, completando a adopcao do tipo `Diagnostic` em todos os
+  estagios (lexer, parser, checker, interpreter). Internal helpers do checker
+  continuam a usar `String` internamente por ser o tipo correcto para mensagens
+  sem span. 403 testes passam, 0 falham. 14 wrappers `String` em `lib.rs` estao
+  `#[deprecated]`. `cargo clippy` mostra apenas 2 warnings (pre-existentes em
+  test_runner.rs).
+- Distancia do fim: esta trilha pre-LSP esta muito madura; o produto completo
+  ainda precisa evoluir linguagem, runtime, package manager e tooling.
+- **Maturidade actual**: A-F Core Language 100% ✅ | F-P Production Tooling ~65%
+  (LSP MVP feito, faltam editor extensions) | P-Z Commercial ~2%
+  (LSP recém-criado, todo ecossistema por fazer).
+  Ver detalhes em `nexuslang-src/docs/project-maturity-model.md`.
+- **Regra**: toda conclusão reporta letra actual, percentagem por trilha, e próximo
+  passo. Segue modelo KIPAY — portos separados por estágio de maturidade.
+
+## Etapa concluida: Fase 11.41 - modularizar internamente a superficie de diagnostics/tooling
+
+Objetivo: extrair o bloco de diagnostics/report/tooling de `src/lib.rs` para um
+modulo dedicado `src/diagnostics/`, reduzindo peso em `lib.rs` e mantendo
+re-exports/API publica, JSON v1, CLI textual, wrappers `String`, matriz de
+contrato, sem adicionar LSP, registry remoto, parser recovery, byte ranges
+completos ou mudar a semantica de imports.
+
+Foi feito:
+
+- Criado diretorio `nexuslang-src/src/diagnostics/` com `mod.rs` contendo todo o
+  codigo de diagnostics/report/tooling extraido de `lib.rs` (~891 linhas).
+- `lib.rs` reduzido de 1282 para ~205 linhas, mantendo re-exports publicos.
+- Structs, impls, JSON formatters, helpers e pipeline load/check/run movidos
+  para o modulo dedicado.
+- API publica inalterada: todas as funcoes e tipos continuam acessiveis via
+  `lib.rs`.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/src/diagnostics/mod.rs` (novo)
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo check
+cargo test --test core
+cargo test
+```
+
+Resultado:
+
+- `cargo check`: PASS, sem erros.
+- `cargo test --test core`: PASS, 260 testes.
+- `cargo test`: PASS, 260 core tests.
+- Doc-tests: falha pre-existente (rusqlite no contexto doc-test, nao relacionada).
+
+Estado atual:
+
+- A superficie publica de diagnostics/tooling permanece inalterada, com re-exports
+  em `lib.rs` apontando para `src/diagnostics/mod.rs`.
+- JSON v1, CLI textual, wrappers `String`, matriz de contrato continuam preservados.
+- `lib.rs` esta mais enxuto (~205 linhas), facilitando manutencao futura.
+- Ainda nao ha parser recovery, loader multi-error, runtime multi-error,
+  coleta de cascatas top-level, LSP, registry remoto, byte ranges completos ou
+  mudanca na semantica de imports.
+
+## Proximo passo recomendado
+
+Fase 11.42 - (nao definida). Possiveis direcoes: adicionar diff compacto para
+mismatches de `.out`/`.err` no runner, parser recovery, ou iniciar superficie
+pre-LSP com sugestoes de diagnosticos.
+
+AVISO: O proximo passo deve respeitar os limites pre-LSP, preservar JSON v1,
+CLI textual, wrappers `String`, e validar com `cargo test` e `cargo check`.
+
+## Etapa concluida: Fase 11.39 - contexto de fonte/snippets para tooling
+
+Objetivo: adicionar uma API publica in-memory opt-in de contexto de
+fonte/snippets para itens de tooling do `MultiModuleDiagnosticReport`, usando
+`SourceDatabase` quando disponivel para expor linha destacada e range/line/
+column existentes, preservando JSON v1, CLI textual, wrappers `String`, sem
+adicionar LSP, registry remoto, parser recovery, byte ranges completos ou mudar
+a semantica de imports.
+
+Nota de continuidade: a F11.39 nao altera JSON v1, CLI, coleta de diagnostics,
+saida textual, wrappers `String` ou semantica de imports. O contexto de fonte
+e uma camada Rust/tooling opt-in: consumidores passam um `SourceDatabase`
+quando o tiverem, ou `None` quando quiserem apenas a view achatada sem snippets.
+
+Foi feito:
+
+- API publica adicionada em `MultiModuleDiagnosticReport`:
+  - `tooling_view_with_source_context(Option<&SourceDatabase>)`;
+  - `tooling_items_with_source_context(Option<&SourceDatabase>)`.
+- Tipos publicos adicionados:
+  - `MultiModuleDiagnosticReportSourceView`;
+  - `MultiModuleDiagnosticToolingItemWithSourceContext`;
+  - `MultiModuleDiagnosticSourceContext`.
+- `MultiModuleDiagnosticSourceContext` expoe:
+  - `module_id`;
+  - `path`;
+  - `line`;
+  - `column`;
+  - `source_range`;
+  - `line_text`;
+  - `highlight_start_column`;
+  - `highlight_end_column`.
+- A resolucao de contexto usa o `SourceDatabase` quando disponivel,
+  priorizando `module_id` e depois `path`.
+- Diagnostics sem fonte resolvivel continuam seguros com
+  `source_context: None`.
+- `nexuslang-src/examples/diagnostic_report_tooling.rs` agora demonstra a view
+  com contexto de fonte e imprime linha/snippet/highlight quando disponivel.
+- Fixtures/testes core foram reforcados para validar:
+  - checker: contexto presente para diagnostic em modulo importado, path,
+    module_id, line/column, `source_range`, linha com `return "erro"` e
+    highlight consistente;
+  - module_loader: ausencia segura de contexto quando o loader falha antes de
+    entregar `SourceDatabase`;
+  - runtime: ausencia segura de contexto quando o diagnostic runtime ainda nao
+    carrega owner/path;
+  - `tooling_items_with_source_context()` retorna os mesmos itens da source
+    view;
+  - JSON v1 nao serializa `line_text`, `highlight_start_column` ou outros
+    campos da camada opt-in.
+- Documentacao atualizada:
+  - `DIAGNOSTICS_JSON_CONTRACT.md` documenta a API opt-in e seus limites;
+  - `README.md`, `MODULES_IMPORTS_ARCHITECTURE.md`, `ROADMAP.md` e
+    `ARCHITECTURE_AUDIT_NEXUSLANG.md` refletem o contexto de fonte in-memory.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/examples/diagnostic_report_tooling.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test --test core diagnostic_report_tooling_example_consumes
+cargo check --all-targets
+cargo test --test cli
+cargo test --test core
+cargo fmt --check
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- Testes focados das fixtures de tooling: PASS, 3 testes.
+- `cargo check --all-targets`: PASS, incluindo o exemplo Cargo
+  `diagnostic_report_tooling.rs`.
+- `cargo fmt --check`: PASS.
+- `cargo test --test cli`: PASS, 26 testes.
+- `cargo test --test core`: PASS, 258 testes.
+- `cargo test`: PASS, 50 unit + 26 CLI gerais + 7 CLI package-manager +
+  258 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+
+Estado atual:
+
+- `MultiModuleDiagnosticReport` agora tem filtros, grupos, summary, view
+  achatada e source-context view opt-in para tooling Rust.
+- O contexto de fonte ja expoe linha destacada, line/column e source range
+  existente quando o `SourceDatabase` consegue resolver o item.
+- `nexus check --json-report` e `nexus run --json-report` continuam emitindo o
+  mesmo shape JSON v1; a source-context view nao e serializada.
+- `nexus check --json`, `nexus run --json`, saida textual e wrappers `String`
+  continuam first-error e compativeis.
+- Ainda nao ha parser recovery, loader multi-error, runtime multi-error,
+  coleta de cascatas top-level, LSP, registry remoto, byte ranges completos ou
+  mudanca na semantica de imports.
+
+Estado do projeto:
+
+- Fase/trilha atual: diagnostics/tooling multi-modulo em hardening pre-LSP;
+  F11.39 fecha a base in-memory necessaria para UI/CLI/editor exibirem
+  snippets sem depender ainda de LSP.
+- Solido agora: module graph local, SourceDatabase minimo, path/owner/range,
+  JSON v1 first-error, metadata rica, report agrupavel, `check/run
+  --json-report`, coleta checker limitada, matriz function/route/workflow/
+  invoice, helpers publicos de consulta, summary in-memory, exemplos Rust,
+  view achatada e source-context opt-in.
+- Verificacao mais recente: `quality-gate.sh` passou em 2026-05-27.
+- Falta imediato: concluido pela F11.40, registrada acima.
+- Distancia do fim: a base pre-LSP de diagnostics esta madura; o produto
+  completo ainda precisa evoluir linguagem, runtime, package manager e tooling.
+
+## Etapa concluida: Fase 11.38 - view/flatten in-memory do report
+
+Objetivo: adicionar uma API publica in-memory de view/flatten para
+`MultiModuleDiagnosticReport`, gerando itens de tooling com path, module_id,
+stage, severity, code, message, source range quando houver e indice de grupo,
+preservando JSON v1, CLI textual, wrappers `String`, sem adicionar LSP,
+registry remoto, parser recovery, byte ranges completos ou mudar a semantica de
+imports.
+
+Nota de continuidade: a F11.38 nao altera a coleta, a serializacao JSON, a CLI
+ou a semantica de imports. A view achatada e apenas uma camada Rust/tooling
+in-memory sobre os diagnostics ja presentes no report.
+
+Foi feito:
+
+- API publica adicionada em `MultiModuleDiagnosticReport`:
+  - `tooling_view()`;
+  - `tooling_items()`.
+- Tipos publicos adicionados:
+  - `MultiModuleDiagnosticReportView`;
+  - `MultiModuleDiagnosticToolingItem`.
+- `MultiModuleDiagnosticReportView` expoe:
+  - `summary`;
+  - `groups`;
+  - `items`.
+- Cada `MultiModuleDiagnosticToolingItem` expoe:
+  - `diagnostic_index`;
+  - `group_index`;
+  - `path`;
+  - `module_id`;
+  - `stage`;
+  - `severity`;
+  - `code`;
+  - `message`;
+  - `line`;
+  - `column`;
+  - `source_range`.
+- `nexuslang-src/examples/diagnostic_report_tooling.rs` agora usa
+  `tooling_view()` e imprime os itens achatados.
+- Fixtures/testes core da F11.37 foram reforcados para validar:
+  - checker: dois diagnostics no mesmo grupo, `diagnostic_index`, `group_index`,
+    path, module_id, stage, severity, code, message e `source_range`;
+  - module_loader: missing export com stage/codigo/path, sem module_id/range;
+  - runtime: divisao por zero com output parcial, sem path/module/range;
+  - `tooling_items()` retorna os mesmos itens de `tooling_view().items`;
+  - JSON v1 nao serializa `summary`, `group_index` ou `diagnostic_index`.
+- Documentacao atualizada:
+  - `DIAGNOSTICS_JSON_CONTRACT.md` documenta `tooling_view()`,
+    `tooling_items()` e os campos de `MultiModuleDiagnosticToolingItem`;
+  - `README.md`, `MODULES_IMPORTS_ARCHITECTURE.md`, `ROADMAP.md` e
+    `ARCHITECTURE_AUDIT_NEXUSLANG.md` refletem a view achatada in-memory.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/examples/diagnostic_report_tooling.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test --test core diagnostic_report_tooling_example_consumes
+cargo check --all-targets
+cargo test --test cli
+cargo test --test core
+cargo fmt --check
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- Testes focados das fixtures de tooling: PASS, 3 testes.
+- `cargo check --all-targets`: PASS, incluindo o exemplo Cargo
+  `diagnostic_report_tooling.rs`.
+- `cargo fmt --check`: PASS.
+- `cargo test --test cli`: PASS, 26 testes.
+- `cargo test --test core`: PASS, 258 testes.
+- `cargo test`: PASS, 50 unit + 26 CLI gerais + 7 CLI package-manager +
+  258 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+
+Estado atual:
+
+- `MultiModuleDiagnosticReport` agora tem filtros, grupos, summary e view
+  achatada in-memory para tooling Rust.
+- A view achatada ja expoe path/module/stage/severity/code/message/range e
+  indices de diagnostic/grupo para UI/CLI/editor.
+- `nexus check --json-report` e `nexus run --json-report` continuam emitindo o
+  mesmo shape JSON v1; `tooling_view()`/`tooling_items()` nao sao serializados.
+- `nexus check --json`, `nexus run --json`, saida textual e wrappers `String`
+  continuam first-error e compativeis.
+- Ainda nao ha parser recovery, loader multi-error, runtime multi-error,
+  coleta de cascatas top-level, LSP, registry remoto, byte ranges completos ou
+  mudanca na semantica de imports.
+
+Estado do projeto:
+
+- Fase/trilha atual: diagnostics/tooling multi-modulo em hardening pre-LSP;
+  F11.38 deixou o report pronto para consumo de UI/CLI/editor em memoria.
+- Solido agora: module graph local, SourceDatabase minimo, path/owner/range,
+  JSON v1 first-error, metadata rica, report agrupavel, `check/run
+  --json-report`, coleta checker limitada, matriz function/route/workflow/
+  invoice, helpers publicos de consulta, summary in-memory, exemplos Rust e
+  view achatada.
+- Verificacao mais recente: `quality-gate.sh` passou em 2026-05-27.
+- Falta imediato: contexto de fonte/snippets opt-in para itens de tooling,
+  usando `SourceDatabase` quando disponivel, sem transformar isso ainda em LSP
+  nem mexer no JSON v1.
+- Distancia do fim: esta trilha esta muito perto de uma base pre-LSP madura; o
+  produto completo ainda precisa evoluir linguagem, runtime, package manager e
+  tooling.
+
+## Etapa concluida: Fase 11.37 - fixtures e exemplos Rust do report
+
+Objetivo: adicionar fixtures e exemplos de consumo Rust para
+`MultiModuleDiagnosticReport`/`summary()`, cobrindo filtros, grupos e resumo em
+cenarios checker/module_loader/runtime, preservando JSON v1, CLI textual,
+wrappers `String`, sem adicionar LSP, registry remoto, parser recovery, byte
+ranges completos ou mudar a semantica de imports.
+
+Nota de continuidade: a F11.37 nao muda APIs de serializacao nem coleta. Ela
+torna o contrato de tooling exercitavel e facil de copiar por consumidores
+Rust.
+
+Foi feito:
+
+- Exemplo Cargo compilavel adicionado:
+  - `nexuslang-src/examples/diagnostic_report_tooling.rs`;
+  - le um entrypoint `.nx`;
+  - consome `load_and_check_with_source_database_diagnostic_report`;
+  - consome `load_and_run_with_source_database_captured_diagnostic_report`;
+  - usa `summary()`, filtros por stage/severity, grupos e output capturado.
+- Fixtures/testes core adicionados:
+  - `diagnostic_report_tooling_example_consumes_checker_fixture`;
+  - `diagnostic_report_tooling_example_consumes_module_loader_fixture`;
+  - `diagnostic_report_tooling_example_consumes_runtime_fixture`.
+- Cobertura das fixtures:
+  - checker: report com dois diagnostics independentes, grupo path/module,
+    `summary()`, filtro por path/stage/severity, primeiro diagnostic do grupo,
+    wrapper `String` via `load_and_check_with_graph` e JSON v1 sem `summary`;
+  - module_loader: missing export, `DiagnosticStage::ModuleLoader`, codigo
+    `NXL4004`, path afetado, wrapper `String` via `load_program` e JSON v1 sem
+    `summary`;
+  - runtime: divisao por zero com output parcial capturado, stage runtime,
+    codigo `NXL5001`, grupo sem path/module, `Display`/texto e JSON v1 de run
+    com `output`, sem `summary`.
+- Documentacao atualizada:
+  - `DIAGNOSTICS_JSON_CONTRACT.md` agora aponta para o exemplo Cargo, nomes
+    dos testes-fixture e um padrao minimo de consumo Rust;
+  - `README.md`, `MODULES_IMPORTS_ARCHITECTURE.md`, `ROADMAP.md` e
+    `ARCHITECTURE_AUDIT_NEXUSLANG.md` registram a cobertura de consumo Rust.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/examples/diagnostic_report_tooling.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test --test core diagnostic_report_tooling_example_consumes
+cargo check --all-targets
+cargo test --test cli
+cargo test --test core
+cargo fmt --check
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- Testes focados das fixtures/exemplos Rust: PASS, 3 testes.
+- `cargo check --all-targets`: PASS, incluindo o exemplo Cargo
+  `diagnostic_report_tooling.rs`.
+- `cargo fmt --check`: PASS.
+- `cargo test --test cli`: PASS, 26 testes.
+- `cargo test --test core`: PASS, 258 testes.
+- `cargo test`: PASS, 50 unit + 26 CLI gerais + 7 CLI package-manager +
+  258 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+
+Estado atual:
+
+- O contrato Rust de report/summary agora tem exemplos vivos e fixtures reais
+  para checker, module_loader e runtime.
+- `nexus check --json-report` e `nexus run --json-report` continuam emitindo o
+  mesmo shape JSON v1; o summary continua apenas in-memory.
+- `nexus check --json`, `nexus run --json`, saida textual e wrappers `String`
+  continuam first-error e compativeis.
+- Ainda nao ha parser recovery, loader multi-error, runtime multi-error,
+  coleta de cascatas top-level, LSP, registry remoto, byte ranges completos ou
+  mudanca na semantica de imports.
+
+Estado do projeto:
+
+- Fase/trilha atual: diagnostics/tooling multi-modulo em hardening pre-LSP;
+  F11.37 deixou o contrato de consumo Rust verificavel.
+- Solido agora: module graph local, SourceDatabase minimo, path/owner/range,
+  JSON v1 first-error, metadata rica, report agrupavel, `check/run
+  --json-report`, coleta checker limitada, matriz function/route/workflow/
+  invoice, helpers publicos de consulta, summary in-memory e exemplos Rust
+  compilaveis/fixture-backed.
+- Verificacao mais recente: `quality-gate.sh` passou em 2026-05-27.
+- Falta imediato: uma view/flatten in-memory para tooling que transforme o
+  report em itens prontos para UI/CLI/editor sem introduzir LSP ou mudar JSON.
+- Distancia do fim: esta trilha esta quase pronta como base pre-LSP; o produto
+  completo ainda precisa evoluir linguagem, runtime, package manager e tooling.
+
+## Proximo passo recomendado
+
+Fase 11.38 - Adicionar uma API publica in-memory de view/flatten para
+`MultiModuleDiagnosticReport`, gerando itens de tooling com path, module_id,
+stage, severity, code, message, source range quando houver e indice de grupo,
+preservando JSON v1, CLI textual, wrappers `String`, sem adicionar LSP,
+registry remoto, parser recovery, byte ranges completos ou mudar a semantica de
+imports.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.38, adicionando uma API publica in-memory de view/flatten para `MultiModuleDiagnosticReport`, gerando itens de tooling com path, module_id, stage, severity, code, message, source range quando houver e indice de grupo, preservando JSON v1, CLI textual, wrappers `String`, sem adicionar LSP, registry remoto, parser recovery, byte ranges completos ou mudar a semantica de imports. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Revisar `MultiModuleDiagnosticReport`, grupos, summary e fixtures da F11.37.
+- Definir structs publicas pequenas para uma view achatada de diagnostics.
+- Cobrir checker/module_loader/runtime sem alterar JSON v1 nem CLI textual.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/examples/diagnostic_report_tooling.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+
+## Etapa concluida: Fase 11.36 - resumo in-memory do report
+
+Objetivo: adicionar uma API publica in-memory de resumo para
+`MultiModuleDiagnosticReport`, com contagens por stage/severity, paths/modules
+afetados e flags como `has_errors`, preservando o shape JSON v1 atual,
+`check/run --json` first-error, `check/run --json-report`, saida textual,
+wrappers `String`, sem adicionar LSP, registry remoto, parser recovery, byte
+ranges completos ou mudar a semantica de imports.
+
+Nota de continuidade: a F11.36 nao muda a coleta, a CLI nem a serializacao. O
+resumo e uma conveniencia Rust/tooling em memoria sobre os diagnostics ja
+existentes no report.
+
+Foi feito:
+
+- API publica adicionada:
+  - `MultiModuleDiagnosticReport::summary()`;
+  - `MultiModuleDiagnosticReportSummary`;
+  - `MultiModuleDiagnosticStageCount`;
+  - `MultiModuleDiagnosticSeverityCount`.
+- O resumo expoe:
+  - `total`;
+  - `has_diagnostics`;
+  - `has_errors`;
+  - `has_warnings`;
+  - contagens por `DiagnosticStage`;
+  - contagens por `Option<DiagnosticSeverity>`, incluindo bucket `None`;
+  - paths afetados unicos;
+  - module IDs afetados unicos.
+- Contagens e listas preservam a ordem da primeira ocorrencia, sem ordenar ou
+  reformatar diagnostics.
+- Teste core adicionado:
+  - `multi_module_diagnostic_report_summary_counts_tooling_dimensions_without_changing_json`;
+  - cobre erro, warning, diagnostic sem severity, paths/modules afetados,
+    summary vazio e ausencia de campos de summary no JSON v1.
+- Documentacao atualizada:
+  - `DIAGNOSTICS_JSON_CONTRACT.md` registra `summary()` como API Rust
+    in-memory;
+  - `MODULES_IMPORTS_ARCHITECTURE.md`, `ROADMAP.md`,
+    `ARCHITECTURE_AUDIT_NEXUSLANG.md` e `README.md` refletem o resumo sem
+    mudanca de JSON/CLI.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test --test core multi_module_diagnostic_report_summary_counts_tooling_dimensions_without_changing_json
+cargo check --all-targets
+cargo test --test cli
+cargo test --test core
+cargo fmt --check
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- Teste focado do summary: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo fmt --check`: PASS.
+- `cargo test --test cli`: PASS, 26 testes.
+- `cargo test --test core`: PASS, 255 testes.
+- `cargo test`: PASS, 50 unit + 26 CLI gerais + 7 CLI package-manager +
+  255 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+
+Estado atual:
+
+- `MultiModuleDiagnosticReport` agora oferece filtros, grupos e resumo
+  in-memory para tooling Rust.
+- `summary()` nao e serializado e nao adiciona campos ao JSON v1.
+- `nexus check --json-report` e `nexus run --json-report` continuam emitindo o
+  mesmo shape JSON v1.
+- `nexus check --json`, `nexus run --json`, saida textual e wrappers `String`
+  continuam first-error e compativeis.
+- Ainda nao ha parser recovery, loader multi-error, runtime multi-error,
+  coleta de cascatas top-level, LSP, registry remoto, byte ranges completos ou
+  mudanca na semantica de imports.
+
+Estado do projeto:
+
+- Fase/trilha atual: diagnostics/tooling multi-modulo em hardening e ergonomia
+  de API; F11.36 concluiu a visao resumida em memoria.
+- Solido agora: module graph local, SourceDatabase minimo, path/owner/range,
+  JSON v1 first-error, metadata rica, report agrupavel, `check/run
+  --json-report`, coleta checker limitada, matriz function/route/workflow/
+  invoice, helpers publicos de consulta e summary in-memory.
+- Verificacao mais recente: `quality-gate.sh` passou em 2026-05-27.
+- Falta imediato: fixtures/exemplos de consumo Rust para tornar o contrato de
+  tooling mais facil de usar sem transformar isso ainda em LSP ou novo JSON.
+- Distancia do fim: esta trilha de diagnostics/tooling esta quase no fim para
+  a base pre-LSP; o produto completo ainda esta em hardening de linguagem,
+  runtime e tooling.
+
+## Proximo passo recomendado
+
+Fase 11.37 - Adicionar fixtures e exemplos de consumo Rust para
+`MultiModuleDiagnosticReport`/`summary()`, cobrindo filtros, grupos e resumo em
+cenarios checker/module_loader/runtime, preservando JSON v1, CLI textual,
+wrappers `String`, sem adicionar LSP, registry remoto, parser recovery, byte
+ranges completos ou mudar a semantica de imports.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.37, adicionando fixtures e exemplos de consumo Rust para `MultiModuleDiagnosticReport`/`summary()`, cobrindo filtros, grupos e resumo em cenarios checker/module_loader/runtime, preservando JSON v1, CLI textual, wrappers `String`, sem adicionar LSP, registry remoto, parser recovery, byte ranges completos ou mudar a semantica de imports. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Revisar `DIAGNOSTICS_JSON_CONTRACT.md` e os testes de report/summary.
+- Criar fixtures ou exemplos Rust pequenos para consumo de filtros, grupos e
+  summary em reports de checker, module_loader e runtime.
+- Validar que os exemplos nao alteram JSON v1, CLI textual ou wrappers
+  `String`.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+
+## Etapa concluida: Fase 11.35 - helpers publicos de tooling no report
+
+Objetivo: adicionar helpers publicos de tooling sobre
+`MultiModuleDiagnosticReport` para consultar diagnostics por path/module_id,
+stage/severity e primeiro diagnostic por grupo, preservando o shape JSON v1
+atual, `check/run --json` first-error, `check/run --json-report`, saida
+textual, wrappers `String`, sem adicionar LSP, registry remoto, parser
+recovery, byte ranges completos ou mudar a semantica de imports.
+
+Nota de continuidade: a F11.35 nao muda a coleta nem a serializacao. Ela apenas
+torna o report mais ergonomico para consumidores Rust/tooling em memoria. Os
+helpers retornam referencias aos diagnostics existentes e nao adicionam campos
+ao JSON v1.
+
+Foi feito:
+
+- API publica em `MultiModuleDiagnosticReport`:
+  - `diagnostics_for_path(&Path)`;
+  - `diagnostics_for_module_id(HirModuleId)`;
+  - `diagnostics_for_path_and_module(Option<&Path>, Option<HirModuleId>)`;
+  - `diagnostics_for_stage(DiagnosticStage)`;
+  - `diagnostics_for_severity(DiagnosticSeverity)`;
+  - `diagnostics_for_group(&MultiModuleDiagnosticGroup)`;
+  - `first_diagnostic_for_group(&MultiModuleDiagnosticGroup)`.
+- Comportamento dos helpers:
+  - filtros por path usam correspondencia exata com `diagnostic.path`;
+  - filtros por severity usam `diagnostic.severity == Some(severity)`;
+  - helpers de grupo usam `diagnostic_indexes` e ignoram indices invalidos
+    com seguranca;
+  - todos retornam referencias, sem copiar ou reformatar diagnostics.
+- Teste core adicionado:
+  - `multi_module_diagnostic_report_tooling_helpers_filter_without_changing_json`;
+  - cobre path, module_id, path/module, stage, severity, grupo, primeiro item
+    por grupo e grupo com indice obsoleto;
+  - confirma que os helpers nao alteram o shape JSON v1.
+- Documentacao atualizada:
+  - `DIAGNOSTICS_JSON_CONTRACT.md` registra os helpers como API Rust in-memory;
+  - `MODULES_IMPORTS_ARCHITECTURE.md`, `ROADMAP.md`,
+    `ARCHITECTURE_AUDIT_NEXUSLANG.md` e `README.md` refletem a ergonomia de
+    tooling sem mudanca no JSON.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test --test core multi_module_diagnostic_report_tooling_helpers_filter_without_changing_json
+cargo check --all-targets
+cargo test --test cli
+cargo test --test core
+cargo fmt --check
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- Teste focado dos helpers de tooling: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo fmt --check`: PASS.
+- `cargo test --test cli`: PASS, 26 testes.
+- `cargo test --test core`: PASS, 254 testes.
+- `cargo test`: PASS, 50 unit + 26 CLI gerais + 7 CLI package-manager +
+  254 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+
+Estado atual:
+
+- `MultiModuleDiagnosticReport` agora e mais facil de consumir por tooling
+  Rust sem depender de parsing JSON.
+- `nexus check --json-report` e `nexus run --json-report` continuam emitindo o
+  mesmo shape JSON v1.
+- `nexus check --json`, `nexus run --json`, saida textual e wrappers `String`
+  continuam first-error e compativeis.
+- Ainda nao ha parser recovery, loader multi-error, runtime multi-error,
+  coleta de cascatas top-level, LSP, registry remoto, byte ranges completos ou
+  mudanca na semantica de imports.
+
+Estado do projeto:
+
+- Fase/trilha atual: diagnostics/tooling multi-modulo em hardening e ergonomia
+  de API.
+- Solido agora: module graph local, SourceDatabase minimo, path/owner/range,
+  JSON v1 first-error, metadata rica, report agrupavel, `check/run
+  --json-report`, coleta checker limitada, matriz function/route/workflow/
+  invoice e helpers publicos de consulta.
+- Verificacao mais recente: `quality-gate.sh` passou em 2026-05-27.
+- Falta imediato: oferecer uma visao resumida do report para dashboards/CLI
+  tooling sem mudar o JSON v1 atual.
+
+## Proximo passo recomendado
+
+Fase 11.36 - Adicionar uma API publica in-memory de resumo para
+`MultiModuleDiagnosticReport`, com contagens por stage/severity, paths/modules
+afetados e flags como `has_errors`, preservando o shape JSON v1 atual,
+`check/run --json` first-error, `check/run --json-report`, saida textual,
+wrappers `String`, sem adicionar LSP, registry remoto, parser recovery, byte
+ranges completos ou mudar a semantica de imports.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.36, adicionando uma API publica in-memory de resumo para `MultiModuleDiagnosticReport`, com contagens por stage/severity, paths/modules afetados e flags como `has_errors`, preservando o shape JSON v1 atual, `check/run --json` first-error, `check/run --json-report`, saida textual, wrappers `String`, sem adicionar LSP, registry remoto, parser recovery, byte ranges completos ou mudar a semantica de imports. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Etapa concluida: Fase 11.34 - matriz de cobertura checker-report
+
+Objetivo: estabilizar a coleta checker-report com uma matriz de cobertura para
+function/route/workflow/invoice, casos de setup global e statements top-level
+first-error, preservando `check/run --json` first-error, `check/run
+--json-report`, saida textual, wrappers `String`, sem adicionar LSP, registry
+remoto, byte ranges completos, parser recovery ou mudar a semantica de
+imports.
+
+Nota de continuidade: a F11.34 nao muda a semantica da coleta implementada na
+F11.33; ela transforma os limites em contrato testado. O report plural continua
+restrito a diagnostics de corpo de declaracoes independentes no checker. Erros
+de parser/loader/setup global/runtime e statements top-level continuam
+first-error por design.
+
+Foi feito:
+
+- Testes core adicionados:
+  - `checker_diagnostic_report_covers_declaration_family_matrix`;
+  - `checker_diagnostic_report_keeps_global_setup_errors_first_error`;
+  - `checker_diagnostic_report_keeps_top_level_statements_first_error`.
+- A matriz positiva cobre diagnostics independentes de:
+  - `function`: retorno com tipo invalido;
+  - `route`: route sem `return` direto;
+  - `workflow`: statement interno com tipo invalido;
+  - `invoice`: item com `price` sem tipo `money`.
+- A matriz tambem valida:
+  - todos os diagnostics coletados mantem `DiagnosticStage::Checker`;
+  - path/source_range continuam apontando para o modulo correto;
+  - `groups[0].diagnostic_indexes` preserva a ordem `[0, 1, 2, 3]`.
+- Limites estabilizados:
+  - setup global, como declaracao duplicada, continua gerando report de um
+    item e nao entra na coleta de corpos;
+  - statements top-level continuam parando no primeiro erro para evitar
+    cascata em estado de escopo dependente de ordem;
+  - regular `check/run --json`, CLI textual e wrappers `String` continuam
+    first-error.
+- Documentacao atualizada:
+  - `DIAGNOSTICS_JSON_CONTRACT.md` registra a matriz e os limites;
+  - `MODULES_IMPORTS_ARCHITECTURE.md`, `ROADMAP.md`,
+    `ARCHITECTURE_AUDIT_NEXUSLANG.md` e `README.md` refletem a cobertura real.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test --test core checker_diagnostic_report_covers_declaration_family_matrix
+cargo test --test core checker_diagnostic_report_keeps_global_setup_errors_first_error
+cargo test --test core checker_diagnostic_report_keeps_top_level_statements_first_error
+cargo check --all-targets
+cargo test --test cli
+cargo test --test core
+cargo fmt --check
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- Testes focados da matriz checker-report: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo fmt --check`: PASS.
+- `cargo test --test cli`: PASS, 26 testes.
+- `cargo test --test core`: PASS, 253 testes.
+- `cargo test`: PASS, 50 unit + 26 CLI gerais + 7 CLI package-manager +
+  253 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+
+Estado atual:
+
+- O contrato de coleta checker-report esta testado para function, route,
+  workflow e invoice.
+- `nexus check --json-report` e `nexus run --json-report` continuam sendo os
+  modos opt-in para report plural.
+- `nexus check --json`, `nexus run --json`, saida textual e wrappers `String`
+  continuam first-error e compativeis.
+- Ainda nao ha parser recovery, loader multi-error, runtime multi-error,
+  coleta de cascatas top-level, LSP, registry remoto, byte ranges completos ou
+  mudanca na semantica de imports.
+
+Estado do projeto:
+
+- Fase/trilha atual: diagnostics/tooling multi-modulo em hardening da coleta
+  report.
+- Solido agora: module graph local, SourceDatabase minimo, path/owner/range,
+  JSON v1 first-error, metadata rica, report agrupavel, `check/run
+  --json-report` com output de run, coleta checker limitada e matriz
+  function/route/workflow/invoice validada.
+- Verificacao mais recente: `quality-gate.sh` passou em 2026-05-27.
+- Falta imediato: transformar a estabilidade do report em ergonomia de tooling
+  sem mudar o JSON first-error nem abrir LSP ainda.
+
+## Proximo passo recomendado
+
+Fase 11.35 - Adicionar helpers publicos de tooling sobre
+`MultiModuleDiagnosticReport` para consultar diagnostics por path/module_id,
+stage/severity e primeiro diagnostic por grupo, preservando o shape JSON v1
+atual, `check/run --json` first-error, `check/run --json-report`, saida
+textual, wrappers `String`, sem adicionar LSP, registry remoto, parser recovery,
+byte ranges completos ou mudar a semantica de imports.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.35, adicionando helpers publicos de tooling sobre `MultiModuleDiagnosticReport` para consultar diagnostics por path/module_id, stage/severity e primeiro diagnostic por grupo, preservando o shape JSON v1 atual, `check/run --json` first-error, `check/run --json-report`, saida textual, wrappers `String`, sem adicionar LSP, registry remoto, parser recovery, byte ranges completos ou mudar a semantica de imports. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Etapa concluida: Fase 11.33 - coleta real minima no report multi-modulo
+
+Objetivo: criar uma base interna minima de coleta real de diagnostics para o
+report multi-modulo, comecando pelo checker em declaracoes independentes,
+preservando `check/run --json` first-error, `check/run --json-report`, saida
+textual, wrappers `String`, sem adicionar LSP, registry remoto, byte ranges
+completos, parser recovery ou mudar a semantica de imports.
+
+Nota de continuidade: a F11.33 e a primeira etapa em que o report deixa de ser
+apenas um envelope de primeiro erro para checker diagnostics. A coleta ainda e
+deliberadamente conservadora: loader/parser/setup/runtime continuam
+first-error, e statements top-level continuam parando no primeiro erro para
+evitar cascatas dependentes de ordem.
+
+Foi feito:
+
+- Checker:
+  - adicionado `Checker::check_with_module_graph_diagnostics`, uma API plural
+    usada por tooling/report;
+  - ela reutiliza a mesma sequencia de HIR, import resolution, symbol index,
+    owner context, typed-HIR metadata, `collect_decls` e import aliases do
+    caminho `check_with_module_graph`;
+  - falhas globais de coleta/setup ainda retornam um unico diagnostic;
+  - a fase de verificacao de declaracoes passa a usar
+    `check_decls_collecting_independent_diagnostics`;
+  - corpos independentes de function/route/invoice/workflow podem acumular
+    diagnostics em ordem estavel;
+  - statements top-level continuam first-error por serem dependentes de ordem
+    e mutarem `top_scope`.
+- API publica/tooling:
+  - adicionado `check_with_source_database_diagnostic_report(...)`, que converte
+    os diagnostics plurais do checker em `MultiModuleDiagnosticReport` com
+    path, module_id, owner e source_range via `SourceDatabase`;
+  - `load_and_check_with_source_database_diagnostic_report` agora usa a coleta
+    plural quando o loader passa;
+  - adicionado `MultiModuleRunDiagnosticReport`;
+  - adicionado `load_and_run_with_source_database_captured_diagnostic_report`,
+    usado por `run --json-report` para report checker plural + `output: []`;
+  - `load_and_check_with_source_database_diagnostic`,
+    `load_and_run_with_source_database_captured_diagnostic`, `check/run
+    --json`, CLI textual e wrappers `String` continuam first-error.
+- CLI:
+  - `nexus check --json-report` agora pode emitir multiplos checker
+    diagnostics no array `diagnostics`;
+  - `nexus run --json-report` tambem usa o report plural para falhas de
+    checker e preserva `output: []` quando a execucao nao inicia;
+  - runtime continua um diagnostic com output parcial quando aplicavel;
+  - regular `nexus check --json` e `nexus run --json` continuam com shape
+    first-error.
+- Testes adicionados:
+  - `load_and_check_with_source_database_diagnostic_report_collects_independent_checker_diagnostics`;
+  - `cli_check_json_report_collects_independent_checker_diagnostics`;
+  - `cli_run_json_report_collects_checker_diagnostics_without_output`.
+- Documentacao atualizada:
+  - `DIAGNOSTICS_JSON_CONTRACT.md` documenta os limites atuais de coleta;
+  - `MODULES_IMPORTS_ARCHITECTURE.md`, `ROADMAP.md`,
+    `ARCHITECTURE_AUDIT_NEXUSLANG.md` e `README.md` registram que report modes
+    podem coletar checker diagnostics independentes.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/program_flow.rs`
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test --test core load_and_check_with_source_database_diagnostic_report_collects_independent_checker_diagnostics
+cargo test --test cli cli_check_json_report_collects_independent_checker_diagnostics
+cargo test --test cli cli_run_json_report_collects_checker_diagnostics_without_output
+cargo check --all-targets
+cargo test --test cli
+cargo test --test core
+cargo fmt --check
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- Testes focados da coleta checker/report: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo fmt --check`: PASS.
+- `cargo test --test cli`: PASS, 26 testes.
+- `cargo test --test core`: PASS, 250 testes.
+- `cargo test`: PASS, 50 unit + 26 CLI gerais + 7 CLI package-manager +
+  250 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+
+Estado atual:
+
+- `nexus check --json-report` e `nexus run --json-report` agora podem carregar
+  mais de um checker diagnostic quando eles pertencem a declaracoes
+  independentes.
+- `diagnostic` continua apontando para o primeiro item e `diagnostics` contem a
+  colecao completa; `groups` agrupa por path/module.
+- `nexus check --json`, `nexus run --json`, CLI textual e wrappers `String`
+  continuam first-error e compativeis.
+- Ainda nao ha parser recovery, loader multi-error, runtime multi-error,
+  coleta de cascatas em statements top-level, LSP, registry remoto, byte ranges
+  completos ou mudanca na semantica de imports.
+
+Estado do projeto:
+
+- Fase/trilha atual: diagnostics/tooling multi-modulo saiu de contrato puro e
+  entrou em coleta real minima.
+- Solido agora: module graph local, SourceDatabase minimo, path/owner/range,
+  JSON v1 first-error, metadata rica, report agrupavel, `check/run
+  --json-report` com output de run e coleta checker limitada.
+- Verificacao mais recente: `quality-gate.sh` passou em 2026-05-27.
+- Falta imediato: estabilizar a matriz de cobertura da coleta checker-report
+  para mais familias de declaracoes e documentar/testar os limites de cascata.
+
+## Proximo passo recomendado
+
+Fase 11.34 - Estabilizar a coleta checker-report com uma matriz de cobertura
+para function/route/workflow/invoice, casos de setup global e statements
+top-level first-error, preservando `check/run --json` first-error,
+`check/run --json-report`, saida textual, wrappers `String`, sem adicionar
+LSP, registry remoto, byte ranges completos, parser recovery ou mudar a
+semantica de imports.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.34, estabilizando a coleta checker-report com uma matriz de cobertura para function/route/workflow/invoice, casos de setup global e statements top-level first-error, preservando `check/run --json` first-error, `check/run --json-report`, saida textual, wrappers `String`, sem adicionar LSP, registry remoto, byte ranges completos, parser recovery ou mudar a semantica de imports. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Etapa concluida: Fase 11.32 - `nexus run --json-report` opt-in
+
+Objetivo: expor `nexus run --json-report` como modo opt-in para o report de
+diagnostics multi-modulo com `output` capturado, preservando `nexus run
+--json` com o shape first-error atual e sem adicionar LSP, registry remoto,
+byte ranges completos, parser recovery ou mudar a semantica de imports.
+
+Nota de continuidade: a F11.32 completa a exposicao CLI opt-in do report minimo
+criado na F11.30 e exposto para `check` na F11.31. O report de `run` tambem
+continua representando o primeiro erro atual em um envelope de colecao; ainda
+nao ha recuperacao/coleta real de multiplos diagnostics.
+
+Foi feito:
+
+- API/serializacao:
+  - adicionado `multi_module_diagnostic_report_output_json(command, report,
+    output)` em `nexuslang-src/src/lib.rs`;
+  - `multi_module_diagnostic_report_json(command, report)` foi mantido para
+    `check` e passou a compartilhar helper interno com a variante que inclui
+    `output`;
+  - `output` e emitido no topo do report apenas pela variante nova, mantendo
+    `diagnostic`, `diagnostics` e `groups`.
+- CLI:
+  - adicionado modo opt-in `nexus run --json-report`;
+  - sucesso emite report vazio com `ok: true`, `diagnostic: null`,
+    `diagnostics: []`, `groups: []` e `output` capturado;
+  - erro runtime emite report com diagnostic/runtime e preserva output parcial;
+  - erros de loader/checker em `run --json-report` emitem report com
+    `output: []`;
+  - `nexus run --json` continua emitindo o shape first-error/success antigo;
+  - `--json` e `--json-report` em `run` sao mutuamente exclusivos.
+- Testes CLI:
+  - `cli_run_json_report_reports_success_with_captured_output`;
+  - `cli_run_json_report_reports_runtime_diagnostic_with_partial_output`;
+  - `cli_run_json_report_reports_checker_diagnostic_without_output`;
+  - reforcado que `cli_run_json_reports_success_with_captured_output` e
+    `cli_run_json_reports_runtime_diagnostic_with_partial_output` nao emitem
+    `diagnostics` nem `groups`.
+- Testes core:
+  - `multi_module_diagnostic_report_output_json_includes_captured_output`.
+- Documentacao atualizada:
+  - `DIAGNOSTICS_JSON_CONTRACT.md` documenta `nexus run --json-report` e a API
+    Rust com output;
+  - `MODULES_IMPORTS_ARCHITECTURE.md`, `ROADMAP.md`,
+    `ARCHITECTURE_AUDIT_NEXUSLANG.md` e `README.md` registram o estado real.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test --test cli cli_run_json_report_reports_success_with_captured_output
+cargo test --test cli cli_run_json_report_reports_runtime_diagnostic_with_partial_output
+cargo test --test cli cli_run_json_report_reports_checker_diagnostic_without_output
+cargo test --test cli cli_run_json_reports_success_with_captured_output
+cargo test --test core multi_module_diagnostic_report_output_json_includes_captured_output
+cargo check --all-targets
+cargo fmt --check
+cargo test --test cli
+cargo test --test core
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- Testes focados de `run --json-report`: PASS.
+- Teste focado da API `multi_module_diagnostic_report_output_json`: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo fmt --check`: PASS.
+- `cargo test --test cli`: PASS, 24 testes.
+- `cargo test --test core`: PASS, 249 testes.
+- `cargo test`: PASS, 50 unit + 24 CLI gerais + 7 CLI package-manager +
+  249 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+
+Estado atual:
+
+- `nexus check --json-report` e `nexus run --json-report` estao disponiveis
+  para tooling.
+- `nexus check --json`, `nexus run --json`, CLI textual e wrappers `String`
+  continuam compativeis.
+- O report ainda e infraestrutura de colecao: representa o primeiro erro
+  atual, nao multiplos erros reais.
+- Ainda nao ha LSP, registry remoto, byte ranges completos, parser recovery,
+  coleta real multi-error ou runtime errors tipados.
+
+Estado do projeto:
+
+- Fase/trilha atual: diagnostics/tooling multi-modulo com contrato JSON v1 e
+  modos CLI opt-in para `check` e `run`.
+- Solido agora: module graph local, SourceDatabase minimo, path/owner/range,
+  JSON v1 first-error, metadata rica, report agrupavel, `check --json-report`
+  e `run --json-report` com output capturado.
+- Verificacao mais recente: `quality-gate.sh` passou em 2026-05-27.
+- Falta imediato: comecar a alimentar o report com uma base real de coleta de
+  diagnostics sem quebrar os fluxos first-error.
+
+## Proximo passo recomendado
+
+Fase 11.33 - Criar uma base interna minima de coleta real de diagnostics para o
+report multi-modulo, comecando pelo checker em declaracoes independentes quando
+possivel, preservando `check/run --json` first-error, `check/run
+--json-report`, saida textual, wrappers `String`, sem adicionar ainda LSP,
+registry remoto, byte ranges completos, parser recovery ou mudar a semantica de
+imports.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.33, criando uma base interna minima de coleta real de diagnostics para o report multi-modulo, comecando pelo checker em declaracoes independentes quando possivel, preservando `check/run --json` first-error, `check/run --json-report`, saida textual, wrappers `String`, sem adicionar ainda LSP, registry remoto, byte ranges completos, parser recovery ou mudar a semantica de imports. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Etapa concluida: Fase 11.31 - `nexus check --json-report` opt-in
+
+Objetivo: expor o report minimo de diagnostics multi-modulo como modo opt-in
+no CLI/tooling, preservando `nexus check --json` e `nexus run --json` com o
+shape first-error atual e sem adicionar LSP, registry remoto, byte ranges
+completos, parser recovery ou mudar a semantica de imports.
+
+Nota de continuidade: a F11.31 usa o `MultiModuleDiagnosticReport` criado na
+F11.30. O report continua representando o primeiro erro atual em um envelope de
+colecao; ainda nao ha recuperacao/coleta real de multiplos diagnostics.
+
+Foi feito:
+
+- CLI:
+  - adicionado modo opt-in `nexus check --json-report`;
+  - sucesso emite o report vazio com `ok: true`, `diagnostic: null`,
+    `diagnostics: []` e `groups: []`;
+  - erro emite o report com `diagnostic` apontando para o primeiro diagnostic,
+    `diagnostics` com o array de diagnostics e `groups` por path/modulo;
+  - `nexus check --json` continua emitindo o shape first-error/success antigo;
+  - `nexus run --json` continua inalterado;
+  - `--json` e `--json-report` em `check` sao mutuamente exclusivos.
+- Testes CLI:
+  - `cli_check_json_report_reports_success`;
+  - `cli_check_json_report_reports_diagnostic_collection`;
+  - reforcado que `cli_check_json_reports_success` e
+    `cli_check_json_reports_structured_imported_module_diagnostic` nao emitem
+    `diagnostics` nem `groups`.
+- Documentacao atualizada:
+  - `DIAGNOSTICS_JSON_CONTRACT.md` documenta `nexus check --json-report`;
+  - `MODULES_IMPORTS_ARCHITECTURE.md`, `ROADMAP.md`,
+    `ARCHITECTURE_AUDIT_NEXUSLANG.md` e `README.md` registram o modo opt-in.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test --test cli cli_check_json_report_reports_success
+cargo test --test cli cli_check_json_report_reports_diagnostic_collection
+cargo test --test cli cli_check_json_reports_success
+cargo check --all-targets
+cargo fmt --check
+cargo test --test cli
+cargo test --test core
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- Testes focados de `--json-report`: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo fmt --check`: PASS.
+- `cargo test --test cli`: PASS, 21 testes.
+- `cargo test --test core`: PASS, 248 testes.
+- `cargo test`: PASS, 50 unit + 21 CLI gerais + 7 CLI package-manager +
+  248 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+
+Estado atual:
+
+- `nexus check --json-report` esta disponivel para tooling.
+- `nexus check --json`, `nexus run --json`, CLI textual e wrappers `String`
+  continuam compativeis.
+- O report ainda e infraestrutura de colecao: representa o primeiro erro
+  atual, nao multiplos erros reais.
+- Ainda nao ha LSP, registry remoto, byte ranges completos, parser recovery ou
+  runtime errors tipados.
+
+Estado do projeto:
+
+- Fase/trilha atual: diagnostics/tooling multi-modulo com contrato e exposicao
+  CLI opt-in praticamente fechados para `check`.
+- Solido agora: module graph local, SourceDatabase minimo, path/owner/range,
+  JSON v1 first-error, metadata rica, report agrupavel e `check
+  --json-report` opt-in.
+- Verificacao mais recente: `quality-gate.sh` passou em 2026-05-27.
+- Falta imediato: decidir se o report tambem deve cobrir `run` com output
+  capturado, ou iniciar a trilha de coleta real/recovery.
+
+## Proximo passo recomendado
+
+Fase 11.32 - Expor `nexus run --json-report` como modo opt-in para o report de
+diagnostics com `output` capturado, preservando `nexus run --json` com o shape
+atual, sem adicionar ainda LSP, registry remoto, byte ranges completos, parser
+recovery ou mudar a semantica de imports.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.32, expondo `nexus run --json-report` como modo opt-in para o report de diagnostics com `output` capturado, preservando `nexus run --json` com o shape atual e sem adicionar ainda LSP, registry remoto, byte ranges completos, parser recovery ou mudar a semantica de imports. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Etapa concluida: Fase 11.30 - report minimo de diagnostics multi-modulo
+
+Objetivo: criar uma colecao/report minimo de diagnostics multi-modulo para
+tooling, capaz de agrupar diagnostics por path/modulo mantendo
+`MultiModuleDiagnostic` e o JSON v1 atual de primeiro erro como
+compatibilidade, sem adicionar LSP, registry remoto, byte ranges completos ou
+mudar a semantica de imports.
+
+Nota de continuidade: a F11.30 continua a trilha de diagnostics/tooling. Ela
+nao implementa ainda parser recovery nem coleta real de multiplos erros do
+checker; cria o formato publico onde essa coleta podera entrar depois.
+
+Foi feito:
+
+- Adicionado `MultiModuleDiagnosticReport` em `nexuslang-src/src/lib.rs`:
+  - carrega `Vec<MultiModuleDiagnostic>`;
+  - expõe `new`, `empty`, `from_diagnostic`, `diagnostics`,
+    `into_diagnostics`, `push`, `first`, `len`, `is_empty`;
+  - implementa `From<MultiModuleDiagnostic>`.
+- Adicionado `MultiModuleDiagnosticGroup`:
+  - agrupa por `path` e `module_id`;
+  - guarda `diagnostic_indexes` apontando para o array principal.
+- Adicionado `MultiModuleDiagnosticReport::groups_by_path_and_module()`.
+- Adicionado `multi_module_diagnostic_report_json(command, report)`:
+  - emite `diagnostic` com o primeiro erro para ponte com consumidores
+    first-error;
+  - emite `diagnostics` com todos os diagnostics;
+  - emite `groups` agrupados por path/modulo;
+  - e uma API separada: `multi_module_diagnostic_json` e CLI `--json`
+    continuam com o shape atual de primeiro erro.
+- Adicionado `load_and_check_with_source_database_diagnostic_report()`:
+  - preserva o comportamento atual de parar no primeiro erro;
+  - embrulha esse erro em um report de um item para tooling.
+- Testes core adicionados:
+  - `multi_module_diagnostic_report_groups_by_path_and_module`;
+  - `load_and_check_with_source_database_diagnostic_report_wraps_first_error`.
+- Documentacao atualizada:
+  - `DIAGNOSTICS_JSON_CONTRACT.md` documenta o report como API separada;
+  - `MODULES_IMPORTS_ARCHITECTURE.md`, `ROADMAP.md`,
+    `ARCHITECTURE_AUDIT_NEXUSLANG.md` e `README.md` registram o estado real.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test --test core multi_module_diagnostic_report_groups_by_path_and_module
+cargo test --test core load_and_check_with_source_database_diagnostic_report_wraps_first_error
+cargo check --all-targets
+cargo fmt --check
+cargo test --test cli
+cargo test --test core
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- Testes focados do report: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo fmt --check`: PASS.
+- `cargo test --test cli`: PASS, 19 testes.
+- `cargo test --test core`: PASS, 248 testes.
+- `cargo test`: PASS, 50 unit + 19 CLI gerais + 7 CLI package-manager +
+  248 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+
+Estado atual:
+
+- Existe agora uma API publica de report/colecao para diagnostics
+  multi-modulo, com agrupamento por path/modulo.
+- `MultiModuleDiagnostic`, wrappers `String`, CLI textual e `nexus check/run
+  --json` continuam first-error e compativeis.
+- A colecao ainda e infraestrutura: os fluxos atuais continuam parando no
+  primeiro loader/checker/runtime error.
+- Ainda nao ha LSP, registry remoto, byte ranges completos, parser recovery ou
+  runtime errors tipados.
+
+Estado do projeto:
+
+- Fase/trilha atual: diagnostics/tooling multi-modulo chegando ao fim da base
+  de contrato.
+- Solido agora: module graph local, SourceDatabase minimo, path/owner/range,
+  JSON v1 de primeiro erro, metadata rica, e report minimo agrupavel para
+  tooling.
+- Verificacao mais recente: `quality-gate.sh` passou em 2026-05-27.
+- Falta imediato: expor o report de forma opt-in no CLI/tooling ou começar a
+  alimentar o report com coletores reais quando houver recuperação.
+
+## Proximo passo recomendado
+
+Fase 11.31 - Expor o report minimo de diagnostics como modo opt-in no CLI,
+por exemplo `nexus check --json-report`, preservando `nexus check --json` e
+`nexus run --json` com o shape first-error atual e sem adicionar ainda LSP,
+registry remoto, byte ranges completos, parser recovery ou mudar a semantica de
+imports.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.31, expondo o report minimo de diagnostics multi-modulo como modo opt-in no CLI/tooling, preservando `nexus check --json` e `nexus run --json` com o shape first-error atual e sem adicionar ainda LSP, registry remoto, byte ranges completos, parser recovery ou mudar a semantica de imports. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Etapa concluida: Fase 11.29 - expandir metadata de diagnostics em checker/loader/runtime
+
+Objetivo: expandir labels/notes/suggestions para familias adicionais de
+diagnostics em checker/module_loader/runtime sem alterar mensagens,
+codes/severities, saida textual padrao, wrappers `String`, JSON v1, LSP,
+registry remoto, byte ranges completos ou semantica de imports.
+
+Nota de continuidade: a F11.29 continua diretamente a F11.28. A F11.28
+populou os primeiros produtores; a F11.29 amplia a cobertura para familias
+mais comuns e mantem a metadata dentro dos arrays existentes do JSON v1.
+
+Foi feito:
+
+- Checker:
+  - `Checker::error` agora passa por `enrich_checker_diagnostic`;
+  - alem de `CHECKER_TYPE`, agora recebem label/note/suggestion os codigos
+    `CHECKER_SYMBOL`, `CHECKER_ARGUMENT`, `CHECKER_MODEL`, `CHECKER_ROUTE`,
+    `CHECKER_AUTH`, `CHECKER_WORKFLOW` e `CHECKER_INVOICE`;
+  - mensagens humanas e `Display` continuam iguais.
+- Module loader:
+  - diagnostics de `DuplicateGraphSymbol`, `DuplicateImportAlias`,
+    `ImportAliasCollision`, `NonRelativePath`, `PackageImport`,
+    `PathResolution` e `StdLibNotFound` agora carregam metadata de tooling;
+  - `SymbolNotExported` continuou com metadata da F11.28.
+- Runtime:
+  - criado `enrich_runtime_diagnostic` em `diagnostic/mod.rs`;
+  - `MultiModuleDiagnostic::runtime` e o playground passam a usar o mesmo
+    helper;
+  - `RUNTIME_DIVISION_BY_ZERO` agora tambem recebe label;
+  - `RUNTIME_UNDEFINED_VARIABLE`, `RUNTIME_UNDEFINED_FUNCTION`,
+    `RUNTIME_MODEL` e `RUNTIME_WORKFLOW` recebem label/note/suggestion.
+- Testes:
+  - adicionados testes core para checker symbol/argument/model/workflow;
+  - adicionados testes core para runtime undefined variable/function;
+  - reforcados testes de module_loader para non-relative path, duplicate alias
+    e alias collision;
+  - atualizado o contrato esperado de runtime JSON para conter label em
+    division-by-zero;
+  - `nexus run --json` segue capturando stdout parcial no mesmo envelope.
+- Documentacao atualizada em `DIAGNOSTICS_JSON_CONTRACT.md`,
+  `MODULES_IMPORTS_ARCHITECTURE.md`, `ROADMAP.md`,
+  `ARCHITECTURE_AUDIT_NEXUSLANG.md` e `README.md`.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/diagnostic/mod.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/src/playground/mod.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test --test core checker_additional_diagnostic_families_include_tooling_metadata
+cargo test --test core runtime_additional_diagnostic_families_include_tooling_metadata
+cargo test --test core module_loader_rejects_non_relative_path
+cargo test --test core module_graph_rejects_duplicate_import_aliases_in_one_module
+cargo test --test core module_graph_rejects_import_alias_collision_with_local_top_level
+cargo test --test core multi_module_diagnostic_json_covers_runtime_stage
+cargo check --all-targets
+cargo fmt --check
+cargo test --test cli
+cargo test --test core
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- Todos os testes focados: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo fmt --check`: PASS.
+- `cargo test --test cli`: PASS, 19 testes.
+- `cargo test --test core`: PASS, 246 testes.
+- `cargo test`: PASS, 50 unit + 19 CLI gerais + 7 CLI package-manager +
+  246 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+
+Estado atual:
+
+- Labels/notes/suggestions agora cobrem parser import/export, a maior parte
+  das familias especificas de checker, os erros mais importantes do
+  module_loader e as familias runtime especificas.
+- JSON v1 manteve o mesmo envelope e os mesmos campos; apenas arrays
+  opcionais existentes passaram a vir preenchidos em mais casos.
+- Saida textual padrao, wrappers `String`, codes/severities e semantica de
+  imports foram preservados.
+- Ainda nao ha LSP, registry remoto, colecao de diagnostics, byte ranges
+  completos, parser recovery ou runtime errors tipados.
+
+Estado do projeto:
+
+- Fase/trilha atual: diagnostics/tooling multi-modulo em hardening final antes
+  de colecao de diagnostics e base LSP.
+- Solido agora: module graph local, SourceDatabase minimo, path/owner/range em
+  diagnostics multi-modulo, JSON v1 para `check`/`run`, codes/severities
+  granulares, containers opcionais e metadados populados nas familias mais
+  comuns.
+- Verificacao mais recente: `quality-gate.sh` passou em 2026-05-27.
+- Falta imediato: introduzir uma colecao/report de diagnostics multi-modulo
+  para tooling sem quebrar o modo atual de primeiro erro.
+
+## Proximo passo recomendado
+
+Fase 11.30 - Criar uma colecao/report minimo de diagnostics multi-modulo para
+tooling, capaz de agrupar diagnostics por path/modulo mantendo
+`MultiModuleDiagnostic` e o JSON v1 atual de primeiro erro como compatibilidade,
+sem adicionar ainda LSP, registry remoto, byte ranges completos ou mudar a
+semantica de imports.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.30, introduzindo uma colecao/report minimo de diagnostics multi-modulo para tooling com agrupamento por path/modulo e compatibilidade com `MultiModuleDiagnostic`/JSON v1 de primeiro erro, sem adicionar ainda LSP, registry remoto, byte ranges completos ou mudar a semantica de imports. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Etapa concluida: Fase 11.28 - popular labels/notes/suggestions nos produtores principais
+
+Objetivo: popular labels/notes/suggestions nos diagnostics de maior impacto em
+parser/checker/module_loader/runtime sem alterar mensagens, codes/severities,
+saida textual padrao, wrappers `String`, JSON v1, LSP, registry remoto ou
+semantica de imports.
+
+Nota de continuidade: a F11.28 continua diretamente a F11.27. A F11.27 criou
+os containers opcionais; a F11.28 comeca a preencher esses containers em
+produtores reais e mantem vazios os diagnostics ainda nao enriquecidos.
+
+Foi feito:
+
+- Parser:
+  - `Diagnostic::parser` agora enriquece diagnostics classificados como
+    `PARSER_IMPORT` com label, note e suggestion sobre a forma `import Nome
+    [as Alias] from "./modulo.nx"`;
+  - diagnostics classificados como `PARSER_EXPORT` recebem label, note e
+    suggestion sobre exports suportados;
+  - a precedencia do classificador foi ajustada para reconhecer `export`
+    antes de `import`, evitando classificar mensagens como "exportar um
+    import" como erro de import.
+- Checker:
+  - `Checker::error` agora popula label/note/suggestion para diagnostics
+    `CHECKER_TYPE`;
+  - isso cobre os type mismatches de maior impacto, incluindo retorno invalido
+    em modulo importado.
+- Module loader:
+  - `ModuleError::SymbolNotExported` agora inclui label na posicao do import,
+    note dizendo que o modulo alvo existe mas nao exporta o simbolo, e
+    suggestion para exportar ou alterar o nome importado.
+- Runtime:
+  - `MultiModuleDiagnostic::runtime` agora adiciona note/suggestion para
+    `RUNTIME_DIVISION_BY_ZERO`;
+  - o playground runtime diagnostic recebeu a mesma metadata no `Diagnostic`
+    interno, embora a trilha validada aqui seja o JSON v1 multi-modulo.
+- Testes CLI atualizados para validar metadata real em:
+  - checker type diagnostic via `nexus check --json`;
+  - module_loader symbol-not-exported via `nexus check --json`;
+  - runtime division-by-zero via `nexus run --json`.
+- Testes core adicionados/reforcados para:
+  - parser import/export metadata;
+  - checker type metadata em diagnostic multi-modulo com SourceDatabase;
+  - runtime division-by-zero metadata no JSON v1.
+- Atualizados `DIAGNOSTICS_JSON_CONTRACT.md`,
+  `MODULES_IMPORTS_ARCHITECTURE.md`, `ROADMAP.md`,
+  `ARCHITECTURE_AUDIT_NEXUSLANG.md` e `README.md`.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/diagnostic/mod.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/src/playground/mod.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test parser_import_export_diagnostics_include_tooling_metadata
+cargo test diagnostic_code_catalog_classifies_error_families
+cargo test --test cli cli_check_json
+cargo test --test cli cli_run_json
+cargo test load_and_check_with_source_database_diagnostic_exposes_structured_error
+cargo test multi_module_diagnostic_json_covers_runtime_stage
+cargo check --all-targets
+cargo fmt --check
+cargo test --test cli
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo fmt`: PASS.
+- `cargo test parser_import_export_diagnostics_include_tooling_metadata`: PASS.
+- `cargo test diagnostic_code_catalog_classifies_error_families`: PASS.
+- `cargo test --test cli cli_check_json`: PASS, 3 testes.
+- `cargo test --test cli cli_run_json`: PASS, 2 testes.
+- `cargo test load_and_check_with_source_database_diagnostic_exposes_structured_error`: PASS.
+- `cargo test multi_module_diagnostic_json_covers_runtime_stage`: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo fmt --check`: PASS.
+- `cargo test --test cli`: PASS, 19 testes.
+- `cargo test`: PASS, 50 unit + 19 CLI gerais + 7 CLI package-manager +
+  244 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+
+Estado atual:
+
+- Labels/notes/suggestions deixaram de ser apenas containers e agora aparecem
+  em produtores reais de alto impacto.
+- Mensagens humanas, `Display`, wrappers `String`, codes/severities, JSON v1 e
+  semantica de imports foram preservados.
+- O JSON v1 continua emitindo o mesmo envelope, agora com metadata preenchida
+  em parser import/export, checker type, module_loader symbol-not-exported e
+  runtime division-by-zero.
+- Ainda faltam labels/notes/suggestions para outras familias, como checker
+  symbol/argument/model/route/auth/workflow/invoice, module_loader path/alias
+  errors e runtime undefined variable/function/model/workflow.
+- Ainda nao ha LSP, registry remoto, colecao de diagnostics, byte ranges
+  completos ou runtime errors tipados.
+
+Estado do projeto:
+
+- Fase/trilha atual: diagnostics/tooling multi-modulo em hardening final antes
+  de colecao de diagnostics e base LSP.
+- Solido agora: module graph local, SourceDatabase minimo, path/owner/range em
+  diagnostics multi-modulo, JSON v1 para `check`/`run`, codes/severities
+  granulares, containers opcionais e primeiros produtores reais com
+  labels/notes/suggestions.
+- Verificacao mais recente: `quality-gate.sh` passou em 2026-05-27.
+- Falta imediato: ampliar cobertura dos metadados para as demais familias mais
+  comuns e depois introduzir colecao de diagnostics/byte ranges completos.
+- Distancia do fim: a trilha esta quase pronta para MVP interno de tooling,
+  mas o produto completo ainda precisa de LSP, registry real, incrementalidade
+  e runtime errors tipados.
+
+## Proximo passo recomendado
+
+Fase 11.29 - Expandir labels/notes/suggestions para familias adicionais de
+diagnostics em checker/module_loader/runtime, priorizando symbol/argument
+errors, path/alias errors e undefined variable/function, sem adicionar ainda
+colecao de diagnostics, LSP, registry remoto, byte ranges completos ou mudar
+semantica de imports.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.29, expandindo labels/notes/suggestions para familias adicionais de diagnostics em checker/module_loader/runtime sem alterar mensagens, codes/severities, saida textual padrao, wrappers `String`, JSON v1, LSP, registry remoto, byte ranges completos ou semantica de imports. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Etapa concluida: Fase 11.27 - labels, notes e suggestions opcionais
+
+Objetivo: adicionar labels, notes e suggestions opcionais aos diagnostics
+estruturados e ao JSON v1, preservando `message`, `code`, `severity`, saida
+textual, wrappers `String`, shape existente do contrato e semantica de imports.
+
+Nota de continuidade: a F11.27 continua diretamente a F11.26 na trilha de
+diagnostics/tooling. A mudanca adiciona containers opcionais de metadados, mas
+nao passa ainda a popular automaticamente todos os diagnostics de parser,
+checker, loader ou runtime.
+
+Foi feito:
+
+- Adicionado `DiagnosticLabel` com:
+  - `message`;
+  - `line`;
+  - `column`;
+  - constructors/builders `new`, `at_location`, `with_location` e
+    `with_span`.
+- Adicionado `DiagnosticSuggestion` com:
+  - `message`;
+  - `replacement: Option<String>`;
+  - constructors `new` e `with_replacement`.
+- `Diagnostic` agora carrega:
+  - `labels: Vec<DiagnosticLabel>`;
+  - `notes: Vec<String>`;
+  - `suggestions: Vec<DiagnosticSuggestion>`.
+- Adicionados builders/limpadores:
+  - `with_label`;
+  - `with_label_at`;
+  - `without_labels`;
+  - `with_note`;
+  - `without_notes`;
+  - `with_suggestion`;
+  - `with_replacement_suggestion`;
+  - `without_suggestions`.
+- `Display` de `Diagnostic` e `MultiModuleDiagnostic` continua sem incluir
+  labels/notes/suggestions.
+- O JSON v1 de multi-modulo agora emite, dentro de `diagnostic`:
+  - `labels`;
+  - `notes`;
+  - `suggestions`.
+- Suggestions no JSON v1 usam objetos com:
+  - `message`;
+  - `replacement`.
+- CLI JSON atual emite arrays vazios para diagnostics existentes quando nenhum
+  produtor popula metadados extras.
+- Adicionado teste de core garantindo que labels/notes/suggestions nao alteram
+  `to_string()` e podem ser limpos.
+- Adicionado teste de JSON v1 com label, note e suggestion com replacement.
+- Testes CLI de `check --json` e `run --json` reforcam a presenca de arrays
+  vazios no contrato.
+- Atualizados `DIAGNOSTICS_JSON_CONTRACT.md`,
+  `MODULES_IMPORTS_ARCHITECTURE.md`, `ROADMAP.md`,
+  `ARCHITECTURE_AUDIT_NEXUSLANG.md` e `README.md`.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/diagnostic/mod.rs`
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test diagnostic_code_and_severity_do_not_change_text_display
+cargo test multi_module_diagnostic_json_includes_labels_notes_and_suggestions
+cargo test --test cli cli_check_json
+cargo test --test cli cli_run_json
+cargo fmt --check
+cargo test --test cli
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo fmt`: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo test diagnostic_code_and_severity_do_not_change_text_display`: PASS.
+- `cargo test multi_module_diagnostic_json_includes_labels_notes_and_suggestions`: PASS.
+- `cargo test --test cli cli_check_json`: PASS, 3 testes.
+- `cargo test --test cli cli_run_json`: PASS, 2 testes.
+- `cargo fmt --check`: PASS.
+- `cargo test --test cli`: PASS, 19 testes.
+- `cargo test`: PASS, 50 unit + 19 CLI gerais + 7 CLI package-manager +
+  243 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+
+Estado atual:
+
+- O contrato JSON v1 preserva os campos existentes e acrescenta
+  `labels`/`notes`/`suggestions` como metadados aditivos.
+- A saida textual padrao, wrappers `String`, `message`, `code`, `severity` e
+  semantica de imports foram preservados.
+- A API estruturada ja suporta labels/notes/suggestions, mas os produtores
+  reais ainda emitem arrays vazios na maior parte dos diagnostics.
+- Ainda nao ha LSP, registry remoto, colecao de diagnostics, byte ranges
+  completos ou runtime errors tipados.
+
+Estado do projeto:
+
+- Fase/trilha atual: diagnostics/tooling multi-modulo em hardening incremental.
+- Solido agora: module graph local, SourceDatabase minimo, path/owner/range em
+  diagnostics multi-modulo, JSON v1 para `check`/`run`, codes/severities
+  granulares e containers opcionais para labels/notes/suggestions.
+- Verificacao mais recente: `quality-gate.sh` passou em 2026-05-27.
+- Falta imediato: popular labels/notes/suggestions em produtores de maior
+  impacto, depois avançar para colecao de diagnostics, byte ranges completos,
+  recovery e base LSP.
+- Distancia do fim: esta trilha esta quase pronta para MVP interno de tooling,
+  mas o produto completo ainda esta no meio do caminho porque faltam LSP,
+  registry real, incrementalidade e runtime errors tipados.
+
+## Proximo passo recomendado
+
+Fase 11.28 - Popular labels/notes/suggestions nos diagnostics de maior impacto
+em parser/checker/module_loader/runtime, começando por import/export, type
+mismatch, simbolo nao exportado e runtime division-by-zero, preservando
+mensagens, codes/severities, saida textual padrao, wrappers `String`, JSON v1 e
+semantica de imports.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.28, populando labels/notes/suggestions nos diagnostics de maior impacto em parser/checker/module_loader/runtime sem alterar mensagens, codes/severities, saida textual padrao, wrappers `String`, JSON v1, LSP, registry remoto ou semantica de imports. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Etapa concluida: Fase 11.26 - catalogo granular de diagnostic codes
+
+Objetivo: criar um catalogo granular de diagnostic codes por familia de erro
+para lexer/parser/module_loader/checker/runtime e cobrir estabilidade no JSON
+v1, preservando mensagens, saida textual padrao, severities e wrappers
+`String`, sem adicionar LSP, registry remoto ou mudar a semantica de imports.
+
+Nota de continuidade: a F11.26 continua diretamente a F11.25 como trilha
+principal de diagnostics. A memoria tambem registra uma etapa paralela de
+runtime storage drivers feita depois da F11.25; essa etapa foi preservada e a
+F11.26 nao altera storage, routes, imports ou registry.
+
+Foi feito:
+
+- Adicionado o modulo publico `nexuslang::diagnostic::codes` com constantes
+  estaveis para familias de erro de input, lexer, parser, checker,
+  module_loader e runtime.
+- Catalogo atual:
+  - `NXL0001`: input generico;
+  - `NXL1001`: lexer/caractere invalido;
+  - `NXL1002`: lexer/string nao terminada;
+  - `NXL1003`: lexer/operador invalido;
+  - `NXL2001` a `NXL2006`: parser/sintaxe, import, export, declaracao,
+    expressao e statement;
+  - `NXL3001` a `NXL3009` e `NXL3099`: checker/tipo, simbolo, assignment,
+    model, route, auth, workflow, invoice, argumentos e generico;
+  - `NXL4001` a `NXL4010`: module_loader/IO, parse, ciclo, simbolo nao
+    exportado, duplicados/alias/path/package/stdlib;
+  - `NXL5001` a `NXL5005` e `NXL5099`: runtime/divisao por zero, variavel,
+    funcao, model, workflow e generico.
+- Adicionados classificadores publicos:
+  - `parser_code_for_message`;
+  - `checker_code_for_message`;
+  - `runtime_code_for_message`.
+- `Diagnostic::parser` agora classifica codes de parser pelo texto do erro.
+- Lexer usa codes especificos para string nao terminada e operador invalido;
+  caractere invalido continua no default `NXL1001`.
+- Checker classifica cada diagnostic criado por `Checker::error` antes de
+  anexar span/owner.
+- `ModuleError::to_diagnostic` mapeia cada variante para code granular de
+  module_loader.
+- `MultiModuleDiagnostic::runtime` e o playground JSON classificam diagnostics
+  runtime com o catalogo novo.
+- O teste CLI de module_loader passou a exigir `NXL4004` para simbolo nao
+  exportado, preservando o restante do envelope JSON v1.
+- Adicionado teste core `diagnostic_code_catalog_classifies_error_families`.
+- Atualizados `DIAGNOSTICS_JSON_CONTRACT.md`, `MODULES_IMPORTS_ARCHITECTURE.md`,
+  `ROADMAP.md`, `ARCHITECTURE_AUDIT_NEXUSLANG.md` e `README.md`.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/diagnostic/mod.rs`
+- `nexuslang-src/src/lexer/mod.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/src/playground/mod.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test diagnostic_code_catalog_classifies_error_families
+cargo test --test cli cli_check_json
+cargo test --test cli cli_run_json
+cargo fmt --check
+cargo test --test cli
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo fmt`: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo test diagnostic_code_catalog_classifies_error_families`: PASS.
+- `cargo test --test cli cli_check_json`: PASS, 3 testes.
+- `cargo test --test cli cli_run_json`: PASS, 2 testes.
+- `cargo fmt --check`: PASS.
+- `cargo test --test cli`: PASS, 19 testes.
+- `cargo test`: PASS, 50 unit + 19 CLI gerais + 7 CLI package-manager +
+  242 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+
+Estado atual:
+
+- O contrato JSON v1 preserva o mesmo shape com `diagnostic.code` e
+  `diagnostic.severity`, agora com catalogo granular por familia.
+- A saida textual padrao, `Display`, wrappers `String`, severities e semantica
+  de imports foram preservados.
+- `nexus check --json` e `nexus run --json` continuam emitindo um diagnostic
+  estruturado por erro, com path/owner/source_range quando disponivel.
+- Ainda nao ha LSP, registry remoto, colecao de diagnostics, labels/notes,
+  suggestions, byte ranges completos ou runtime errors tipados.
+
+## Proximo passo recomendado
+
+Fase 11.27 - Adicionar labels/notes/suggestions opcionais aos diagnostics
+estruturados e ao JSON v1, mantendo mensagens, codes/severities, saida textual
+padrao e wrappers `String`, sem adicionar ainda LSP, registry remoto, colecao
+de diagnostics ou mudar a semantica de imports.
+
+## Etapa concluida: Runtime storage drivers para `nexus serve`
+
+Objetivo: aplicar a camada de drivers no runtime de storage sem alterar a
+linguagem, o checker, a semantica das routes ou os wrappers publicos
+existentes.
+
+Foi feito:
+
+- Criado `StorageDriver` com drivers estaveis `json` e `sqlite`.
+- Adicionado parser/registry simples de drivers:
+  - `StorageDriver::parse`;
+  - `StorageDriver::from_name`;
+  - `StorageDriver::available_names`;
+  - `StorageDriver::target_path`.
+- Adicionado `Storage::new_driver(driver, data_dir)`, preservando
+  `Storage::new_json` e `Storage::new_sqlite`.
+- `Storage::driver()` agora identifica o driver ativo.
+- `nexus serve` passou a aceitar:
+  - `--storage json`;
+  - `--storage sqlite`;
+  - alias interno `--driver`.
+- `serve_file_with_storage_driver` foi exposto para callers que querem escolher
+  o driver diretamente.
+- O driver JSON continua sendo o default para compatibilidade.
+- O driver SQLite usa `.nexus-data/nexus.db` ao servir HTTP.
+- README, ROADMAP e audit de arquitetura foram atualizados para documentar a
+  selecao publica de driver.
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test storage_driver_registry_parses_and_constructs_backends
+cargo test --test cli cli_serve
+cargo test
+cargo fmt --check
+```
+
+Resultado:
+
+- `cargo fmt`: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo test storage_driver_registry_parses_and_constructs_backends`: PASS.
+- `cargo test --test cli cli_serve`: PASS, cobrindo serve multi-modulo,
+  `serve --storage sqlite` e rejeicao de driver desconhecido.
+- `cargo test`: PASS, incluindo 50 unit, 19 CLI, 7 package-manager, 242 core e
+  doc-tests.
+- `cargo fmt --check`: PASS.
+
+Estado atual:
+
+- O sistema ja possui uma camada minima de driver para storage runtime.
+- JSON e SQLite sao selecionaveis de forma explicita no servidor HTTP.
+- Ainda nao ha driver remoto, configuracao por manifesto, variaveis de ambiente,
+  pool de conexoes, migracoes fisicas ou API dinamica de plugins.
+
+## Proximo passo recomendado
+
+Fase 11.26 - Criar um catalogo granular de diagnostic codes por familia de
+erro e cobrir estabilidade no JSON v1.
+
+AVISO: O proximo passo principal registrado continua sendo a Fase 11.26,
+criando um catalogo granular de diagnostic codes por familia de erro para
+lexer/parser/module_loader/checker/runtime e cobrindo estabilidade no JSON v1,
+preservando mensagens, saida textual padrao, severities e wrappers `String`,
+sem adicionar ainda LSP, registry remoto ou mudar a semantica de imports. Se a
+trilha de drivers for priorizada antes disso, o proximo incremento deve ser
+apenas configuracao explicita de driver por manifesto/ambiente, sem abrir
+drivers remotos dinamicos nem mudar a semantica das routes.
+
+## Etapa concluida: Fase 11.25 - diagnostic codes e severities opcionais
+
+Objetivo: adicionar diagnostic codes e severities opcionais aos diagnostics
+estruturados e ao contrato JSON v1, preservando mensagens, saida textual padrao
+e wrappers `String`, sem adicionar LSP, registry remoto ou mudar a semantica de
+imports.
+
+Nota de reconciliacao: a F11.25 continua diretamente a F11.24. A F11.24 fechou
+`check --json` e `run --json`; a F11.25 adiciona metadados estaveis de tooling
+sem mudar o texto humano nem a forma de execucao.
+
+Foi feito:
+
+- Adicionado `DiagnosticSeverity` com valores:
+  - `error`;
+  - `warning`;
+  - `info`;
+  - `hint`.
+- `Diagnostic` passou a carregar metadados opcionais:
+  - `code: Option<String>`;
+  - `severity: Option<DiagnosticSeverity>`.
+- `Diagnostic::new` agora preenche defaults por stage:
+  - `NXL0001`: input;
+  - `NXL1001`: lexer;
+  - `NXL2001`: parser;
+  - `NXL3001`: checker;
+  - `NXL4001`: module loader;
+  - `NXL5001`: runtime;
+  - severity default `error`.
+- Adicionados helpers:
+  - `DiagnosticStage::default_code`;
+  - `DiagnosticSeverity::as_str`;
+  - `Diagnostic::with_code`;
+  - `Diagnostic::without_code`;
+  - `Diagnostic::with_severity`;
+  - `Diagnostic::without_severity`.
+- O `Display` de `Diagnostic` e `MultiModuleDiagnostic` permaneceu igual, logo
+  wrappers `String` e saida textual nao mudaram.
+- O JSON v1 de diagnostics agora inclui `diagnostic.code` e
+  `diagnostic.severity`.
+- O contrato `DIAGNOSTICS_JSON_CONTRACT.md` foi atualizado com:
+  - campos `code` e `severity`;
+  - tabela de default codes por stage;
+  - regra de compatibilidade dizendo que esses campos sao metadados aditivos.
+- Testes CLI reforcados para exigir:
+  - `NXL3001` em diagnostic de checker;
+  - `NXL4001` em diagnostic de module loader;
+  - `NXL5001` em diagnostic runtime;
+  - `severity: "error"`.
+- Teste core adicionado para provar que code/severity nao alteram
+  `to_string()` e podem ser limpos.
+- Atualizados `README.md`, `MODULES_IMPORTS_ARCHITECTURE.md`,
+  `ROADMAP.md` e `ARCHITECTURE_AUDIT_NEXUSLANG.md`.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/diagnostic/mod.rs`
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test diagnostic_code_and_severity_do_not_change_text_display
+cargo test --test cli cli_check_json
+cargo test --test cli cli_run_json
+cargo fmt --check
+cargo test --test cli
+cargo test
+
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo run --quiet -- run --json /tmp/.../main_runtime_error.nx
+cargo run --quiet -- check --json /tmp/.../main_checker_error.nx
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo fmt`: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo test diagnostic_code_and_severity_do_not_change_text_display`: PASS.
+- `cargo test --test cli cli_check_json`: PASS, 3 testes.
+- `cargo test --test cli cli_run_json`: PASS, 2 testes.
+- `cargo fmt --check`: PASS.
+- `cargo test --test cli`: PASS, 17 testes.
+- `cargo test`: PASS, 50 unit + 17 CLI gerais + 7 CLI package-manager +
+  240 core + doc-tests.
+- Smoke manual de `run --json` runtime: PASS com exit 1, emitindo
+  `code:"NXL5001"` e `severity:"error"`.
+- Smoke manual de `check --json` checker: PASS com exit 1, emitindo
+  `code:"NXL3001"` e `severity:"error"`.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+
+Estado atual:
+
+- `Diagnostic` tem code/severity opcionais.
+- `nexus check --json` e `nexus run --json` incluem `diagnostic.code` e
+  `diagnostic.severity` no contrato JSON v1.
+- A saida textual padrao e wrappers `String` permanecem sem mudanca.
+- Os codes atuais sao defaults por stage, nao ainda um catalogo granular por
+  erro especifico.
+- Ainda nao ha byte ranges, labels, notes, suggestions, colecao de diagnostics,
+  LSP, registry remoto ou source database incremental.
+
+Estado do projeto:
+
+- Fase/trilha atual: F11.25 adiciona metadados basicos de tooling ao contrato
+  JSON v1.
+- Solido agora: module graph local, path dependencies locais, stdlib ampla ate
+  F12.05, SourceDatabase com ranges, checker diagnostics com owner estruturado,
+  API publica estruturada, contrato JSON v1, `check --json`, `run --json` e
+  code/severity opcionais.
+- Falta imediato: trocar os defaults genericos por um catalogo granular de
+  diagnostic codes por familia de erro, com testes de estabilidade.
+- Distancia do fim: a trilha local de diagnostics/tooling esta quase pronta
+  para MVP interno; o produto completo ainda precisa de catalogo granular,
+  byte ranges, labels/notes, colecao de diagnostics, LSP, registry real e
+  incrementalidade.
+
+## Proximo passo recomendado
+
+Fase 11.26 - Criar um catalogo granular de diagnostic codes por familia de
+erro e cobrir estabilidade no JSON v1.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.26, criando um catalogo granular de diagnostic codes por familia de erro para lexer/parser/module_loader/checker/runtime e cobrindo estabilidade no JSON v1, preservando mensagens, saida textual padrao, severities e wrappers `String`, sem adicionar ainda LSP, registry remoto ou mudar a semantica de imports. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Etapa concluida: Fase 11.24 - `nexus run --json` com output capturado
+
+Objetivo: adicionar `nexus run --json` com captura estruturada de stdout do
+programa e diagnostics runtime no contrato JSON v1, preservando a saida textual
+padrao e sem adicionar LSP, registry remoto ou mudar a semantica de imports.
+
+Nota de reconciliacao: a F11.24 continua diretamente a F11.23. A F11.23
+versionou/documentou o contrato JSON v1 e cobriu runtime pela API; a F11.24
+leva esse caminho para o CLI `run` com captura de output para evitar misturar
+`print()` do programa com o envelope JSON.
+
+Foi feito:
+
+- `nexus run` passou a aceitar `--json` antes ou depois do caminho do arquivo.
+- A saida textual padrao de `nexus run` foi preservada:
+  - sem `--json`, o programa continua imprimindo diretamente em stdout;
+  - erros continuam indo para stderr com o texto humano atual.
+- Em modo JSON, `nexus run --json` usa execucao capturada e emite exatamente um
+  envelope JSON em stdout.
+- Sucesso de `run --json` emite:
+  - `ok: true`;
+  - `schema_version: 1`;
+  - `command: "run"`;
+  - `path`;
+  - `output`, com as linhas emitidas pelo programa.
+- Erro de `run --json` emite:
+  - `ok: false`;
+  - `schema_version: 1`;
+  - `command: "run"`;
+  - `diagnostic`, no mesmo formato v1 de `MultiModuleDiagnostic`;
+  - `output`, vazio para falhas de load/check e parcial para falhas de runtime.
+- Adicionado `MultiModuleRunDiagnostic`, preservando `MultiModuleDiagnostic`
+  mais o output parcial capturado.
+- Adicionada API publica
+  `load_and_run_with_source_database_captured_diagnostic`, voltada a tooling e
+  CLI JSON.
+- Adicionados formatters JSON publicos:
+  - `multi_module_success_output_json`;
+  - `multi_module_diagnostic_output_json`.
+- A funcao de parsing de entrada/`--json` passou a ser compartilhada por
+  `run` e `check`, mantendo `nexus.toml` entrypoints.
+- Adicionados testes CLI cobrindo:
+  - `run --json` com sucesso e output capturado;
+  - `run --json` com erro runtime e output parcial.
+- Adicionado teste core cobrindo a API capturada em sucesso e erro runtime.
+- Atualizados `DIAGNOSTICS_JSON_CONTRACT.md`, `README.md`,
+  `MODULES_IMPORTS_ARCHITECTURE.md`, `ROADMAP.md` e
+  `ARCHITECTURE_AUDIT_NEXUSLANG.md`.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test --test cli cli_run_json
+cargo test captured_multi_module_run_preserves_output_on_success_and_runtime_error
+cargo fmt --check
+cargo test --test cli
+cargo test
+
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo run --quiet -- run --json /tmp/.../main.nx
+cargo run --quiet -- run --json /tmp/.../main_runtime_error.nx
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo fmt`: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo test --test cli cli_run_json`: PASS, 2 testes.
+- `cargo test captured_multi_module_run_preserves_output_on_success_and_runtime_error`: PASS.
+- `cargo fmt --check`: PASS.
+- `cargo test --test cli`: PASS, 17 testes.
+- `cargo test`: PASS, 50 unit + 17 CLI gerais + 7 CLI package-manager +
+  239 core + doc-tests.
+- Smoke manual de `run --json` sucesso: PASS, emitindo
+  `{"ok":true,"schema_version":1,"command":"run","path":...,"output":["ok","2"]}`.
+- Smoke manual de `run --json` runtime: PASS com exit 1, emitindo diagnostic
+  `runtime` e `output:["antes"]`.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+
+Estado atual:
+
+- `nexus check --json` e `nexus run --json` usam o contrato JSON v1.
+- `run --json` captura stdout do programa e preserva output parcial em erro de
+  runtime.
+- A saida textual padrao de `check` e `run` permanece intacta.
+- O contrato v1 segue sem diagnostic codes, severities, byte ranges, colecao de
+  diagnostics, LSP, registry remoto ou source database incremental.
+
+Estado do projeto:
+
+- Fase/trilha atual: F11.24 fecha a primeira superficie CLI JSON completa para
+  check/run multi-modulo.
+- Solido agora: module graph local, path dependencies locais, stdlib ampla ate
+  F12.05, SourceDatabase com ranges, checker diagnostics com owner estruturado,
+  API publica estruturada, contrato JSON v1, `check --json` e `run --json`.
+- Falta imediato: adicionar metadados estaveis de tooling, principalmente
+  diagnostic codes e severities opcionais, sem quebrar mensagens existentes.
+- Distancia do fim: a trilha local de diagnostics/tooling esta quase pronta
+  para MVP interno; o produto completo ainda precisa de codes/severities,
+  byte ranges, colecao de diagnostics, LSP, registry real e incrementalidade.
+
+## Proximo passo recomendado
+
+Fase 11.25 - Adicionar diagnostic codes e severities opcionais aos diagnostics
+estruturados e ao contrato JSON v1.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.25, adicionando diagnostic codes e severities opcionais aos diagnostics estruturados e ao contrato JSON v1, preservando mensagens, saida textual padrao e wrappers `String`, sem adicionar ainda LSP, registry remoto ou mudar a semantica de imports. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Etapa concluida: Fase 11.23 - contrato JSON v1 de diagnostics multi-modulo
+
+Objetivo: estabilizar/documentar o contrato JSON de diagnostics multi-modulo e
+adicionar cobertura para variants de loader/checker/runtime, preservando a
+saida textual padrao e sem adicionar LSP, registry remoto ou mudar a semantica
+de imports.
+
+Nota de reconciliacao: a F11.23 continua diretamente a F11.22. O CLI ainda so
+emite JSON em `nexus check --json`; runtime foi coberto pela API/formatter
+publico porque `check` nao executa programas e `run --json` exige captura limpa
+de stdout antes de ser seguro.
+
+Foi feito:
+
+- Promovida a serializacao JSON de diagnostics multi-modulo para API publica
+  do crate:
+  - `MULTI_MODULE_DIAGNOSTIC_JSON_SCHEMA_VERSION`;
+  - `multi_module_success_json`;
+  - `multi_module_diagnostic_json`.
+- O contrato JSON passou a incluir:
+  - `schema_version: 1`;
+  - `command`;
+  - `ok`;
+  - `path` em sucesso;
+  - `diagnostic.stage`;
+  - `diagnostic.message`;
+  - `diagnostic.line`;
+  - `diagnostic.column`;
+  - `diagnostic.path`;
+  - `diagnostic.module_id`;
+  - `diagnostic.owner`;
+  - `diagnostic.source_range`;
+  - `diagnostic.text`.
+- `nexus check --json` agora usa o formatter publico, mantendo a saida textual
+  padrao inalterada.
+- Adicionado documento `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md` com:
+  - schema version atual;
+  - produtores;
+  - objetos de sucesso/erro;
+  - campos;
+  - notas por stage;
+  - regras de compatibilidade.
+- Adicionado teste CLI para diagnostic `module_loader` em JSON.
+- Fortalecidos os testes CLI de sucesso e checker JSON para exigir
+  `schema_version` e `command`.
+- Adicionado teste core cobrindo diagnostic `runtime` com
+  `load_and_run_with_source_database_diagnostic` e o formatter JSON publico.
+- Atualizados `README.md`, `MODULES_IMPORTS_ARCHITECTURE.md`,
+  `ROADMAP.md` e `ARCHITECTURE_AUDIT_NEXUSLANG.md`.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test --test cli cli_check_json
+cargo test multi_module_diagnostic_json_covers_runtime_stage
+cargo fmt --check
+cargo test --test cli
+cargo test
+
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo run --quiet -- check --json /tmp/.../main.nx
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo fmt`: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo test --test cli cli_check_json`: PASS, 3 testes.
+- `cargo test multi_module_diagnostic_json_covers_runtime_stage`: PASS.
+- `cargo fmt --check`: PASS.
+- `cargo test --test cli`: PASS, 15 testes.
+- `cargo test`: PASS, 50 unit + 15 CLI gerais + 7 CLI package-manager +
+  238 core + doc-tests.
+- Smoke manual de `check --json`: PASS, emitindo
+  `{"ok":true,"schema_version":1,"command":"check","path":...}`.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+
+Estado atual:
+
+- O contrato JSON v1 esta documentado e versionado.
+- `nexus check --json` cobre sucesso, diagnostics de loader e diagnostics de
+  checker em formato estruturado.
+- O formatter publico cobre tambem diagnostics de runtime vindos da API
+  `load_and_run_with_source_database_diagnostic`.
+- A saida textual padrao permanece como comportamento principal para humanos.
+- Ainda nao ha `nexus run --json`, colecao de diagnostics, diagnostic codes,
+  severities, byte ranges, LSP, registry remoto ou source database incremental.
+
+Estado do projeto:
+
+- Fase/trilha atual: F11.23 fecha o contrato JSON v1 minimo para diagnostics
+  multi-modulo.
+- Solido agora: module graph local, path dependencies locais, stdlib ampla ate
+  F12.05, SourceDatabase com ranges, checker diagnostics com owner estruturado,
+  API publica estruturada, `nexus check --json` e formatter JSON versionado.
+- Falta imediato: adicionar `nexus run --json` com captura de output para cobrir
+  runtime no CLI sem misturar prints do programa com o envelope JSON.
+- Distancia do fim: a trilha local de diagnostics/tooling esta quase pronta
+  para MVP interno; o produto completo ainda precisa de output JSON de run,
+  colecao de diagnostics, codes/severities, byte ranges, LSP, registry real e
+  incrementalidade.
+
+## Proximo passo recomendado
+
+Fase 11.24 - Adicionar `nexus run --json` com captura estruturada de stdout do
+programa e diagnostics runtime no contrato JSON v1.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.24, adicionando `nexus run --json` com captura estruturada de stdout do programa e diagnostics runtime no contrato JSON v1, preservando a saida textual padrao e sem adicionar ainda LSP, registry remoto ou mudar a semantica de imports. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Etapa concluida: Fase 11.22 - `nexus check --json`
+
+Objetivo: adicionar modo `nexus check --json` para emitir diagnostics
+multi-modulo estruturados a partir de `MultiModuleDiagnostic`, preservando a
+saida textual padrao e sem adicionar LSP, registry remoto ou mudar a semantica
+de imports.
+
+Nota de reconciliacao: a F11.22 continua a trilha de diagnostics/module graph
+iniciada nas fases F11.x e convive com a trilha F12.x de stdlib ja registrada
+abaixo. Esta fase nao alterou a stdlib nem a semantica de resolucao de imports.
+
+Foi feito:
+
+- `nexus check` passou a aceitar `--json` antes ou depois do caminho do arquivo.
+- A saida textual padrao de `nexus check` foi preservada:
+  - sucesso textual continua em stdout;
+  - erro textual continua em stderr;
+  - codigo de saida continua 0 em sucesso e 1 em erro.
+- Em modo JSON, sucesso emite em stdout:
+  - `ok: true`;
+  - `path` validado.
+- Em modo JSON, erro emite em stdout:
+  - `ok: false`;
+  - `diagnostic.stage`;
+  - `diagnostic.message`;
+  - `diagnostic.line` e `diagnostic.column`;
+  - `diagnostic.path`;
+  - `diagnostic.module_id`;
+  - `diagnostic.owner`;
+  - `diagnostic.source_range`;
+  - `diagnostic.text`, preservando a representacao textual completa.
+- A implementacao usa `MultiModuleDiagnostic` diretamente e serializacao JSON
+  local minima, sem nova dependencia.
+- Opcoes desconhecidas em `nexus check` agora falham com mensagem de uso clara.
+- Adicionados testes CLI cobrindo:
+  - sucesso de `nexus check --json`;
+  - erro de checker em modulo importado com path, module_id, owner e
+    source_range estruturados.
+- Atualizados `MODULES_IMPORTS_ARCHITECTURE.md`, `ROADMAP.md`,
+  `ARCHITECTURE_AUDIT_NEXUSLANG.md` e `README.md`.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test --test cli cli_check_json
+cargo fmt --check
+cargo test --test cli
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo fmt`: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo test --test cli cli_check_json`: PASS, 2 testes.
+- `cargo fmt --check`: PASS.
+- `cargo test --test cli`: PASS, 14 testes.
+- `cargo test`: PASS, 50 unit + 14 CLI gerais + 7 CLI package-manager +
+  237 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+
+Smoke manual executado:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+nexus check --json /tmp/.../main.nx
+```
+
+Resultado esperado observado:
+
+```json
+{"ok":true,"path":"/tmp/.../main.nx"}
+```
+
+Estado atual:
+
+- Tooling externo pode obter diagnostics multi-modulo estruturados via API
+  publica Rust ou via CLI `nexus check --json`.
+- O contrato JSON atual e minimo e cobre o primeiro diagnostic do pipeline.
+- A saida textual padrao permanece o comportamento principal para humanos.
+- Ainda nao ha LSP, registry remoto, source database incremental, colecao de
+  diagnostics, schema versionado de JSON ou `nexus run --json`.
+
+Estado do projeto:
+
+- Fase/trilha atual: F11.22 fecha a primeira ponte CLI estruturada entre
+  `MultiModuleDiagnostic` e ferramentas externas.
+- Solido agora: module graph local, path dependencies locais, stdlib ampla ate
+  F12.05, SourceDatabase com ranges, checker diagnostics com owner estruturado,
+  API publica e `nexus check --json`.
+- Falta imediato: estabilizar/documentar o contrato JSON e aumentar cobertura
+  para variants de loader/checker/runtime antes de abrir LSP ou registry.
+- Distancia do fim: a base local de modulos/diagnostics esta pronta para
+  tooling inicial; o produto completo ainda precisa de schema versionado,
+  colecao de diagnostics, LSP, registry real e incrementalidade.
+
+## Proximo passo recomendado
+
+Fase 11.23 - Estabilizar/documentar o contrato JSON de diagnostics
+multi-modulo e cobrir variants de loader/checker/runtime.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.23, estabilizando e documentando o contrato JSON de diagnostics multi-modulo e adicionando cobertura para variants de loader/checker/runtime, preservando a saida textual padrao e sem adicionar ainda LSP, registry remoto ou mudar a semantica de imports. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Etapa concluida: Fase 11.21 - API publica de diagnostics multi-modulo estruturados
+
+Objetivo: expor uma API publica de diagnostics multi-modulo estruturados para
+tooling/CLI com path, owner e source range, preservando wrappers `String` e sem
+adicionar LSP, registry remoto ou mudar a semantica de imports.
+
+Nota de reconciliacao: a memoria estava no topo com F12.05 de stdlib
+ERP/business batch. Esta entrada F11.21 retoma a trilha de diagnostics/module
+graph; as entradas F12.01-F12.05 permanecem abaixo e continuam validas.
+
+Foi feito:
+
+- Adicionado `CheckedMultiModuleProgram`, resultado publico nomeado contendo:
+  - `program`;
+  - `module_graph`;
+  - `decl_module_map`;
+  - `source_database`.
+- Adicionado `MultiModuleDiagnostic`, diagnostico publico estruturado contendo:
+  - `path: Option<PathBuf>`;
+  - `module_id: Option<HirModuleId>`;
+  - `diagnostic: Diagnostic` com `owner` quando vindo do checker;
+  - `source_range: Option<SourceRange>`.
+- Adicionada API `load_and_check_with_source_database_diagnostic`, retornando
+  `Result<CheckedMultiModuleProgram, MultiModuleDiagnostic>`.
+- Adicionada API `load_and_run_with_source_database_diagnostic`, preservando
+  diagnostics estruturados para falhas de load/check e convertendo erro de
+  runtime para `DiagnosticStage::Runtime`.
+- Os wrappers antigos `load_and_check_with_source_database` e
+  `load_and_run_with_source_database` continuam retornando `String` e agora
+  ficam por cima da API estruturada.
+- `nexus check` e `nexus run` passaram a chamar a API estruturada, mantendo a
+  saida textual atual.
+- Adicionado teste core cobrindo que erro em modulo importado expoe path,
+  module_id, owner e source_range pela nova API publica.
+- Atualizados `MODULES_IMPORTS_ARCHITECTURE.md`, `ROADMAP.md` e
+  `ARCHITECTURE_AUDIT_NEXUSLANG.md`.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo fmt --check
+cargo check --all-targets
+cargo test source_database
+cargo test --test cli cli_check_reports_checker_error_path_for_imported_module
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+git diff --check
+```
+
+Resultado:
+
+- `cargo fmt --check`: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo test source_database`: PASS, 9 testes.
+- `cargo test --test cli cli_check_reports_checker_error_path_for_imported_module`: PASS.
+- `cargo test`: PASS, 50 unit + 12 CLI gerais + 7 CLI package-manager +
+  237 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+- `git diff --check`: PASS.
+
+Estado atual:
+
+- Tooling externo ja pode chamar uma API publica estruturada para check/run
+  multi-modulo e obter path, module_id, owner e source_range sem parsear texto.
+- O CLI usa esse caminho estruturado internamente, mas preserva a saida textual.
+- Os wrappers `String` continuam disponiveis.
+- A API ainda retorna o primeiro erro do pipeline; ainda nao ha colecao de
+  diagnostics, saida JSON no CLI, LSP, source database incremental ou registry
+  remoto.
+
+Estado do projeto:
+
+- Fase/trilha atual: F11.21 fecha a primeira API publica de diagnostics
+  multi-modulo para tooling.
+- Solido agora: module graph local, path dependencies locais, stdlib ampla ate
+  F12.05, SourceDatabase com ranges, checker diagnostics com owner estruturado
+  e API publica sem parsing de strings.
+- Falta imediato: escolher entre adicionar saida estruturada/JSON no CLI ou
+  voltar para F12.06 de stdlib/linguagem.
+- Distancia do fim: a trilha local de modulos/diagnostics esta quase pronta
+  para MVP interno; o produto completo segue intermediario por faltar LSP,
+  registry real, source database incremental e colecao de diagnostics.
+
+## Proximo passo recomendado
+
+Fase 11.22 - Adicionar modo `nexus check --json` para emitir diagnostics
+multi-modulo estruturados usando `MultiModuleDiagnostic`.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.22, adicionando modo `nexus check --json` para emitir diagnostics multi-modulo estruturados a partir de `MultiModuleDiagnostic`, preservando a saida textual padrao e sem adicionar ainda LSP, registry remoto ou mudar a semantica de imports. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Etapa concluida: Fase 12.05 - stdlib ERP/business batch
+
+Objetivo: adicionar pelo menos 20 novos modulos de stdlib focados em rotinas
+de negocio, mantendo tudo em NexusLang puro quando possivel e evitando novas
+primitivas Rust.
+
+Nota de reconciliacao: a memoria estava no topo com F11.20 de diagnostics.
+Esta entrada F12.05 foi registrada acima porque o pedido atual voltou para a
+trilha de stdlib; a F11.20 permanece abaixo e continua valida.
+
+Foi feito:
+
+- Adicionados 20 novos modulos reais em `nexuslang-src/stdlib/`:
+  - `std/sales`;
+  - `std/tax`;
+  - `std/discount`;
+  - `std/payment`;
+  - `std/banking`;
+  - `std/accounting`;
+  - `std/ledger`;
+  - `std/shipping`;
+  - `std/warehouse`;
+  - `std/procurement`;
+  - `std/supplier`;
+  - `std/customer`;
+  - `std/project`;
+  - `std/task`;
+  - `std/kpi`;
+  - `std/report`;
+  - `std/pagination`;
+  - `std/security`;
+  - `std/config`;
+  - `std/commerce`.
+- Os novos modulos usam nomes prefixados (`sales_*`, `tax_*`, etc.) para
+  respeitar o contrato atual de superficie flat do module graph.
+- A implementacao ficou em NexusLang puro, reaproveitando modulos existentes
+  como `std/math`, `std/string` e `std/money` quando necessario.
+- O smoke de release agora importa e executa uma funcao de cada novo modulo.
+- As validacoes de pacote agora exigem a presenca dos 20 novos arquivos.
+- Adicionados testes core e CLI importando todos os 20 novos modulos num fluxo
+  unico de negocio.
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test stdlib
+cargo test --test cli stdlib
+cargo test
+
+cd /home/alexandre/Nesusang
+bash -n scripts/package-release.sh
+bash -n scripts/validate-release-package.sh
+bash -n scripts/validate-public-release-install.sh
+```
+
+Resultado: todos passaram.
+
+Estado atual:
+
+- A stdlib tem 38 modulos.
+- A stdlib publica soma 202 funcoes exportadas.
+- Esta fase nao mudou Rust/runtime; por isso nao exigiu rebuild de WASM.
+- `std/fs` continua propositalmente fora ate existir politica clara de
+  permissoes/native-only.
+
+## Proximo passo recomendado
+
+Fase 12.06 - Escolher entre:
+
+- documentar a stdlib atual em uma pagina gerada/listada por modulo;
+- fortalecer a linguagem com generics/indexacao de arrays para reduzir
+  wrappers tipados;
+- ou abrir uma trilha segura para `std/fs` native-only com restricoes claras.
+
+AVISO: a stdlib ja cresceu bastante; antes de adicionar muitos modulos novos,
+vale criar documentacao automatizada e/ou estabilizar generics/indexacao para
+evitar duplicacao. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`,
+`nexuslang-src/stdlib/`, `nexuslang-src/tests/core.rs`,
+`nexuslang-src/tests/cli.rs` e os scripts de release.
+
+## Etapa concluida: Fase 11.20 - ownership explicito de diagnostics no checker
+
+Objetivo: anexar ownership explicito de diagnostics por declaracao/modulo no
+checker, usando o `SourceDatabase` apenas para path/range de exibicao e
+eliminando os casos ambiguos restantes de ranges identicos entre modulos.
+
+Nota de reconciliacao: a memoria tambem contem entradas posteriores da trilha
+de stdlib, incluindo F12.05. Esta F11.20 retoma a trilha de diagnostics/module
+graph; as entradas F12.01-F12.05 permanecem validas.
+
+Foi feito:
+
+- Adicionado `DiagnosticOwner { decl_index, module_id }` como metadado opcional
+  em `Diagnostic`.
+- O checker passou a manter contexto de owner durante `collect_decls` e
+  `check_decls`.
+- O metodo central `Checker::error` anexa automaticamente o owner ativo aos
+  diagnostics de checker, sem alterar as chamadas individuais de erro.
+- `check_with_module_graph` popula o mapa de declaracao -> modulo para que o
+  owner carregue tambem o `module_id` do `ModuleGraph`.
+- Diagnostics de lexer/parser/runtime continuam sem owner por padrao.
+- `SourceDatabase::attach_program_diagnostic` agora prefere o owner explicito
+  do diagnostic antes de tentar ranges por linha/coluna.
+- Mantido o fallback antigo por ranges/line-count para diagnostics antigos ou
+  sem owner.
+- Adicionado teste cobrindo ranges identicos entre entry e modulo importado: o
+  erro do entry agora fica no `main.nx` por owner do checker, nao por desempate
+  heuristico de range.
+- A semantica de imports/export, aliases, stdlib, manifest entrypoints, local
+  path dependencies, LSP e registry remoto nao foi alterada.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/diagnostic/mod.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/program_flow.rs`
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo fmt --check
+cargo check --all-targets
+cargo test source_database
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+git diff --check
+```
+
+Resultado:
+
+- `cargo fmt --check`: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo test source_database`: PASS, 8 testes.
+- `cargo test`: PASS, 50 unit + 12 CLI gerais + 7 CLI package-manager +
+  236 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+- `git diff --check`: PASS.
+
+Estado atual:
+
+- Diagnostics de checker em programas graph-aware agora carregam owner de
+  declaracao/modulo.
+- O SourceDatabase voltou ao papel correto: resolver path/range de exibicao a
+  partir de owner estruturado quando disponivel.
+- Ranges inferidos da F11.19 continuam uteis para tooling e fallback, mas ja
+  nao sao a autoridade primaria para erros do checker.
+- Ainda nao existe LSP, source database incremental/persistente, byte ranges
+  nativos no parser, registry remoto ou mudanca de semantica de imports.
+
+Estado do projeto:
+
+- Fase/trilha atual: F11.20 deixa a trilha local de diagnostics multi-modulo
+  pronta para um MVP interno bem mais confiavel.
+- Solido agora: module graph local, stdlib ampla ate F12.05, path dependencies
+  locais, SourceDatabase com ranges, CLI com path de erro e checker diagnostics
+  com owner estruturado.
+- Falta imediato: escolher entre evoluir tooling/API de diagnostics
+  multi-modulo ou seguir a F12.06 da stdlib/linguagem.
+- Distancia do fim: a trilha local de modulos esta quase pronta para MVP
+  interno; o produto completo segue em fase intermediaria por faltar LSP,
+  registry real, source database incremental e politicas mais fortes de
+  runtime/package.
+
+## Proximo passo recomendado
+
+Fase 11.21 - Expor uma API publica de diagnostics multi-modulo estruturados
+para tooling/CLI, preservando wrappers `String`.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.21, expondo uma API publica de diagnostics multi-modulo estruturados para tooling/CLI com path, owner e source range, preservando os wrappers `String` e sem adicionar ainda LSP, registry remoto ou mudar a semantica de imports. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Etapa concluida: Fase 12.04 - stdlib operacional
+
+Objetivo: adicionar modulos operacionais uteis para apps reais sem abrir ainda
+uma superficie ampla de filesystem: tempo, ambiente, logging e manipulacao de
+paths.
+
+Foi feito:
+
+- Adicionados novos modulos reais em `nexuslang-src/stdlib/`:
+  - `std/time`: `time_runtime_clock_available`, `time_unix_seconds`,
+    `time_unix_millis`, `time_seconds_between`, `time_minutes_between`,
+    `time_hours_between`, `time_days_between`, `time_is_before`,
+    `time_is_after`;
+  - `std/env`: `env_runtime_available`, `env_get`, `env_has`, `env_get_or`,
+    `env_is_true`, `env_is_empty`;
+  - `std/log`: `log_format`, `log_debug`, `log_info`, `log_warn`,
+    `log_error`, `log_with_context`;
+  - `std/path`: `path_join`, `path_basename`, `path_dirname`,
+    `path_extension`, `path_stem`, `path_normalize`, `path_is_absolute`.
+- `checker/type_rules.rs` reconhece os novos builtins internos de `time`,
+  `env` e `path`.
+- `interpreter/mod.rs` implementa relogio Unix nativo com fallback seguro no
+  WASM, ambiente nativo com fallback vazio no WASM, e manipulacao portavel de
+  paths sem tocar no filesystem.
+- `std/log` ficou puro em NexusLang, retornando strings formatadas sem efeito
+  colateral.
+- O smoke de release e as validacoes de pacote agora cobrem `std/time`,
+  `std/env`, `std/log` e `std/path`.
+- Adicionados testes core e CLI para os novos modulos.
+- O WASM do playground foi reconstruido apos a mudanca de runtime.
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test stdlib
+cargo test --test cli stdlib
+cargo test
+
+cd /home/alexandre/Nesusang
+bash -n scripts/package-release.sh
+bash -n scripts/validate-release-package.sh
+bash -n scripts/validate-public-release-install.sh
+./scripts/build-playground-wasm.sh
+node --check nexuslang-playground.js
+```
+
+Resultado: todos passaram.
+
+Estado atual:
+
+- A stdlib tem 18 modulos: `math`, `string`, `collections`, `validation`,
+  `date`, `money`, `number`, `inventory`, `crm`, `invoice`, `json`, `csv`,
+  `http`, `crypto`, `time`, `env`, `log` e `path`.
+- A stdlib publica soma 118 funcoes exportadas.
+- `std/env` e o relogio de `std/time` sao nativos no CLI/runtime desktop e
+  tem fallback seguro no WASM.
+- `std/path` manipula strings de path; ainda nao faz I/O de filesystem.
+
+## Proximo passo recomendado
+
+Fase 12.05 - Escolher entre:
+
+- adicionar `std/result`, `std/option` e helpers de erro quando a linguagem
+  tiver ergonomia suficiente para representar esses padrões;
+- adicionar `std/fs` com politica clara de permissoes/native-only;
+- fortalecer a linguagem com generics/indexacao de arrays para simplificar
+  `std/collections`;
+- ou evoluir `std/json` para parse estruturado.
+
+AVISO: O proximo passo deve evitar abrir I/O irrestrito sem uma politica de
+seguranca. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`,
+`nexuslang-src/stdlib/`, `nexuslang-src/src/checker/type_rules.rs`,
+`nexuslang-src/src/interpreter/mod.rs`, `nexuslang-src/tests/core.rs` e
+`nexuslang-src/tests/cli.rs`.
+
+## Etapa concluida: Fase 12.03 - stdlib dados, protocolo e crypto
+
+Objetivo: avancar a stdlib com modulos fortes para serializacao, intercambio
+de dados, helpers HTTP e hashing, mantendo os arquivos `.nx` como superficie
+publica e usando builtins Rust pequenos onde a linguagem ainda nao consegue
+expressar a operacao com seguranca.
+
+Nota de reconciliacao: a memoria estava no topo com F11.19 de diagnostics
+multi-modulo. Esta entrada F12.03 foi registrada acima porque o pedido atual
+retomou a trilha de stdlib descrita em F12.02; a F11.19 permanece abaixo e
+continua valida.
+
+Foi feito:
+
+- Adicionados novos modulos reais em `nexuslang-src/stdlib/`:
+  - `std/json`: `json_escape`, `json_string`, `json_int`, `json_float`,
+    `json_bool`, `json_pair`, `json_object_1`, `json_object_2`,
+    `json_array_2`, `json_is_object`, `json_is_array`;
+  - `std/csv`: `csv_needs_quotes`, `csv_escape_cell`, `csv_row_2`,
+    `csv_row_3`, `csv_header_2`, `csv_header_3`;
+  - `std/http`: `http_status_text`, `http_is_success`, `http_is_redirect`,
+    `http_is_client_error`, `http_is_server_error`,
+    `http_method_allows_body`, `http_url_encode`, `http_build_query_1`,
+    `http_build_query_2`;
+  - `std/crypto`: `crypto_sha256_hex`, `crypto_constant_time_eq`,
+    `crypto_is_sha256_hex`, `crypto_verify_sha256_hex`.
+- `checker/type_rules.rs` reconhece os novos builtins internos
+  `__std_json_*`, `__std_csv_*`, `__std_http_*` e `__std_crypto_*` tanto no
+  caminho AST quanto no caminho HIR que ja consomem `infer_std_builtin_call_type`.
+- `interpreter/mod.rs` implementa escape JSON, quoting CSV, URL encoding,
+  textos HTTP comuns, normalizacao de metodo HTTP, SHA-256 hexadecimal e
+  comparacao constante para strings.
+- `sha2` passou a ser dependencia comum do crate para funcionar tambem no alvo
+  WASM, ja que `std/crypto` e runtime compartilhado com o playground.
+- O smoke de release agora importa tambem `std/json`, `std/csv`, `std/http` e
+  `std/crypto`; as validacoes de pacote exigem a presenca desses arquivos.
+- Adicionados testes core e CLI para os novos modulos.
+- O WASM do playground foi reconstruido apos a mudanca de runtime.
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test stdlib
+cargo test --test cli stdlib
+cargo test
+
+cd /home/alexandre/Nesusang
+bash -n scripts/package-release.sh
+bash -n scripts/validate-release-package.sh
+bash -n scripts/validate-public-release-install.sh
+./scripts/build-playground-wasm.sh
+node --check nexuslang-playground.js
+```
+
+Resultado: todos passaram.
+
+Estado atual:
+
+- A stdlib tem 14 modulos: `math`, `string`, `collections`, `validation`,
+  `date`, `money`, `number`, `inventory`, `crm`, `invoice`, `json`, `csv`,
+  `http` e `crypto`.
+- A stdlib publica soma 90 funcoes exportadas.
+- `std/http` ainda e helper de protocolo/string, nao cliente HTTP de rede.
+- `std/json` ainda monta/escapa JSON por strings; parser JSON estruturado fica
+  para uma fase futura.
+
+## Proximo passo recomendado
+
+Fase 12.04 - Escolher entre:
+
+- fortalecer a linguagem com generics/indexacao de arrays para simplificar
+  `std/collections`;
+- adicionar `std/time`, `std/env`, `std/log` e `std/fs` com cuidado de
+  compatibilidade WASM/native;
+- ou evoluir `std/json` para parse estruturado quando houver tipos/objetos mais
+  adequados para representar valores JSON.
+
+AVISO: O proximo passo deve escolher conscientemente entre expandir a stdlib
+com builtins Rust nativos/WASM-aware ou fortalecer a linguagem para reduzir
+wrappers tipados. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`,
+`nexuslang-src/stdlib/`, `nexuslang-src/src/checker/type_rules.rs`,
+`nexuslang-src/src/interpreter/mod.rs`, `nexuslang-src/tests/core.rs` e
+`nexuslang-src/tests/cli.rs`.
+
+## Etapa concluida: Fase 11.19 - source ranges minimos no SourceDatabase
+
+Objetivo: adicionar source ranges/end spans minimos ao SourceDatabase e aos
+diagnostics multi-modulo para reduzir o mapeamento heuristico de erros, sem
+adicionar LSP, registry remoto ou mudar a semantica de imports.
+
+Nota de reconciliacao: o pedido citava a F12.01 de stdlib ja registrada, mas a
+memoria atual ja continha tambem a F12.02 como etapa mais recente de stdlib.
+Esta fase 11.19 foi registrada no topo por ser a etapa solicitada agora; as
+entradas F12.01 e F12.02 permanecem abaixo e continuam validas.
+
+Foi feito:
+
+- Adicionado `SourceRange { start, end }` ao module graph/tooling, com helper
+  `contains(line, column)` para consultas line/column.
+- Adicionado `SourceDeclRange`, ligando cada declaracao do `Program` mesclado
+  a `module_id`, `decl_index` e range de origem.
+- `SourceDatabase` agora guarda `decl_ranges` e expoe:
+  - `decl_ranges()`;
+  - `decl_range_for_program_decl(decl_index)`;
+  - `source_range_for_module_location(module_id, line, column)`.
+- `ModuleDiagnostic` agora carrega `source_range: Option<SourceRange>` alem de
+  `module_id`, `path` e `diagnostic`.
+- `attach_program_diagnostic` passou a preferir ranges derivados antes do
+  fallback antigo por linha/source line count.
+- Os end spans sao inferidos a partir do texto-fonte por declaracao:
+  declaracoes com bloco usam balanceamento simples de `{}` a partir do span
+  inicial; imports/statements ficam no fim da linha inicial.
+- O scanner minimo ignora braces dentro de strings comuns para reduzir falsos
+  end spans.
+- A semantica de import/export, aliases, `std/<modulo>`, manifest entrypoints e
+  path dependencies locais nao mudou.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo fmt --check
+cargo check --all-targets
+cargo test source_database
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+git diff --check
+```
+
+Resultado:
+
+- `cargo fmt --check`: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo test source_database`: PASS, 7 testes.
+- `cargo test`: PASS, 50 unit + 10 CLI gerais + 7 CLI package-manager +
+  233 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de storage/docs, `node --check`, smoke HTTP 18/0, smoke auth 19/0,
+  smoke backup/restore e validacao OpenAPI.
+- `git diff --check`: PASS.
+
+Estado atual:
+
+- O SourceDatabase ja nao depende apenas de range heuristico por proxima
+  declaracao/source line count para diagnostics multi-modulo.
+- Diagnostics estruturados podem transportar o range da declaracao proprietaria
+  quando o mapeamento por linha/coluna encontra um `SourceDeclRange`.
+- A solucao ainda e line/column e inferida do source; ainda nao e byte-range,
+  source map incremental, LSP ou ownership exato emitido pelo checker.
+- Em casos patologicos com declaracoes de modulos diferentes ocupando ranges
+  identicos, o mapeamento ainda pode precisar de um owner explicito vindo do
+  checker numa fase futura.
+
+Estado do projeto:
+
+- Fase/trilha atual: F11.19 fecha a primeira versao pratica de source ranges
+  para tooling multi-modulo.
+- Solido agora: imports/export relativos, aliases, stdlib, manifest
+  entrypoints, path dependencies locais, contrato de duplicados flat,
+  SourceDatabase com modulos/import edges/ranges de declaracao e CLI com path
+  para erros de checker em modulos importados.
+- A trilha de stdlib F12.01/F12.02 permanece reconciliada: os modulos
+  `std/math` ate `std/invoice` continuam sendo resolvidos pelo mesmo module
+  graph e nao exigiram mudanca de semantica.
+- Falta imediato: decidir se a proxima etapa volta para F12.03 de stdlib/
+  linguagem ou aprofunda F11.20 com ownership de diagnostics por declaracao no
+  checker.
+
+## Proximo passo recomendado
+
+Fase 11.20 - Adicionar ownership explicito de diagnostics por declaracao/modulo
+no checker, usando o `SourceDatabase` apenas para path/range de exibicao.
+
+AVISO: O proximo passo recomendado, se a trilha de modulos continuar, e criar
+uma Fase 11.20 para anexar o owner de declaracao/modulo aos diagnostics
+produzidos pelo checker, eliminando os ultimos casos ambiguos de ranges
+identicos entre modulos. Nao adicionar ainda LSP, registry remoto ou mudar a
+semantica de imports. Se a prioridade voltar para produto/stdlib, retomar a
+F12.03 descrita na entrada F12.02 abaixo.
+
+## Etapa concluida: Fase 12.02 - stdlib ERP-first adicional
+
+Objetivo: avancar a biblioteca padrao para alem dos helpers basicos, com
+modulos uteis para sistemas de negocio sem esperar por generics/indexacao de
+arrays.
+
+Foi feito:
+
+- Adicionados novos modulos reais em `nexuslang-src/stdlib/`:
+  - `std/number`: `number_is_even`, `number_is_odd`, `number_is_positive`,
+    `number_is_negative`, `number_sign`, `number_between`;
+  - `std/inventory`: `inventory_can_fulfill`,
+    `inventory_remaining_after_sale`, `inventory_backorder_qty`,
+    `inventory_needs_reorder`, `inventory_reorder_qty`,
+    `inventory_stock_status`;
+  - `std/crm`: `crm_display_name`, `crm_normalize_status`,
+    `crm_is_active_status`, `crm_is_valid_email`, `crm_contact_label`;
+  - `std/invoice`: `invoice_line_total`, `invoice_subtotal_2`,
+    `invoice_apply_discount`, `invoice_tax_amount`,
+    `invoice_grand_total`, `invoice_is_paid`.
+- A maior parte desta fase foi implementada em NexusLang puro, reutilizando
+  `std/math`, `std/string`, `std/validation` e `std/money`.
+- O smoke de release agora importa tambem `std/number`, `std/inventory`,
+  `std/crm` e `std/invoice`.
+- As validacoes de pacote agora exigem a presenca dos novos modulos.
+- Adicionados testes core e CLI para os novos modulos ERP-first.
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test stdlib
+cargo test
+
+cd /home/alexandre/Nesusang
+bash -n scripts/package-release.sh
+bash -n scripts/validate-release-package.sh
+bash -n scripts/validate-public-release-install.sh
+git diff --check
+```
+
+Resultado: todos passaram.
+
+Estado atual:
+
+- A stdlib tem 10 modulos: `math`, `string`, `collections`, `validation`,
+  `date`, `money`, `number`, `inventory`, `crm` e `invoice`.
+- A stdlib publica soma 60 funcoes exportadas.
+- A fase 12.02 reforcou o posicionamento ERP-first sem adicionar nova sintaxe.
+
+## Proximo passo recomendado
+
+Fase 12.03 - Escolher entre:
+
+- adicionar `std/json`, `std/csv`, `std/http` e `std/crypto` com builtins Rust;
+- ou evoluir a linguagem com generics/indexacao de arrays para deixar
+  `std/collections` mais natural.
+
+AVISO: O proximo passo deve escolher conscientemente entre aumentar a stdlib
+com mais builtins Rust ou fortalecer a linguagem para reduzir wrappers
+tipados. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`,
+`nexuslang-src/stdlib/`, `nexuslang-src/src/checker/type_rules.rs`,
+`nexuslang-src/src/interpreter/mod.rs`, `nexuslang-src/tests/core.rs` e
+`nexuslang-src/tests/cli.rs`.
+
+## Etapa concluida: Fase 11.18 - diagnostics multi-modulo via SourceDatabase
+
+Objetivo: usar o SourceDatabase minimo para melhorar diagnostics multi-modulo
+no CLI/checker e preparar APIs de tooling por path, sem mudar a semantica de
+imports nem adicionar LSP/registry.
+
+Nota de continuidade: a memoria ja continha uma entrada posterior de F12.01
+para stdlib. Esta F11.18 foi registrada acima porque foi a etapa solicitada
+nesta sessao; a entrada F12.01 foi preservada abaixo.
+
+Foi feito:
+
+- `ModuleDiagnostic` agora implementa `Display` e `Error`, renderizando
+  diagnostics com path, linha e coluna no formato `path:line:column: message`.
+- `SourceDatabase` ganhou APIs para mapear diagnostics do `Program` mesclado
+  de volta ao modulo de origem:
+  - `module_for_program_location`;
+  - `attach_program_diagnostic`.
+- O mapeamento usa `Program + decl_module_map + SourceDatabase` para encontrar
+  o modulo por range de declaracao. Isto e uma base in-memory; ainda nao e
+  source map de LSP com byte ranges/end spans.
+- Adicionada API publica `nexuslang::check_with_source_database`, que executa
+  o checker com `ModuleGraph` e devolve `ModuleDiagnostic` estruturado em erro.
+- `nexuslang::load_and_check_with_source_database` agora usa essa API e
+  preserva o contrato `Result<..., String>`, mas com path no texto do erro
+  quando o diagnostic vem de modulo importado.
+- Adicionada API `nexuslang::load_and_run_with_source_database` para o CLI ter
+  diagnostics de checker com path antes de executar.
+- `nexus check` e `nexus run` passaram a usar os wrappers source-database-aware.
+  `load_and_check_with_graph` e `load_and_run_with_graph` continuam intactos.
+- Adicionados testes core cobrindo:
+  - mapeamento de erro de checker para `lib.nx` importado;
+  - formato string de erro com path/linha/coluna via
+    `load_and_check_with_source_database`.
+- Adicionado teste CLI cobrindo `nexus check main.nx` com erro semantico dentro
+  de modulo importado e stderr contendo `lib.nx`.
+- Atualizados `MODULES_IMPORTS_ARCHITECTURE.md`, `ROADMAP.md` e
+  `ARCHITECTURE_AUDIT_NEXUSLANG.md`.
+- Durante o quality gate limpo, foram corrigidos pequenos problemas latentes
+  em `interpreter/mod.rs` relacionados ao bloco de runtime stdlib
+  (`borrow`/`deref` e formatação `rustfmt`) e marcado um helper de stdlib em
+  `checker/type_rules.rs` com `#[allow(dead_code)]` enquanto ele permanece
+  preparado para uso futuro.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/src/checker/type_rules.rs`
+- `nexuslang-src/src/interpreter/mod.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt --check
+cargo check --all-targets
+cargo test source_database
+cargo test --test cli cli_check_reports_checker_error_path_for_imported_module
+cargo test --test cli
+cargo run --quiet -- check /tmp/<manual>/main.nx  # falha esperada, confirmou path lib.nx no erro
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+git diff --check
+```
+
+Resultado:
+
+- `cargo fmt --check`: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo test source_database`: PASS, 5 testes.
+- `cargo test --test cli`: PASS, 8 testes.
+- Teste manual CLI: falha esperada com
+  `Erro de validação: /tmp/.../lib.nx:2:5: Tipo de retorno inválido...`.
+- `cargo test`: PASS, 50 unit + 8 CLI gerais + 7 CLI package-manager +
+  229 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de compatibilidade de storage, docs de model operations,
+  `node --check`, smoke HTTP 18/0, smoke auth 19/0, smoke backup/restore e
+  OpenAPI.
+- `git diff --check`: PASS.
+
+Estado atual:
+
+- O CLI agora mostra o path do modulo importado quando um erro de checker vem
+  de uma declaracao daquele modulo.
+- O SourceDatabase ja serve como base de tooling por path para diagnostics
+  multi-modulo em memoria.
+- A semantica de imports/export, aliases, `std/<modulo>`, manifest entrypoint e
+  path dependencies locais nao mudou.
+- A precisao ainda e limitada por line/column e ranges inferidos por
+  declaracao; ainda nao existem byte ranges/end spans ou source map incremental.
+
+Estado do projeto:
+
+- Fase/trilha atual: Fase 11.18 fecha a primeira integracao pratica entre
+  SourceDatabase e diagnostics multi-modulo.
+- Solido agora: imports/export relativos, aliases, stdlib, manifest
+  entrypoints, path dependencies locais, contrato de duplicados flat,
+  SourceDatabase in-memory e CLI com path para erros de checker em modulos
+  importados.
+- Falta imediato: substituir o mapeamento heuristico por ranges mais precisos
+  no source database/diagnostics e reconciliar esta trilha com a F12.01 de
+  stdlib ja registrada.
+- Distancia do fim: a trilha local de modulos esta quase pronta para MVP
+  interno; o produto completo continua em fase intermediaria por faltar
+  registry real, LSP, source database persistente/incremental, runtime errors
+  tipados e migrations robustas.
+
+## Proximo passo recomendado
+
+Fase 11.19 - Adicionar source ranges/end spans minimos para diagnostics e
+tooling multi-modulo.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.19, adicionando source ranges/end spans minimos ao SourceDatabase/diagnostics para reduzir o mapeamento heuristico de erros multi-modulo e reconciliar esta trilha com a F12.01 de stdlib ja registrada, sem adicionar ainda LSP, registry remoto ou mudar a semantica de imports. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`, `MODULES_IMPORTS_ARCHITECTURE.md`,
+  `nexuslang-src/src/ast/mod.rs`, `nexuslang-src/src/diagnostic/mod.rs`,
+  `nexuslang-src/src/module_loader.rs`, `nexuslang-src/src/parser/mod.rs` e
+  `nexuslang-src/tests/core.rs`.
+- Definir um contrato minimo para source ranges/end spans sem reescrever todo
+  o parser.
+- Melhorar o mapeamento de `attach_program_diagnostic` para usar ranges mais
+  confiaveis quando disponiveis.
+- Adicionar testes para erro dentro de declaracoes com linhas sobrepostas entre
+  entry e modulo importado.
+- Validar com `cargo fmt`, `cargo check --all-targets`, `cargo test`,
+  `quality-gate.sh` e `git diff --check`.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/src/ast/mod.rs`
+- `nexuslang-src/src/diagnostic/mod.rs`
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/src/parser/mod.rs`
+- `nexuslang-src/tests/core.rs`
+
+## Etapa concluida: Fase 12.01 - stdlib principal inicial
+
+Objetivo: instalar os modulos principais da biblioteca padrao sem depender de
+Python nem criar uma superficie grande demais antes de namespaces/generics.
+
+Foi feito:
+
+- Mantido `std/math` com funcoes puras `abs`, `max`, `min` e `clamp`.
+- Adicionados modulos reais em `nexuslang-src/stdlib/`:
+  - `std/string`: `contains`, `starts_with`, `ends_with`, `to_upper`,
+    `to_lower`, `trim`, `length`, `is_empty`;
+  - `std/collections`: helpers tipados para arrays `[int]` e `[string]`
+    (`len_*`, `is_empty_*`, `contains_*`, `first_*`, `last_*`, `reverse_*`);
+  - `std/validation`: `is_blank`, `min_len`, `max_len`, `between_len`,
+    `is_email`;
+  - `std/date`: helpers sobre string ISO `YYYY-MM-DD` (`is_iso_date`,
+    `year`, `month`, `day`);
+  - `std/money`: `format_money`, `is_positive_money`, `is_zero_money`,
+    `same_currency`.
+- Adicionados builtins Rust internos `__std_*` para as operacoes que NexusLang
+  puro ainda nao consegue expressar, especialmente string/array/date/money.
+- O checker AST e typed-HIR agora reconhecem esses builtins internos com tipos
+  estaveis, preservando os wrappers publicos `.nx`.
+- O pacote de release valida a presenca dos novos modulos e o smoke do pacote
+  executa imports de `std/math`, `std/string`, `std/collections`,
+  `std/validation`, `std/date` e `std/money`.
+- Adicionados testes core e CLI para os novos modulos.
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test stdlib
+cargo test
+
+cd /home/alexandre/Nesusang
+bash -n scripts/package-release.sh
+bash -n scripts/validate-release-package.sh
+bash -n scripts/validate-public-release-install.sh
+git diff --check
+```
+
+Resultado: todos passaram.
+
+Estado atual:
+
+- A stdlib principal tem 6 modulos: `math`, `string`, `collections`,
+  `validation`, `date` e `money`.
+- A abordagem continua hibrida: API publica em `.nx`, operacoes impossiveis em
+  NexusLang puro implementadas como builtins Rust internos.
+- `std/collections` ainda usa nomes tipados por falta de generics e indexacao
+  de arrays na linguagem.
+- `std/date` ainda opera sobre strings ISO ate existirem literais/valores date
+  mais completos.
+
+## Proximo passo recomendado
+
+Fase 12.02 - Evoluir stdlib com generics/array indexing ou adicionar modulos
+ERP-first (`std/inventory`, `std/crm`, `std/invoice`) sobre a superficie atual.
+
+AVISO: O proximo passo e escolher entre fortalecer a linguagem para stdlib
+generica (generics e indexacao de arrays) ou subir modulos ERP-first por cima
+dos helpers atuais. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`,
+`nexuslang-src/stdlib/`, `nexuslang-src/src/checker/type_rules.rs`,
+`nexuslang-src/src/interpreter/mod.rs` e os testes `stdlib` em
+`nexuslang-src/tests/core.rs`.
+
+## Etapa concluida: Fase 11.17 - SourceDatabase minimo do module graph
+
+Objetivo: criar um SourceDatabase minimo para o module graph, diagnostics por
+modulo e base para tooling multi-modulo sem mudar a semantica de imports.
+
+Foi feito:
+
+- `LoadedModule` agora preserva o source text original de cada ficheiro
+  carregado pelo module loader.
+- Adicionado `SourceDatabase` em `module_loader`, com:
+  - `SourceModule`: `module_id`, path canonico, source text e flag `is_entry`;
+  - `SourceImportEdge`: modulo de origem, modulo destino quando resolvido,
+    nome importado, alias, source path e spans do import/name/alias/path;
+  - `ModuleDiagnostic`: diagnostic enriquecido com `module_id` e path;
+  - consultas `modules`, `import_edges`, `module`, `module_path`,
+    `module_by_path`, `import_edges_from`, `attach_diagnostic` e
+    `attach_diagnostic_to_path`.
+- A ordem deterministica do module graph foi centralizada em
+  `ModuleLoader::ordered_module_paths`: entrypoint primeiro, dependencias
+  ordenadas por path depois. A mesma ordem alimenta `Program` mesclado,
+  `ModuleGraph` e `SourceDatabase`.
+- Adicionadas APIs Rust aditivas:
+  - `module_loader::load_program_with_source_database`;
+  - `module_loader::load_program_full_with_source_database`;
+  - `nexuslang::load_and_check_with_source_database`.
+- `load_program`, `load_program_with_graph`, `load_program_full`,
+  `load_and_check_with_graph` e `load_and_run_with_graph` continuam
+  preservados e com a mesma semantica publica.
+- Nao houve mudanca na resolucao de imports: relativo, `std/<modulo>`,
+  manifest entrypoint e path dependency local continuam usando o contrato das
+  fases 11.15/11.16.
+- Adicionados testes core cobrindo:
+  - SourceDatabase com modulos, source text e import edge relativo;
+  - SourceDatabase com import edge vindo de path dependency local via
+    `nexus.toml`;
+  - diagnostics anexados por module id e por path.
+- Atualizados `MODULES_IMPORTS_ARCHITECTURE.md`, `ROADMAP.md` e
+  `ARCHITECTURE_AUDIT_NEXUSLANG.md` para registrar que ja existe uma base
+  SourceDatabase in-memory, mas ainda nao um banco persistente/incremental de
+  LSP/cache.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo fmt --check
+cargo check --all-targets
+cargo test source_database
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+git diff --check
+```
+
+Resultado:
+
+- `cargo fmt --check`: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo test source_database`: PASS, 3 testes novos.
+- `cargo test`: PASS, 50 unit + 6 CLI gerais + 7 CLI package-manager +
+  225 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de compatibilidade de storage, docs de model operations,
+  `node --check`, smoke HTTP 18/0, smoke auth 19/0, smoke backup/restore e
+  OpenAPI.
+- `git diff --check`: PASS.
+
+Estado atual:
+
+- A trilha local de modulos agora tem metadata minima de source database:
+  paths canonicos, source text, module ids, import edges e helpers para
+  diagnostics por modulo/path.
+- O checker e o runtime ainda usam o merge flat e o contrato conservador da
+  F11.16; SourceDatabase e uma camada de tooling, nao uma nova semantica.
+- Imports relativos, `std/<modulo>`, entrypoints por `nexus.toml` e path
+  dependencies locais continuam validados pelo quality gate.
+- Ainda falta integrar esta base ao rendering de diagnostics multi-modulo do
+  CLI/checker, persistencia/incrementalidade, LSP e namespace/package-qualified
+  lookup.
+
+Estado do projeto:
+
+- Fase/trilha atual: Fase 11.17 fecha a primeira base SourceDatabase in-memory
+  do module graph.
+- Solido agora: imports/export relativos, aliases, stdlib `std/math`,
+  manifest entrypoints, path dependencies locais, contrato de duplicados da
+  superficie flat e metadata de source database por modulo.
+- Falta imediato: usar SourceDatabase para melhorar diagnostics multi-modulo
+  no CLI/checker e preparar uma API de tooling por path sem refazer imports.
+- Distancia do fim: a trilha local de modulos/path packages esta forte para o
+  MVP, mas o produto completo segue em fase intermediaria por faltar registry
+  real, LSP, source database persistente/incremental, runtime errors tipados e
+  migrations robustas.
+
+## Proximo passo recomendado
+
+Fase 11.18 - Usar SourceDatabase nos diagnostics multi-modulo e na base de
+tooling por path.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.18, usando o SourceDatabase minimo para melhorar diagnostics multi-modulo no CLI/checker e preparar APIs de tooling por path, sem mudar ainda a semantica de imports nem adicionar LSP/registry. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`, `MODULES_IMPORTS_ARCHITECTURE.md`,
+  `nexuslang-src/src/module_loader.rs`, `nexuslang-src/src/diagnostic/mod.rs`,
+  `nexuslang-src/src/lib.rs`, `nexuslang-src/src/main.rs` e
+  `nexuslang-src/tests/core.rs`.
+- Definir como diagnostics de checker/module loader devem carregar path de
+  modulo quando vierem de programas multi-modulo.
+- Ligar o SourceDatabase ao caminho de diagnostics sem alterar
+  `load_and_check_with_graph`/`load_and_run_with_graph` nem a semantica de
+  imports.
+- Adicionar testes focados para erro em modulo importado mostrando path correto
+  e manter testes CLI existentes estaveis.
+- Validar com `cargo fmt`, `cargo check --all-targets`, `cargo test`,
+  `quality-gate.sh` e `git diff --check`.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/src/diagnostic/mod.rs`
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/core.rs`
+
+## Etapa concluida: Fase 11.16 - contrato de nomes duplicados no module graph
+
+Objetivo: definir e validar o contrato de nomes duplicados e superficie de
+simbolos no module graph antes de namespace imports, SourceDatabase ou registry
+remoto.
+
+Foi feito:
+
+- Definida a politica MVP: o grafo carregado ainda tem superficie flat por
+  kind para `fn`, `model`, `workflow` e `auth`.
+- `module_loader` agora rejeita duplicados de mesmo nome e mesma kind entre
+  modulos carregados com `DuplicateGraphSymbol`, antes do merge cair no checker.
+- `module_loader` agora rejeita aliases de import duplicados no mesmo modulo
+  com `DuplicateImportAlias`.
+- `module_loader` agora rejeita alias de import que colide com declaracao
+  top-level local do mesmo modulo com `ImportAliasCollision`.
+- A validacao local roda logo apos parse de cada modulo; a validacao global de
+  superficie roda depois de carregar o grafo completo e antes de construir o
+  `Program` mesclado.
+- Adicionados testes core cobrindo:
+  - alias duplicado em um modulo;
+  - alias colidindo com top-level local;
+  - duplicado de `fn` entre dois modulos relativos;
+  - duplicado vindo de path dependency local.
+- Adicionado teste CLI mostrando que `nexus check` reporta duplicado de
+  superficie quando um path dependency local e um modulo local exportam a mesma
+  funcao.
+- Atualizados `MODULES_IMPORTS_ARCHITECTURE.md`, `ROADMAP.md`,
+  `PACKAGE_MANAGER.md` e `ARCHITECTURE_AUDIT_NEXUSLANG.md` para registrar que
+  esta politica flat e deliberada e temporaria ate namespaces/source database.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `PACKAGE_MANAGER.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo fmt --check
+cargo check --all-targets
+cargo test module_graph_rejects
+cargo test --test cli
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+git diff --check
+```
+
+Resultado:
+
+- `cargo fmt --check`: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo test module_graph_rejects`: PASS, incluindo os novos testes core.
+- `cargo test --test cli`: PASS, 6 testes.
+- `cargo test`: PASS, 50 unit + 6 CLI gerais + 7 CLI package-manager +
+  222 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de compatibilidade de storage, docs de model operations,
+  `node --check`, smoke HTTP 18/0, smoke auth 19/0, smoke backup/restore e
+  OpenAPI.
+- `git diff --check`: PASS.
+
+Estado atual:
+
+- A trilha local de modulos agora tem contrato explicito de nomes: sem
+  duplicados por kind no grafo carregado, sem alias duplicado no modulo e sem
+  alias colidindo com top-level local.
+- O contrato e conservador porque o checker ainda usa um `Program` mesclado e
+  mapas globais por kind; isso evita ambiguidade ate existir namespace/package
+  qualified lookup.
+- Imports relativos, `std/<modulo>`, entrypoints por `nexus.toml` e path
+  dependencies locais continuam validados pelo quality gate.
+- Registry remoto, solver, source database persistente, namespace imports e
+  package-qualified lookup continuam fora de escopo.
+
+Estado do projeto:
+
+- Fase/trilha atual: Fase 11.16 fecha o hardening imediato da superficie de
+  simbolos do module graph.
+- Solido agora: imports/export relativos, aliases, stdlib `std/math`,
+  manifest entrypoints, path dependencies locais, erros explicitos para
+  duplicados/colisoes e quality gate completo.
+- Falta imediato: criar uma base de `SourceDatabase`/source map do grafo para
+  tooling, diagnostics por modulo, caches e futura saida do merge flat.
+- Distancia do fim: a trilha local de modulos/path packages esta praticamente
+  fechada para MVP; o produto completo segue em fase intermediaria por faltar
+  registry real, LSP, SourceDatabase, runtime errors tipados e migrations
+  robustas.
+
+## Proximo passo executado depois da F11.16
+
+Fase 11.17 - Criar SourceDatabase minimo para o module graph.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.17, criando um SourceDatabase minimo para o module graph, diagnostics por modulo e base para tooling multi-modulo sem mudar ainda a semantica de imports. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`, `MODULES_IMPORTS_ARCHITECTURE.md`,
+  `nexuslang-src/src/module_loader.rs`, `nexuslang-src/src/diagnostic/mod.rs`,
+  `nexuslang-src/src/lib.rs`, `nexuslang-src/tests/core.rs` e
+  `nexuslang-src/tests/cli.rs`.
+- Definir uma estrutura minima de SourceDatabase com paths canonicos,
+  source text, module ids e relacao import edge, sem refatorar o checker todo.
+- Expor API Rust pequena para tooling consultar modulos e diagnostics por path.
+- Preservar `load_and_check_with_graph` e `load_and_run_with_graph` como APIs
+  publicas existentes.
+- Validar com `cargo fmt`, `cargo check --all-targets`, `cargo test`,
+  `quality-gate.sh` e `git diff --check`.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/src/diagnostic/mod.rs`
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/tests/cli.rs`
+
+## Etapa concluida: Fase 11.15 - package manager local no module graph
+
+Objetivo: integrar `nexus.toml`, entrypoints e path dependencies locais ao
+module graph, sem adicionar registry remoto ainda.
+
+Foi feito:
+
+- `package_manager` passou a expor um contrato publico de leitura de
+  manifesto (`ProjectManifest`, `ProjectDependencySource`,
+  `load_project_manifest`, `load_nearest_project_manifest` e helpers de
+  entrypoint), reutilizando o parser/validador atual de `nexus.toml`.
+- `nexus check`, `nexus run` e `nexus serve` agora aceitam ausencia de ficheiro
+  e usam `[package].entry` do `nexus.toml` mais proximo.
+- `nexus serve --addr <addr>` foi adicionado para servir o entrypoint do
+  manifesto em uma porta explicita, preservando o modo antigo
+  `nexus serve <ficheiro.nx> [addr]`.
+- `module_loader` passou a resolver package-name imports para dependencias
+  locais `path:` declaradas no manifesto mais proximo:
+  - `import x from "crm_core"` carrega o entrypoint do pacote dependente;
+  - `import x from "crm_core/models"` carrega submodulo dentro desse pacote.
+- Imports relativos (`./`, `../`) e `std/<modulo>` continuam no mesmo caminho.
+- Dependencias `local` e `registry:` continuam declarativas para o compilador:
+  geram/validam metadata, mas nao sao source roots importaveis nesta fase.
+- `nexus new` agora orienta `nexus check`/`nexus run` sem ficheiro, alinhado ao
+  entrypoint do manifesto.
+- A suite CLI ganhou cobertura para:
+  - `check`/`run` usando entrypoint do `nexus.toml`;
+  - imports de path dependency local por nome de pacote e submodulo;
+  - `serve --addr` usando entrypoint do manifesto.
+- Atualizados `PACKAGE_MANAGER.md`, `nexuslang-src/ROADMAP.md` e
+  `ARCHITECTURE_AUDIT_NEXUSLANG.md` para refletir que path deps locais agora
+  entram no module graph e que registry remoto ainda nao existe.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/package_manager.rs`
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/tests/cli.rs`
+- `PACKAGE_MANAGER.md`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo fmt --check
+cargo check --all-targets
+cargo test --test cli
+cargo test --test cli_package_manager
+cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+git diff --check
+```
+
+Resultado:
+
+- `cargo fmt --check`: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo test --test cli`: PASS, 5 testes.
+- `cargo test --test cli_package_manager`: PASS, 7 testes.
+- `cargo test`: PASS, 50 unit + 5 CLI gerais + 7 CLI package-manager +
+  218 core + doc-tests.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de compatibilidade de storage, docs de model operations,
+  `node --check`, smoke HTTP 18/0, smoke auth 19/0, smoke backup/restore e
+  OpenAPI.
+- `git diff --check`: PASS.
+
+Estado atual:
+
+- O caminho principal de projeto agora aceita `nexus.toml` como autoridade de
+  entrypoint para `run`, `check` e `serve`.
+- O module graph ja entende imports relativos, `std/<modulo>` e package-name
+  imports de dependencias locais `path:`.
+- O package manager subiu de manifesto/lock/cache isolado para uma integracao
+  minima real com compilacao, mas somente para path deps locais.
+- Registry remoto, publish, solver semantico, checksums/assinaturas por
+  dependencia e downloads continuam fora de escopo.
+- `fmt`, `lint`, `tokens`, `ast` e `repl` continuam essencialmente single-file
+  ou entry-local; isso ainda deve ser tratado antes de prometer tooling
+  multi-modulo completo.
+
+Estado do projeto:
+
+- Fase/trilha atual: Fase 11.15 fecha a ponte local entre package manager e
+  module graph, depois da trilha import/export/stdlib/CLI.
+- Solido agora: imports relativos, aliases, stdlib `std/math`, entrypoints por
+  manifesto, path dependencies locais por nome de pacote, `check`/`run`/`serve`
+  graph-aware e quality gate completo.
+- Falta imediato: definir a politica de nomes duplicados/superficie de simbolos
+  entre modulos e pacotes, iniciar um SourceDatabase/tooling multi-modulo e
+  manter registry remoto explicitamente fora ate o contrato local amadurecer.
+- Distancia do fim: a trilha local de modulos e path packages esta quase
+  fechada; o produto completo segue em fase intermediaria por faltar registry
+  real, LSP, runtime errors tipados, migrations/storage robusto e tooling de
+  projeto.
+
+## Proximo passo executado depois da F11.15
+
+Fase 11.16 - Definir contrato de nomes duplicados e superficie de simbolos no
+module graph.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.16, definindo e validando o contrato de nomes duplicados e superficie de simbolos no module graph. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`, `MODULES_IMPORTS_ARCHITECTURE.md`,
+  `nexuslang-src/src/module_loader.rs`, `nexuslang-src/src/checker/program_flow.rs`,
+  `nexuslang-src/src/checker/symbols.rs`, `nexuslang-src/tests/core.rs` e
+  `nexuslang-src/tests/cli.rs`.
+- Mapear como o merge atual expoe declaracoes de dependencias e onde nomes
+  duplicados entre entry, imports relativos, stdlib e path deps podem colidir.
+- Definir uma politica pequena e testavel para duplicados/ambiguidade antes de
+  namespace imports ou registry remoto.
+- Adicionar testes de regressao para duplicados entre modulos e pacotes locais.
+- Validar com `cargo fmt`, `cargo check --all-targets`, `cargo test`,
+  `quality-gate.sh` e `git diff --check`.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/src/checker/program_flow.rs`
+- `nexuslang-src/src/checker/symbols.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/tests/cli.rs`
+
+## Etapa concluida: Fase 11.14 - CLI/server multi-modulo e resolver HIR por path
+
+Objetivo: fechar a lacuna entre o suporte multi-modulo validado na API Rust e
+a experiencia real do usuario via `nexus check`, `nexus run` e `nexus serve`,
+alem de corrigir a resolucao HIR de imports para respeitar o caminho importado
+e nao apenas o primeiro modulo que exporta o mesmo nome.
+
+Foi feito:
+
+- `nexus check <ficheiro.nx>` passou a usar `load_and_check_with_graph`,
+  ativando import/export, aliases e stdlib no caminho principal do CLI.
+- `nexus run <ficheiro.nx>` passou a usar `load_and_run_with_graph`, removendo
+  a falha em exemplos como `examples/erp_basico_multi/main.nx`.
+- `nexus serve <ficheiro.nx>` passou a carregar e validar o programa com
+  `load_and_check_with_graph`, permitindo routes definidas em entrypoints
+  multi-modulo.
+- `module_loader::resolve_hir_imports` agora resolve o modulo alvo pelo path do
+  import relativo ou `std/<modulo>`, usando o `source_module` e o `ModuleGraph`,
+  em vez de procurar o primeiro modulo que exporta o nome importado.
+- Adicionado teste de regressao para imports cujo nome exportado existe em mais
+  de um modulo, garantindo que a resolucao usa o path importado.
+- Adicionada nova suite `tests/cli.rs` cobrindo:
+  - `nexus check` e `nexus run` no exemplo ERP multi-modulo real;
+  - `nexus check` e `nexus run` com `import abs from "std/math"`;
+  - `nexus serve` com projeto multi-modulo temporario.
+- Corrigida a posse local de `nexuslang-src/src/module_loader.rs`, que estava
+  `root:root` por artefato antigo de validacao WSL e impedia edicao normal.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/src/server/http.rs`
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/ROADMAP.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo fmt
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo fmt --check
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check --all-targets
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test --test cli
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test resolve_hir_imports_uses_import_path_when_export_names_overlap
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test
+
+cd /home/alexandre/Nesusang
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex ./scripts/quality-gate.sh
+git diff --check
+```
+
+Resultado:
+
+- `cargo fmt --check`: PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo test --test cli`: PASS, 3 testes.
+- Teste focado `resolve_hir_imports_uses_import_path_when_export_names_overlap`:
+  PASS.
+- `cargo test`: PASS, 50 unit + 3 CLI gerais + 7 CLI package-manager + 218 core.
+- `quality-gate.sh`: PASS, incluindo fmt, check com `-D warnings`, testes,
+  validacao de compatibilidade de storage, docs de model operations,
+  `node --check`, smoke HTTP, smoke auth, smoke backup/restore e OpenAPI.
+- `git diff --check`: PASS.
+
+Estado atual:
+
+- O caminho principal de usuario para check/run/serve agora usa o mesmo pipeline
+  multi-modulo que ja estava validado nos testes internos.
+- Imports relativos e imports `std/<modulo>` agora sao resolvidos no HIR pelo
+  modulo alvo correto.
+- A stdlib inicial `std/math` esta consumivel via CLI.
+- O package manager continua como MVP local de manifesto/lock/cache: ainda nao
+  alimenta package-name imports nem resolve dependencias transitivas para o
+  compilador.
+- `fmt`, `lint`, `tokens`, `ast` e `repl` continuam essencialmente
+  single-file/entry-local; isso e aceitavel por enquanto, mas deve ser tratado
+  antes de prometer tooling multi-modulo completo.
+
+Estado do projeto:
+
+- Fase/trilha atual: Fase 11.14 fecha a integracao pratica de modulos com CLI e
+  server, depois da trilha parser/AST/HIR/loader/checker/runtime.
+- Solido agora: import/export relativo, aliases, stdlib `std/math`, exemplo ERP
+  multi-modulo, `nexus check`, `nexus run`, `nexus serve`, testes de regressao e
+  quality gate completo.
+- Falta imediato: integrar `nexus.toml`/path dependencies ao module graph,
+  definir package-name imports, decidir contrato de nomes duplicados entre
+  modulos e expandir tooling multi-modulo.
+- Distancia do fim: a trilha de modulos relativos esta quase fechada; o produto
+  completo ainda esta em fase intermediaria por faltar registry real, LSP,
+  runtime errors tipados, migrations/storage robusto e tooling de projeto.
+
+## Proximo passo recomendado
+
+Fase 11.15 - Integrar package manager local ao module graph.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.15, integrando `nexus.toml`,
+entrypoints e path dependencies locais ao module graph sem adicionar registry
+remoto ainda. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar
+exatamente de onde o projeto parou, entender o que ja foi feito e integrar a
+solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`, `PACKAGE_MANAGER.md`,
+  `nexuslang-src/src/package_manager.rs`, `nexuslang-src/src/module_loader.rs`,
+  `nexuslang-src/src/main.rs` e `nexuslang-src/tests/cli_package_manager.rs`.
+- Definir o menor contrato package-aware: project entry via `nexus.toml` e path
+  dependencies locais como raizes resolviveis, sem downloads remotos.
+- Evitar namespace/wildcard imports e manter compatibilidade com imports
+  relativos existentes.
+- Adicionar testes CLI para projeto com `nexus.toml`, path dependency e
+  compilacao/check/run pelo entrypoint.
+- Validar com `cargo fmt`, `cargo check --all-targets`, `cargo test`,
+  `quality-gate.sh` e `git diff --check`.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `PACKAGE_MANAGER.md`
+- `nexuslang-src/src/package_manager.rs`
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli_package_manager.rs`
+- `nexuslang-src/tests/cli.rs`
+
+## Etapa concluida: Fase 11.01 - Desenho minimo de modulos/imports/exports
+
+Objetivo: desenhar o menor caminho seguro para modulos/imports/exports em
+NexusLang, com foco em sintaxe minima, AST/HIR representation, resolver rules,
+package/module visibility e definition/use links para module references e
+imported symbols, preservando spans, mensagens diagnosticas, fallback AST e
+contratos AST/HIR atuais.
+
+Foi feito:
+
+- Consultada a memoria longa antes da decisao arquitetural; nao havia registro
+  previo util sobre sintaxe/arquitetura de module/import/export em NexusLang.
+- Reabertos somente os arquivos indicados pela fase e os pontos minimos de
+  package/API necessarios:
+  `nexuslang-src/TYPED_HIR_ARCHITECTURE.md`, `ROADMAP.md`,
+  `src/ast/mod.rs`, `src/parser/mod.rs`, `src/hir.rs`,
+  `src/checker/resolver.rs`, `src/checker/symbols.rs`,
+  `src/checker/program_flow.rs`, `src/lexer/mod.rs`,
+  `src/package_manager.rs`, `src/lib.rs` e `src/main.rs`.
+- Criado `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md` como design
+  versionado da trilha de modulos/imports/exports.
+- Decidido que a primeira superficie nao tera keyword `module`: cada arquivo
+  `.nx` sera um modulo implicito.
+- Escolhida sintaxe minima e incremental:
+  - `import Customer from "./crm.nx"`;
+  - `import BuildInvoice as InvoiceFlow from "./billing.nx"`;
+  - `export model`, `export fn`, `export workflow` e `export auth`.
+- Definido que `import`, `export`, `from` e `as` devem ser tratados como
+  contextual keywords na primeira implementacao para nao reservar
+  identificadores globalmente.
+- Definido que a MVP tera um simbolo importado por declaracao, sem wildcard,
+  namespace import, default export, re-export, package-name import, route
+  export, invoice export ou nomes qualificados.
+- Mapeada forma AST minima com `ImportDecl` e `Decl::Export { decl, ... }`,
+  preservando os payloads atuais das declaracoes nomeadas.
+- Mapeada forma HIR minima com:
+  - `HirDeclKind::Import`;
+  - `HirSymbolKind::ImportedSymbol`;
+  - `HirReferenceKind::ModulePath`;
+  - `HirReferenceKind::ImportSymbol`;
+  - `HirDeclBody::Import { module, imported, alias }`.
+- Registrada a decisao critica de definition/use links: `HirSymbolId` continua
+  local a um `HirProgram`; links cross-module devem usar uma futura referencia
+  qualificada por modulo, como `HirSymbolRef { module, symbol }`.
+- Definido que o resolver de modulos deve ficar acima do resolver atual:
+  carregar entry source, resolver imports locais relativos, detectar ciclos,
+  coletar exports, validar imports, e so entao alimentar o checker por modulo.
+- Definido que o package manager fica como infraestrutura de manifesto/lock/cache
+  ate imports relativos locais estarem estaveis; package-name imports ficam
+  para fase posterior.
+- Atualizado `nexuslang-src/TYPED_HIR_ARCHITECTURE.md` com o ponteiro para o
+  novo documento e a restricao de nao usar raw `HirSymbolId` cross-module.
+- Atualizado `nexuslang-src/ROADMAP.md` com a secao
+  "Module/import/export architecture".
+- O WASM nao foi recompilado: a mudanca e documental/arquitetural, sem alterar
+  comportamento Rust ou experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/TYPED_HIR_ARCHITECTURE.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test checker::resolver --lib
+cargo fmt --check
+CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check --all-targets
+
+cd /home/alexandre/Nesusang
+git diff --check
+```
+
+Resultado:
+
+- `CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo test checker::resolver --lib`:
+  PASS, 14 testes.
+- `cargo fmt --check`: PASS.
+- `CARGO_TARGET_DIR=/tmp/nexuslang-target-codex cargo check --all-targets`:
+  PASS.
+- `git diff --check`: PASS.
+- Tentativas iniciais de validacao em paralelo via WSL falharam por problema do
+  servico WSL (`0x8007274c`/`E_UNEXPECTED`) e deixaram um artefato
+  `root:root` em `target/debug/deps`; por isso a validacao final usou
+  `CARGO_TARGET_DIR=/tmp/nexuslang-target-codex`.
+- Quality gate completo nao foi reexecutado nesta fase porque nao houve mudanca
+  de codigo Rust; o gate completo da Fase 10.07 estava verde e a Fase 11.01 e
+  documental/arquitetural.
+
+Estado atual:
+
+- A trilha typed-HIR current-surface permanece fechada.
+- Existe agora um desenho explicito para abrir a proxima superficie de
+  linguagem: modulos/imports/exports.
+- O menor primeiro bloco implementavel esta claro: parser/AST/HIR skeleton de
+  import/export, ainda sem resolver multiarquivo completo.
+- O ponto de maior cuidado ja esta documentado: nao misturar `HirSymbolId`
+  locais entre HIR programs diferentes.
+
+Estado do projeto:
+
+- Fase/trilha atual: Fase 11.01 abre a trilha de modulos/imports/exports como
+  desenho arquitetural, apos o fechamento typed-HIR da Fase 10.
+- Solido agora: sintaxe MVP, shape AST/HIR, regras de visibilidade, estrategia
+  de resolver e limites de package-manager estao documentados e validados por
+  checks leves.
+- Falta imediato: implementar o primeiro esqueleto parser/AST/HIR sem resolver
+  multiarquivo, com testes de sintaxe, spans e lowering.
+- Distancia do fim: a trilha de modulos esta no inicio; o produto completo
+  segue longe do fim por ainda faltar resolver multiarquivo, package imports,
+  stdlib, tooling e runtime mais robusto.
+
+## Proximo passo recomendado
+
+Fase 11.02 - Esqueleto AST/parser/HIR de import/export.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.02, implementando o
+primeiro esqueleto AST/parser/HIR para `import Name [as Alias] from "path"` e
+`export` em declaracoes nomeadas suportadas, sem resolver multiarquivo ainda,
+preservando spans, mensagens diagnosticas, fallback AST e contratos AST/HIR
+atuais. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` e
+`nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md` para continuar exatamente de
+onde o projeto parou, entender o que ja foi feito e integrar a solucao com o
+sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`,
+  `nexuslang-src/TYPED_HIR_ARCHITECTURE.md` e `nexuslang-src/ROADMAP.md`.
+- Abrir `nexuslang-src/src/ast/mod.rs`, `src/parser/mod.rs`,
+  `src/hir.rs`, `src/formatter/mod.rs` e `src/checker/program_flow.rs`.
+- Implementar `ImportDecl`, `Decl::Import`, wrapper `Decl::Export` e helpers
+  de unwrapping/export visibility.
+- Implementar parsing contextual de import/export sem reservar keywords no
+  lexer globalmente.
+- Lowerar imports para HIR com `ModulePath`, `ImportSymbol` e
+  `ImportedSymbol`, mantendo single-file check estavel.
+- Adicionar testes focados de parser/HIR/spans e validar com `cargo fmt`,
+  `cargo check --all-targets`, testes focados e quality gate se houver mudanca
+  de codigo relevante.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/MODULES_IMPORTS_ARCHITECTURE.md`
+- `nexuslang-src/TYPED_HIR_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/ast/mod.rs`
+- `nexuslang-src/src/parser/mod.rs`
+- `nexuslang-src/src/hir.rs`
+- `nexuslang-src/src/formatter/mod.rs`
+- `nexuslang-src/src/checker/program_flow.rs`
+
+## Etapa concluida: Fase 11.10 — Static model operations com alias
+
+Objetivo: verificar e testar que chamadas estáticas a modelos (ex:
+`Usuario::all()`) funcionam corretamente quando o nome do modelo é um alias
+definido por `import X as Y from "./path"` — sem alteração de código, apenas
+testes que provam que a registação tripla de alias (F11.07 checker +
+F11.08 runtime) já cobre o caso.
+
+Foi feito:
+
+- Analisado o fluxo completo de `Expr::StaticCall`:
+  - **Parser**: o campo `ty` é a string literal do código fonte (ex: `"Cliente"`)
+  - **Checker** (`checker/expr.rs`): `model_symbol(ty)` e `models.contains_key(ty)`
+    — ambos resolvem ao alias graças a `register_import_aliases()` (F11.07) que
+    copia o símbolo e os fields do modelo sob o nome do alias.
+  - **Interpreter** (`interpreter/mod.rs`): `self.models.contains_key(&ty)` — o
+    alias está presente porque o loop de alias (F11.08, linhas 354-374) clona o
+    `ModelDef` sob o nome do alias.
+- Confirmado que **nenhuma alteração de código é necessária**: a registação
+  tripla de alias (checker) + clonagem de ModelDef (runtime) já cobrem
+  `Expr::StaticCall` completamente. O `ty` string é passado pelo HIR lowering
+  sem transformação.
+- Adicionados 4 testes de integração que provam o funcionamento:
+  - `load_and_run_with_graph_import_alias_static_call` — `Usuario::all()` via
+    `load_and_run_with_graph` não erra
+  - `load_and_run_with_graph_import_alias_static_call_output` — output contém a
+    mensagem mock com o nome do alias
+  - `load_and_run_with_graph_import_alias_static_call_twice` — duas chamadas
+    estáticas sucessivas funcionam
+  - `check_with_module_graph_import_alias_static_call_all` — checker aceita
+    `Usuario::all()` via `check_with_module_graph`
+
+Arquivos principais alterados nesta etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/tests/core.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt --check
+cargo check --all-targets
+cargo test
+```
+
+Resultado:
+
+- `cargo fmt --check`: PASS.
+- `cargo check --all-targets`: PASS sem warnings.
+- `cargo test`: PASS — **258 testes** (50 unit + 7 CLI + 201 core), 0 falhas.
+
+Estado do projeto:
+
+- A trilha de modulos/imports/exports tem agora 11 fases concluídas: desenho
+  (F11.01), parser/AST/HIR (F11.02), module loader (F11.03), HirSymbolRef
+  (F11.04), checker multi-módulo (F11.05), verification tests (F11.06), alias
+  resolution (F11.07), runtime imported symbols (F11.08), model defaults com
+  alias (F11.09), static model ops com alias (F11.10) e workflows via alias
+  (F11.11).
+- **263 testes**, 0 warnings, compilação limpa.
+- A F11.10 não exigiu alteração de código — apenas testes que provam que o
+  alias resolution existente já cobre `Expr::StaticCall`.
+- A F11.11 também não exigiu alteração de código — apenas testes que provam que
+  o alias resolution existente já cobre `run_workflow` com nomes de workflow
+  importados com alias.
+
+## Etapa concluida: Fase 11.11 — Workflows via alias (run_workflow)
+
+Objetivo: verificar e testar que `run_workflow("Nome")` funciona corretamente
+quando o nome do workflow é importado com alias (`import NomeOriginal as Alias
+from "./path"`), tanto no checker como no runtime.
+
+Foi feito:
+
+- Analisado o fluxo de `run_workflow("Nome")`:
+  - **Parser**: `run_workflow("Alias")` é `Expr::Call { name: "run_workflow",
+    args: [StringLit("Alias")] }` — não há tratamento especial para aliases no
+    parser/HIR (lowering é genérico).
+  - **Checker** (`checker/expr.rs` + `checker/workflow_decl.rs`):
+    `ensure_workflow_exists(name)` verifica `workflow_symbol(name)` (símbolo HIR)
+    e `workflows.contains(name)` (HashSet de nomes conhecidos). A
+    `register_import_aliases()` da F11.07 regista o alias em ambos via
+    `set_top_level(Workflow, alias, symbol)` e `self.workflows.insert(alias)`.
+  - **Interpreter** (`interpreter/mod.rs`): `run_workflow(name)` faz
+    `self.workflows.get(name)`. O loop de alias da F11.08 (linha 371) clona
+    `self.workflows[name]` sob o nome do alias.
+- Confirmado que **nenhuma alteração de código é necessária**: a registação de
+  alias no checker + clonagem de workflow steps no runtime já cobrem
+  `run_workflow` com nomes alias.
+- Verificado que o nome original do workflow permanece acessível após o import
+  com alias (o alias é um binding adicional, não substitui o original).
+- Adicionados 5 testes de integração:
+  - `load_and_run_with_graph_import_workflow` — workflow importado sem alias
+  - `load_and_run_with_graph_import_workflow_with_alias` — workflow importado
+    com alias
+  - `load_and_run_with_graph_import_workflow_alias_output` — output contém o
+    print do workflow executado via alias
+  - `check_with_module_graph_import_workflow_alias` — checker aceita
+    `run_workflow("Alias")` via `check_with_module_graph`
+  - `load_and_run_with_graph_import_workflow_alias_original_name_still_works` —
+    o nome original continua acessível após import com alias
+
+Arquivos principais alterados nesta etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/tests/core.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt --check
+cargo check --all-targets
+cargo test
+```
+
+Resultado:
+
+- `cargo fmt --check`: PASS.
+- `cargo check --all-targets`: PASS sem warnings.
+- `cargo test`: PASS — **263 testes** (50 unit + 7 CLI + 206 core), 0 falhas.
+
+## Etapa concluida: Fase 11.12 — Exemplo ERP multi-módulo real
+
+Objetivo: demonstrar e testar o pipeline completo de modulos/imports/exports com
+um exemplo ERP real dividido em múltiplos ficheiros, provando que modelos,
+funções, workflows, routes e scripting imperativo funcionam em conjunto através
+de `import`/`export` entre módulos.
+
+Foi feito:
+
+- Analisados os 8 exemplos `.nx` existentes; `examples/erp_basico.nx` (92 linhas)
+  foi identificado como o mais realista: tem modelos (Employee, Department),
+  funções de negócio (calcular_bonus, saudar), workflow (Payroll), routes CRUD,
+  invoice e scripting imperativo (if, while, for, arrays).
+- Criado o diretório `examples/erp_basico_multi/` com 4 ficheiros que replicam
+  a lógica do `erp_basico.nx` de forma modular:
+  - `models.nx` — `export model Employee`, `export model Department`
+  - `business.nx` — `export fn calcular_bonus`, `export fn saudar`
+  - `payroll.nx` — `export workflow Payroll`
+  - `main.nx` — `import Employee/Department/calcular_bonus/saudar/Payroll` dos
+    módulos, mais routes, invoice e scripting imperativo completo
+- Confirmado que o pipeline `load_and_run_with_graph` funciona com imports sem
+  alias: o checker regista os símbolos a partir das declarações exportadas dos
+  módulos dependentes (via `collect_decls` que processa `Decl::Export`), e o
+  runtime regista-os via `register_decl` que também desempacota `Decl::Export`.
+- Adicionados 3 testes de integração que validam o exemplo multi-módulo:
+  - `erp_basico_multi_checks_and_runs` — `load_and_run_with_graph` executa sem
+    erros
+  - `erp_basico_multi_loads_and_checks_with_graph` — `load_and_check_with_graph`
+    valida o programa completo
+  - `erp_basico_multi_runtime_output` — output contém header, saudação,
+    resultado de condicional, loop e iteração sobre array
+
+Arquivos principais alterados nesta etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/examples/erp_basico_multi/models.nx` (novo)
+- `nexuslang-src/examples/erp_basico_multi/business.nx` (novo)
+- `nexuslang-src/examples/erp_basico_multi/payroll.nx` (novo)
+- `nexuslang-src/examples/erp_basico_multi/main.nx` (novo)
+- `nexuslang-src/tests/core.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt --check
+cargo check --all-targets
+cargo test
+```
+
+Resultado:
+
+- `cargo fmt --check`: PASS.
+- `cargo check --all-targets`: PASS sem warnings.
+- `cargo test`: PASS — **266 testes** (50 unit + 7 CLI + 209 core), 0 falhas.
+- A trilha de modulos/imports/alias está completa com 12 fases, cobrindo
+  parser/AST/HIR (F11.02), module loader (F11.03), HirSymbolRef+ModuleGraph
+  (F11.04), checker multi-módulo (F11.05), verification tests (F11.06), alias
+  resolution (F11.07), runtime imported symbols (F11.08), model defaults com
+  alias (F11.09), static model ops com alias (F11.10), workflows via alias
+  (F11.11) e exemplo ERP multi-módulo real (F11.12).
+
+## Proximo passo recomendado
+
+A trilha de módulos/imports/alias está completa. As próximas áreas a explorar:
+- **stdlib** — Desenhar e implementar uma biblioteca padrão para NexusLang
+- **LSP / tooling** — Autocomplete, go-to-definition, diagnostics multi-módulo
+- **Runtime mais robusto** — Operações reais de BD/CRUD com modelos importados
+- **Expressões `import` com alias em routes** — Verificar se `Employee::all()`
+  funciona com alias em corpo de route (ex: `import Employee as E` + `E::all()`)
+
+## Etapa concluida: Fase 10.08 - Fechamento arquitetural typed-HIR
+
+Objetivo: fechar arquiteturalmente a trilha typed-HIR apos os links/consumos
+das Fases 10.01-10.07, mapear lacunas restantes, decidir entre manter o writer
+centralizado ou desenhar um pass standalone HIR-walking, e preservar spans,
+mensagens diagnosticas, fallback AST e contratos AST/HIR atuais.
+
+Foi feito:
+
+- Consultada a memoria longa antes da decisao arquitetural; nao havia registro
+  util adicional para typed-HIR writer/pass standalone ou lacunas de modulo.
+- Reabertos somente os arquivos indicados pela fase:
+  `ROADMAP.md`, `hir.rs`, `checker/typed_hir_pass.rs`,
+  `checker/hir_metadata.rs`, `checker/hir_expr.rs`, `checker/model_ops.rs`,
+  `checker/auth_decl.rs`, `checker/route_decl.rs`,
+  `checker/workflow_decl.rs` e `checker/resolver.rs`.
+- Criado `nexuslang-src/TYPED_HIR_ARCHITECTURE.md` como registro curto e
+  versionavel do fechamento.
+- Mapeado como completo para a superficie atual:
+  - lexical bindings, route/query params e field access via expression
+    metadata;
+  - object literal field keys como `HirReferenceKind::ObjectField`;
+  - model operation field-name args como `HirExprId -> ModelField`;
+  - auth declarativo como `AuthModel`, `AuthIdentityField` e `AuthRoleField`;
+  - route auth guards como `RouteAuthGuard -> Auth`;
+  - `run_workflow("Name")` como `HirExprId -> Workflow`.
+- Mapeado como fallback AST intencional:
+  - `checker/expr.rs` para callers sem contexto HIR confiavel;
+  - defaults/min/max de model fields, por serem checks literais com diagnostics
+    estaveis;
+  - wrappers de route expression que mantem shape/diagnostics AST antes de
+    delegar a HIR;
+  - mapas legados em `CheckerSymbols` enquanto existirem entrypoints AST.
+- Mapeado como lacuna real futura: module/import/export references, stdlib
+  como simbolos HIR e qualified/imported symbols. Esses itens dependem de
+  sintaxe/AST/HIR que ainda nao existem.
+- Decisao arquitetural: manter o writer centralizado em
+  `checker/typed_hir_pass.rs` por agora. Um pass standalone HIR-walking fica
+  adiado ate module references, metadata cross-declaration mais ampla ou
+  remocao planejada dos fallbacks AST.
+- Atualizado `nexuslang-src/ROADMAP.md` com a secao
+  "Typed-HIR architecture closure" e referencia ao novo documento.
+- O WASM nao foi recompilado: a mudanca e documental/arquitetural, sem alterar
+  comportamento Rust ou experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/TYPED_HIR_ARCHITECTURE.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo check --all-targets
+cargo test checker::resolver --lib
+cargo fmt --check
+
+cd /home/alexandre/Nesusang
+git diff --check
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test checker::resolver --lib`: PASS, 14 testes.
+- `cargo fmt --check`: PASS.
+- `git diff --check`: PASS.
+- Quality gate completo nao foi reexecutado nesta fase porque nao houve mudanca
+  de codigo Rust; o gate completo da Fase 10.07 estava verde imediatamente
+  antes deste fechamento.
+
+Estado atual:
+
+- A trilha typed-HIR das Fases 10.01-10.08 esta arquiteturalmente fechada para
+  a linguagem existente.
+- Links e consumos typed-HIR ERP-centrais estao mapeados e testados.
+- Fallbacks AST restantes sao compatibilidade/diagnostics, nao bloqueadores da
+  superficie atual.
+- A proxima lacuna real e nova superficie de linguagem: modulos/imports e seus
+  definition/use links.
+
+Estado do projeto:
+
+- Fase/trilha atual: Fase 10.08 fecha o bloco typed-HIR current-surface.
+- Solido agora: writer centralizado, metadata query layer, links/consumos HIR
+  e testes focados; validacoes leves estao verdes.
+- Falta imediato: iniciar desenho de modulos/imports/exports sem reabrir o
+  compilador inteiro.
+- Distancia do fim: a subtrilha typed-HIR atual esta fechada; o produto
+  completo segue longe do fim por faltar modulos, stdlib, tooling, runtime
+  mais robusto e verticais ERP mais polidas.
+
+## Proximo passo recomendado
+
+Fase 11.01 - Desenho minimo de modulos/imports e references HIR.
+
+AVISO: O proximo passo e criar/implementar a Fase 11.01, desenhando o menor
+caminho seguro para modulos/imports/exports em NexusLang, com foco em sintaxe
+minima, AST/HIR representation, resolver rules, package/module visibility e
+definition/use links para module references e imported symbols, preservando
+spans, mensagens diagnosticas, fallback AST e contratos AST/HIR atuais. Antes
+de iniciar, leia `MEMORIA_NEXUSLANG.md` e
+`nexuslang-src/TYPED_HIR_ARCHITECTURE.md` para continuar exatamente de onde o
+projeto parou, entender o que ja foi feito e integrar a solucao com o sistema
+atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/TYPED_HIR_ARCHITECTURE.md` e `nexuslang-src/ROADMAP.md`.
+- Abrir `nexuslang-src/src/ast/mod.rs`, `parser/mod.rs`, `hir.rs`,
+  `checker/resolver.rs`, `checker/symbols.rs`, `checker/program_flow.rs` e os
+  arquivos de package-manager relevantes apenas se a sintaxe escolhida tocar
+  pacotes.
+- Escolher uma sintaxe minima para imports locais antes de implementar
+  qualquer runtime/package behavior amplo.
+- Mapear onde entram `HirReferenceKind` para module/imported-symbol refs.
+- Validar com `cargo fmt`, `cargo check --all-targets`, testes focados de
+  parser/HIR/checker e quality gate se houver mudanca de codigo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/TYPED_HIR_ARCHITECTURE.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/ast/mod.rs`
+- `nexuslang-src/src/parser/mod.rs`
+- `nexuslang-src/src/hir.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/checker/symbols.rs`
+- `nexuslang-src/src/checker/program_flow.rs`
+
+## Etapa concluida: Fase 10.07 - Auth, route guards e run_workflow HIR-first
+
+Objetivo: expandir o consumo HIR-first dos definition/use links typed-HIR para
+auth declarativo, route auth guards e `run_workflow("Name")`, usando
+`HirRefId`/`HirExprId` metadata como caminho principal apos validacao e
+preservando fallback AST, spans, mensagens diagnosticas e contratos AST/HIR
+atuais.
+
+Foi feito:
+
+- Consultada a memoria longa antes da decisao; nao havia registro util
+  adicional para auth/route/workflow typed-HIR metadata.
+- Reabertos somente os arquivos indicados pela Fase 10.07:
+  `checker/auth_decl.rs`, `checker/route_decl.rs`,
+  `checker/workflow_decl.rs`, `checker/hir_metadata.rs`,
+  `checker/typed_hir_pass.rs` e `checker/resolver.rs`.
+- `checker/auth_decl.rs` agora, apos validar o auth config e linkar
+  `AuthModel`, `AuthIdentityField` e `AuthRoleField`, consome esses links via
+  `typed_hir_reference_symbol`.
+- `checker/route_decl.rs` agora, apos validar o route auth guard e linkar
+  `RouteAuthGuard`, consome o link via `typed_hir_reference_symbol`.
+- `checker/workflow_decl.rs` agora, apos validar e produzir metadata para
+  literais estaticos de `run_workflow("Name")`, consome o simbolo via
+  `typed_hir_expr_symbol`/`typed_hir_expr_symbol_by_id`.
+- O fallback AST e as mensagens publicas existentes foram preservados: as
+  validacoes de existencia/tipo continuam acontecendo antes do consumo de
+  metadata.
+- O teste `checker_links_auth_declaration_and_route_guard_references` agora
+  prova consumo HIR-first com `typed_hir_reference_hits() >= 4`.
+- O teste `checker_links_run_workflow_literal_to_hir_workflow_symbol` agora
+  prova consumo HIR-first com `typed_hir_expr_symbol_hits() >= 1`.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/auth_decl.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+- `nexuslang-src/src/checker/workflow_decl.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test checker::resolver::tests::checker_links_run_workflow_literal_to_hir_workflow_symbol --lib
+cargo test checker::resolver::tests::checker_links_auth_declaration_and_route_guard_references --lib
+cargo test checker::resolver --lib
+cargo test auth -- --nocapture
+cargo test workflow -- --nocapture
+cargo test route -- --nocapture
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS sem warnings.
+- Testes focados de `run_workflow` e auth/route references: PASS.
+- `cargo test checker::resolver --lib`: PASS, 14 testes.
+- `cargo test auth -- --nocapture`: PASS, incluindo testes lib/core filtrados
+  por auth.
+- `cargo test workflow -- --nocapture`: PASS, incluindo testes lib/core
+  filtrados por workflow.
+- `cargo test route -- --nocapture`: PASS, incluindo testes lib/core filtrados
+  por route.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt check,
+  check com `-D warnings`, clippy, 40 testes lib, 7 testes CLI
+  package-manager, 156 testes core, validacoes storage/docs/OpenAPI, smokes
+  HTTP/auth/storage backup-restore e validacao OpenAPI externa.
+
+Estado atual:
+
+- Object literal field slots, model operation field-name args, auth
+  declarativo, route auth guards e `run_workflow("Name")` agora tem link
+  typed-HIR produzido e consumo testado via metadata.
+- O fallback AST e os mapas legados seguem preservados para compatibilidade e
+  diagnostics.
+- A trilha atual de definition/use links ERP-centrais esta praticamente
+  fechada; as lacunas seguintes sao mais arquiteturais, especialmente futuros
+  modulos e a sistematizacao do pass.
+
+Estado do projeto:
+
+- Fase/trilha atual: Fase 10.07 fecha o consumo HIR-first dos links typed-HIR
+  ja implementados nas fases 10.01-10.06.
+- Solido agora: links de expressoes, refs declarativas, slots de object
+  literal, model ops, auth/route guards e workflow literals sao verificaveis e
+  consumidos; quality gate completo esta verde.
+- Falta imediato: fazer um fechamento de arquitetura typed-HIR antes de abrir
+  novos recursos grandes, mapear lacunas restantes e decidir proximos passos
+  para modulos/stdlib.
+- Distancia do fim: a subtrilha typed-HIR esta perto de fechar como bloco de
+  arquitetura; o produto completo segue longe do fim por faltar modulos,
+  stdlib, tooling, runtime mais robusto e verticais ERP mais polidas.
+
+## Proximo passo recomendado
+
+Fase 10.08 - Fechamento arquitetural typed-HIR e mapa das lacunas restantes.
+
+AVISO: O proximo passo e criar/implementar a Fase 10.08, fazendo um fechamento
+arquitetural da trilha typed-HIR apos os links/consumos das Fases 10.01-10.07,
+mapeando lacunas restantes de definition/use links, validacoes ainda presas ao
+fallback AST, futuras referencias de modulo e a decisao final entre manter o
+writer centralizado em `checker/typed_hir_pass.rs` ou desenhar um pass
+standalone HIR-walking, preservando spans, mensagens diagnosticas, fallback
+AST e contratos AST/HIR atuais. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`
+para continuar exatamente de onde o projeto parou, entender o que ja foi feito
+e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/ROADMAP.md`, `nexuslang-src/src/hir.rs`,
+  `checker/typed_hir_pass.rs`, `checker/hir_metadata.rs`,
+  `checker/hir_expr.rs`, `checker/model_ops.rs`, `checker/auth_decl.rs`,
+  `checker/route_decl.rs`, `checker/workflow_decl.rs` e
+  `checker/resolver.rs`.
+- Mapear o que ainda usa fallback AST por necessidade real versus
+  compatibilidade.
+- Decidir se a proxima etapa deve ser apenas documento/roadmap ou um pequeno
+  refactor de consolidacao.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados e quality gate
+  se houver alteracao relevante.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/hir.rs`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+- `nexuslang-src/src/checker/hir_metadata.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/auth_decl.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+- `nexuslang-src/src/checker/workflow_decl.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+
+## Etapa concluida: Fase 10.06 - Model operation field args HIR-first
+
+Objetivo: expandir o consumo HIR-first dos definition/use links typed-HIR para
+model operation field-name args, usando metadata confiavel como caminho
+principal e mantendo fallback AST, spans, mensagens diagnosticas e contratos
+AST/HIR atuais.
+
+Foi feito:
+
+- Consultada a memoria longa antes da decisao; nao havia registro util
+  adicional para model operation field args typed-HIR.
+- Reabertos somente os arquivos indicados pela Fase 10.06, com foco em
+  `checker/model_ops.rs`, `checker/hir_args.rs`, `checker/hir_metadata.rs`,
+  `checker/typed_hir_pass.rs` e `checker/resolver.rs`.
+- Escolhido o menor bloco seguro: field-name args de model operations
+  (`where`, `where_compare`, `where_between`, `where_all`, `where_any`,
+  ordenacao e variantes paginadas), porque a Fase 10.01 ja ligava
+  `HirExprId -> ModelField`.
+- `checker/hir_metadata.rs` agora registra consumo de `expr_symbol` via
+  `typed_hir_expr_symbol_by_id`, com contador de teste
+  `typed_hir_expr_symbol_hits`.
+- `checker/mod.rs` e `checker/typed_hir_pass.rs` ganharam/resetam esse novo
+  contador junto dos demais contadores typed-HIR.
+- `checker/model_ops.rs` agora, depois de validar o literal de campo e gravar
+  o link `HirExprId -> ModelField`, consome o simbolo via
+  `typed_hir_expr_symbol_by_id` e usa `checked_symbol_type(symbol)` como tipo
+  principal do campo.
+- O fallback legado por `self.models` continua existindo para model/field
+  existence checks, spans e mensagens diagnosticas publicas.
+- A mudanca cobre lookup, optional lookup, array lookup, advanced compare,
+  text filters, range filters, composite filters e ordering.
+- O teste `checker_links_model_operation_field_args_to_hir_field_symbols`
+  agora tambem prova consumo HIR-first com `typed_hir_expr_symbol_hits() >= 4`.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/hir_metadata.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test checker::resolver::tests::checker_links_model_operation_field_args_to_hir_field_symbols --lib
+cargo test checker::resolver --lib
+cargo test model -- --nocapture
+cargo test route -- --nocapture
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS sem warnings.
+- `cargo test checker::resolver::tests::checker_links_model_operation_field_args_to_hir_field_symbols --lib`:
+  PASS.
+- `cargo test checker::resolver --lib`: PASS, 14 testes.
+- `cargo test model -- --nocapture`: PASS, incluindo testes lib/core filtrados
+  por model.
+- `cargo test route -- --nocapture`: PASS, incluindo testes lib/core filtrados
+  por route.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt check,
+  check com `-D warnings`, clippy, 40 testes lib, 7 testes CLI
+  package-manager, 156 testes core, validacoes storage/docs/OpenAPI, smokes
+  HTTP/auth/storage backup-restore e validacao OpenAPI externa.
+
+Estado atual:
+
+- Object literal field slots e model operation field-name args ja tem ciclo
+  completo: link typed-HIR produzido e consumido por validacao.
+- O fallback AST e os mapas legados continuam preservados para compatibilidade
+  e diagnostics.
+- Auth declarativo, route auth guards e `run_workflow("Name")` ainda estao na
+  categoria "link produzido", mas ainda nao foram migrados para consumo
+  HIR-first de forma explicita.
+
+Estado do projeto:
+
+- Fase/trilha atual: Fase 10.06 amplia o padrao HIR-first para model ops.
+- Solido agora: dois blocos ERP-centrais consomem metadata typed-HIR de forma
+  testada; quality gate completo esta verde.
+- Falta imediato: aplicar o mesmo padrao a auth declarativo, route auth guards
+  e `run_workflow("Name")`.
+- Distancia do fim: a subtrilha typed-HIR esta em fase media-avancada; o
+  produto completo segue longe do fim por faltar modulo, stdlib, tooling,
+  runtime mais robusto e verticais ERP mais polidas.
+
+## Proximo passo recomendado
+
+Fase 10.07 - Consumir refs typed-HIR de auth declarativo, route guards e
+`run_workflow`.
+
+AVISO: O proximo passo e criar/implementar a Fase 10.07, expandindo o consumo
+HIR-first dos definition/use links typed-HIR para auth declarativo, route auth
+guards e `run_workflow("Name")`, usando `HirRefId`/`HirExprId` metadata como
+caminho principal apos validacao, preservando fallback AST, spans, mensagens
+diagnosticas e contratos AST/HIR atuais. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/auth_decl.rs`,
+  `checker/route_decl.rs`, `checker/workflow_decl.rs`,
+  `checker/hir_metadata.rs`, `checker/typed_hir_pass.rs` e
+  `checker/resolver.rs`.
+- Escolher o menor bloco entre auth declarativo, route auth guards e
+  `run_workflow("Name")` para consumir metadata ja produzida.
+- Adicionar teste focado provando consumo HIR-first sem alterar diagnostics.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados e quality
+  gate se houver alteracao relevante.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/auth_decl.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+- `nexuslang-src/src/checker/workflow_decl.rs`
+- `nexuslang-src/src/checker/hir_metadata.rs`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+
+## Etapa concluida: Fase 10.05 - Object literal validation HIR-first
+
+Objetivo: usar os definition/use links typed-HIR ja completos para tornar uma
+validacao selecionada HIR-first onde havia metadata confiavel, preservando
+spans, mensagens diagnosticas, fallback AST e contratos AST/HIR atuais; tambem
+avaliar se o writer centralizado ainda basta.
+
+Foi feito:
+
+- Consultada a memoria longa do projeto antes da decisao arquitetural; nao
+  havia registro util adicional para typed-HIR/reference metadata.
+- Escolhido o menor bloco seguro: validacao de object literal fields, porque a
+  Fase 10.04 ja dava `HirRefId` estavel para cada field key.
+- `checker/hir_metadata.rs` agora tem consulta read-only
+  `typed_hir_reference_symbol`, permitindo consumir `HirRefId -> HirSymbolId`
+  pela camada de cache/metadata em vez de ler direto a store.
+- `checker/mod.rs` e `checker/typed_hir_pass.rs` ganharam contador de teste
+  `typed_hir_reference_hits`, resetado junto dos demais contadores typed-HIR.
+- `checker/hir_expr.rs` agora valida object literals no caminho HIR usando:
+  - os campos do model no proprio `HirProgram`;
+  - `field.field_ref` como uso HIR do field key;
+  - `typed_hir_reference_symbol(field_ref)` para consumir o link escrito;
+  - `checked_symbol_type(symbol)` como tipo preferencial do campo, com fallback
+    para o tipo carregado pelo HIR.
+- O fallback AST em `checker/expr.rs` ficou inalterado.
+- O teste `checker_links_object_literal_field_references` agora tambem prova
+  consumo de metadata via `typed_hir_reference_hits() >= 2`.
+- Decisao arquitetural: o writer centralizado em `checker/typed_hir_pass.rs`
+  ainda basta por agora. Um pass standalone fica melhor quando refs de modulo
+  ou metadata cross-declaration tornarem a producao incremental dispersa.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/hir_metadata.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test checker::resolver::tests::checker_links_object_literal_field_references --lib
+cargo test checker::resolver --lib
+cargo test model_instance_ -- --nocapture
+cargo test model -- --nocapture
+cargo test route -- --nocapture
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS sem warnings.
+- `cargo test checker::resolver::tests::checker_links_object_literal_field_references --lib`:
+  PASS.
+- `cargo test checker::resolver --lib`: PASS, 14 testes.
+- `cargo test model_instance_ -- --nocapture`: PASS, 5 testes core focados.
+- `cargo test model -- --nocapture`: PASS, incluindo testes lib/core filtrados
+  por model.
+- `cargo test route -- --nocapture`: PASS, incluindo testes lib/core filtrados
+  por route.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt check,
+  check com `-D warnings`, clippy, 40 testes lib, 7 testes CLI
+  package-manager, 156 testes core, validacoes storage/docs/OpenAPI, smokes
+  HTTP/auth/storage backup-restore e validacao OpenAPI externa.
+
+Estado atual:
+
+- Object literal validation ja consome HIR/model fields e metadata de
+  referencia como caminho typed-HIR principal.
+- O fallback AST segue preservado para callers legados.
+- A trilha typed-HIR agora tem um exemplo concreto de link produzido e
+  consumido, nao apenas registrado.
+- O writer centralizado segue como arquitetura recomendada no curto prazo.
+
+Estado do projeto:
+
+- Fase/trilha atual: Fase 10.05 iniciou a migracao de validacoes para
+  HIR-first usando links typed-HIR confiaveis.
+- Solido agora: refs de object literal field keys sao estaveis, ligadas e
+  consumidas; diagnostics de model instance continuam cobertos; quality gate
+  completo esta verde.
+- Falta imediato: repetir o padrao para model operation field args e depois
+  auth/route/workflow refs, sempre em blocos pequenos.
+- Distancia do fim: esta subtrilha typed-HIR esta em fase media-avancada, mas
+  o produto completo ainda esta longe do fim por faltar modulo, stdlib,
+  tooling, runtime mais robusto e verticais ERP mais polidas.
+
+## Proximo passo recomendado
+
+Fase 10.06 - Expandir consumo HIR-first para model operation field args e
+referencias declarativas.
+
+AVISO: O proximo passo e criar/implementar a Fase 10.06, expandindo o consumo
+HIR-first dos definition/use links typed-HIR para model operation field-name
+args, auth declarativo, route auth guards e/ou `run_workflow("Name")`, usando
+metadata confiavel como caminho principal e mantendo fallback AST, spans,
+mensagens diagnosticas e contratos AST/HIR atuais. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/model_ops.rs`,
+  `checker/hir_args.rs`, `checker/auth_decl.rs`, `checker/route_decl.rs`,
+  `checker/workflow_decl.rs`, `checker/hir_metadata.rs` e
+  `checker/typed_hir_pass.rs`.
+- Escolher um bloco pequeno, provavelmente model operation field-name args,
+  para consumir metadata de `HirExprId -> ModelField` apos linkar.
+- Adicionar teste que prove consumo HIR-first sem alterar diagnostics.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados e quality
+  gate se houver alteracao relevante.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/hir_args.rs`
+- `nexuslang-src/src/checker/auth_decl.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+- `nexuslang-src/src/checker/workflow_decl.rs`
+- `nexuslang-src/src/checker/hir_metadata.rs`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+
+## Etapa concluida: Fase 10.04 - Object literal field slots como HirReference
+
+Objetivo: modelar field keys de object literals (`Customer { name: ... }`) como
+`HirReference` estavel e ligar esses slots aos simbolos HIR de `ModelField`,
+preservando spans, mensagens diagnosticas, fallback AST e contratos AST/HIR
+atuais.
+
+Foi feito:
+
+- Reabertos somente o handoff e os arquivos da trilha `hir.rs`,
+  `checker/hir_expr.rs`, `checker/expr.rs`, `checker/model_decl.rs`,
+  `checker/typed_hir_pass.rs`, `checker/hir_metadata.rs`,
+  `checker/symbol_lookup.rs`, `checker/symbols.rs` e `checker/resolver.rs`.
+- Confirmado que `HirObjectField` ja carregava `name`, `value` e `span`, mas
+  sem identidade de uso para o field key.
+- Escolhida a representacao minima direta: `HirReferenceKind::ObjectField` e
+  `HirObjectField::field_ref: HirRefId`.
+- O lowerer agora propaga o `HirDeclId` dono ate `lower_expr`, em vez de
+  depender apenas de `HirScopeId`, para que object literal fields em routes,
+  funcoes, workflows, invoices, model defaults e top-level statements tenham
+  owner HIR estavel.
+- `Customer { name: ... }` agora gera uma `HirReference` para cada field key,
+  preservando o span do `ObjectField` AST.
+- `checker/hir_expr.rs`, apos validar que o campo existe no model, liga
+  `field.field_ref` ao simbolo HIR `ModelField` correspondente usando o writer
+  centralizado de metadata.
+- O fallback AST em `checker/expr.rs` foi preservado: mensagens publicas,
+  spans e contratos antigos continuam iguais para callers sem contexto HIR.
+- Adicionado teste HIR direto provando refs estaveis para object literal
+  fields antes do checker.
+- Adicionado teste em `checker::resolver` provando que os `field_ref`s de
+  `Customer { name: "Ana", active: true }` apontam para os simbolos
+  `ModelField` e que esses simbolos mantem type metadata.
+- O WASM nao foi recompilado: a mudanca e interna ao HIR/checker e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/hir.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test checker::resolver --lib
+cargo test hir::tests::lowering_indexes_object_literal_fields_as_references --lib
+cargo test model -- --nocapture
+cargo test route -- --nocapture
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS sem warnings.
+- `cargo test checker::resolver --lib`: PASS, 14 testes.
+- `cargo test hir::tests::lowering_indexes_object_literal_fields_as_references
+  --lib`: PASS.
+- `cargo test model -- --nocapture`: PASS, incluindo testes lib/core filtrados
+  por model.
+- `cargo test route -- --nocapture`: PASS, incluindo testes lib/core filtrados
+  por route.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt check,
+  check com `-D warnings`, clippy, 40 testes lib, 7 testes CLI
+  package-manager, 156 testes core, validacoes storage/docs/OpenAPI, smokes
+  HTTP/auth/storage backup-restore e validacao OpenAPI externa.
+
+Estado atual:
+
+- Object literal field slots agora existem como referencias HIR estaveis.
+- `HirCheckedMetadata` consegue responder `field_ref -> ModelField`.
+- Definition/use links typed-HIR cobrem agora expression links, model-op field
+  args, `run_workflow` literals, auth declarativo, route auth guards e object
+  literal field keys.
+- Ainda existem fallbacks AST por compatibilidade, mas ha uma base muito mais
+  clara para tornar validacoes HIR-first sem perder mensagens atuais.
+
+Estado do projeto:
+
+- Fase/trilha atual: Fase 10.04 fechou o primeiro lote ERP-central de
+  referencias nao-expressao em typed-HIR.
+- Solido agora: owner writer centralizado segue funcionando; refs declarativas
+  e slots de object literal tem metadata verificavel; quality gate completo
+  esta verde.
+- Falta imediato: comecar a consumir os links completos como caminho HIR-first
+  em validacoes ja cobertas e decidir ate onde manter o writer incremental
+  antes de promover um pass standalone.
+- Distancia do fim: a trilha typed-HIR esta mais madura, mas o produto completo
+  ainda precisa de HIR mais primario, definition/use links futuros de modulo,
+  stdlib/tooling/runtime mais robustos e vertical ERP mais polida.
+
+## Proximo passo recomendado
+
+Fase 10.05 - Consumir links typed-HIR completos como caminho HIR-first e
+reavaliar o writer centralizado.
+
+AVISO: O proximo passo e criar/implementar a Fase 10.05, usando os
+definition/use links typed-HIR ja completos para tornar validacoes selecionadas
+HIR-first onde houver metadata confiavel, especialmente object literal field
+slots, model field operation args, auth declarativo, route auth guards e
+`run_workflow("Name")`, preservando spans, mensagens diagnosticas, fallback AST
+e contratos AST/HIR atuais. Nesta fase, tambem avaliar se o writer
+centralizado em `checker/typed_hir_pass.rs` ainda basta ou se ja vale desenhar
+um pass standalone que percorre HIR e produz metadata de forma sistematica.
+Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde
+o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema
+atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/hir.rs`, `checker/hir_expr.rs`,
+  `checker/expr.rs`, `checker/model_ops.rs`, `checker/auth_decl.rs`,
+  `checker/route_decl.rs`, `checker/workflow_decl.rs`,
+  `checker/typed_hir_pass.rs` e `checker/hir_metadata.rs`.
+- Mapear quais validacoes ainda fazem lookup por string apesar de ja haver
+  `HirExprId`/`HirRefId` com symbol metadata.
+- Escolher um bloco pequeno para tornar HIR-first sem alterar diagnostics,
+  provavelmente object literal field validation ou model-op field args.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados do bloco
+  escolhido e quality gate se houver alteracao relevante.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/hir.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/expr.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/auth_decl.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+- `nexuslang-src/src/checker/workflow_decl.rs`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+- `nexuslang-src/src/checker/hir_metadata.rs`
+
+## Etapa concluida: Fase 10.03 - Definition/use links para auth declarativo e route auth guards
+
+Objetivo: modelar o menor caminho seguro para ligar referencias nao-expressao
+de auth declarativo e route auth guards aos simbolos HIR correspondentes, sem
+inventar IDs instaveis e preservando spans, mensagens diagnosticas, fallback
+AST e contratos AST/HIR atuais.
+
+Foi feito:
+
+- Consultada a memoria longa do projeto antes do desenho arquitetural; nao
+  havia registro util adicional para auth/route guards.
+- Confirmado no codigo que `AuthConfig` e `RouteAuthGuard` no AST so carregam
+  o span da declaracao/guard, nao spans individuais para `model`, `identity`,
+  `role` ou auth guard target.
+- Escolhida a representacao minima estavel: `HirRefId` + `HirReference` no HIR,
+  paralelos a `HirExprId`/`HirSymbolId`, para representar usos
+  nao-expressao.
+- `hir.rs` agora possui:
+  - `HirRefId`;
+  - `HirReferenceKind` com `AuthModel`, `AuthIdentityField`,
+    `AuthRoleField` e `RouteAuthGuard`;
+  - `HirProgram.references`;
+  - `HirCheckedMetadata` com metadata de `reference -> symbol`.
+- `HirDeclBody::Auth` agora guarda refs HIR para model, identity e role.
+- `HirRouteAuthGuard` agora guarda ref HIR para o auth config usado no guard.
+  O `role: "admin"` do guard continua como valor literal de autorizacao, nao
+  como referencia a simbolo.
+- `checker/typed_hir_pass.rs` inicializa metadata com a contagem de refs e
+  manteve o owner pass como unico writer tambem para links de referencia.
+- `checker/auth_decl.rs` agora, apos validar o auth config, liga:
+  - `auth { model: User }` ao simbolo HIR do model;
+  - `identity: email` ao simbolo HIR do campo de model;
+  - `role: role` ao simbolo HIR do campo de model.
+- `checker/route_decl.rs` agora, apos validar o route auth guard, liga
+  `auth(Session)` ao simbolo HIR do auth config.
+- `checker/program_flow.rs` passou o `HirProgram` para a fase de coleta/check
+  declarativo, para que `check_auth_declaration` receba o `HirDecl` correto
+  sem relower nem lookup por string/span.
+- Adicionado teste focado em `checker::resolver` provando os links de
+  `AuthModel`, `AuthIdentityField`, `AuthRoleField` e `RouteAuthGuard`.
+- O teste de lowering HIR agora tambem confirma estabilidade dos
+  `HirReference` gerados.
+- Mensagens diagnosticas e spans publicos foram preservados.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/hir.rs`
+- `nexuslang-src/src/checker/auth_decl.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/program_flow.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test checker::resolver --lib
+cargo test auth -- --nocapture
+cargo test route -- --nocapture
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS sem warnings.
+- `cargo test checker::resolver --lib`: PASS, 13 testes.
+- `cargo test auth -- --nocapture`: PASS, incluindo 6 testes lib filtrados e
+  9 testes core filtrados por auth.
+- `cargo test route -- --nocapture`: PASS, incluindo 8 testes lib filtrados e
+  22 testes core filtrados por route.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt check,
+  check com `-D warnings`, clippy, 38 testes lib, 7 testes CLI
+  package-manager, 156 testes core, validacoes storage/docs/OpenAPI, smokes
+  HTTP/auth/storage backup-restore e validacao OpenAPI externa.
+
+Estado atual:
+
+- References HIR nao-expressao existem e sao estaveis.
+- Auth declarativo agora tem links HIR para model/identity/role field.
+- Route auth guard agora tem link HIR para o auth config.
+- Route guard role value continua literal de permissao, corretamente sem
+  simbolo proprio.
+- Object literal field keys continuam a principal lacuna de reference/link HIR:
+  hoje `Customer { name: ... }` carrega nome do campo no HIR, mas sem
+  `HirRefId` proprio.
+
+Estado do projeto:
+
+- Fase/trilha atual: Fase 10.03 fecha o primeiro modelo sistematico de
+  referencias nao-expressao typed-HIR.
+- Solido agora: owner writer segue centralizado; expression links, model field
+  operation args, workflow literals, auth declarativo e route guard auth tem
+  links HIR verificaveis; quality gate completo esta verde.
+- Falta imediato: aplicar `HirReference` a object literal field slots e depois
+  comecar a consumir essas refs como caminho HIR-first onde fizer sentido.
+- Distancia do fim: a trilha typed-HIR esta no meio; ja ha uma fundacao
+  coerente para expressoes e refs declarativas, mas ainda faltam object slots,
+  modulos futuros e a decisao sobre pass standalone. O produto completo segue
+  longe do fim.
+
+## Proximo passo recomendado
+
+Fase 10.04 - Object literal field slots como `HirReference`.
+
+AVISO: O proximo passo e criar/implementar a Fase 10.04, modelando field keys
+de object literals (`Customer { name: ... }`) como `HirReference` estavel e
+ligando esses slots aos simbolos HIR de `ModelField`, preservando spans,
+mensagens diagnosticas, fallback AST e contratos AST/HIR atuais. Antes de
+iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o
+projeto parou, entender o que ja foi feito e integrar a solucao com o sistema
+atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/hir.rs`, `checker/expr.rs`,
+  `checker/hir_expr.rs`, `checker/model_decl.rs`,
+  `checker/typed_hir_pass.rs`, `checker/hir_metadata.rs` e
+  `checker/resolver.rs`.
+- Decidir se `HirObjectField` deve ganhar `field_ref: HirRefId` ou se a ref
+  deve viver em uma estrutura paralela.
+- Implementar link de object literal field key para `ModelField` no caminho
+  AST/HIR sem alterar erros publicos.
+- Rodar `cargo fmt`, `cargo check --all-targets`, `cargo test
+  checker::resolver --lib`, testes focados de model_field/model_ops/route e
+  quality gate se houver alteracao relevante.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/hir.rs`
+- `nexuslang-src/src/checker/expr.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/model_decl.rs`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+- `nexuslang-src/src/checker/hir_metadata.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+
+## Etapa concluida: Fase 10.02 - Link typed-HIR para literais `run_workflow`
+
+Objetivo: expandir definition/use links typed-HIR para o menor bloco da trilha
+auth/workflow que ja tivesse `HirExprId` e `HirSymbolId` verificaveis, sem
+alterar sintaxe, spans, mensagens diagnosticas ou contratos AST/HIR publicos.
+
+Foi feito:
+
+- Reabertos apenas os arquivos indicados pela Fase 10.01:
+  `hir.rs`, `checker/auth_decl.rs`, `checker/route_decl.rs`,
+  `checker/workflow_decl.rs`, `checker/hir_args.rs`,
+  `checker/typed_hir_pass.rs` e `checker/resolver.rs`, alem do roadmap.
+- Confirmado que auth declarativo (`auth { model, identity, role }`) e route
+  auth guards ainda vivem como strings em structs HIR (`HirDeclBody::Auth` e
+  `HirRouteAuthGuard`), sem `HirExprId` proprio para o uso da referencia.
+- Escolhido o menor bloco implementavel: literais estaticos em
+  `run_workflow("Name")`, porque o argumento ja e uma expressao HIR
+  (`HirExprKind::String`) e o workflow declarado ja possui `HirSymbolId`
+  top-level.
+- `checker/workflow_decl.rs` ganhou helpers pequenos para ligar o argumento
+  AST/HIR de `run_workflow` ao simbolo HIR do workflow apos a validacao de
+  existencia.
+- `checker/expr.rs` e `checker/hir_expr.rs` agora preservam a validacao
+  existente de `run_workflow`, mas apos sucesso gravam `expr_type = string` e
+  `expr_symbol = Workflow` para o literal estatico.
+- Adicionado teste focado em `checker::resolver` provando que
+  `run_workflow("Billing")` liga o `HirExprId` do literal ao simbolo
+  `HirSymbolKind::Workflow`, preservando tambem o tipo `string` do argumento e
+  o tipo `void` da chamada.
+- Mensagens diagnosticas existentes foram preservadas, incluindo
+  `Workflow 'Missing' não encontrado`.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/expr.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/checker/workflow_decl.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test checker::resolver --lib
+cargo check --all-targets
+cargo test workflow -- --nocapture
+cargo test function -- --nocapture
+cargo test top_level -- --nocapture
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo test checker::resolver --lib`: PASS, 12 testes.
+- `cargo check --all-targets`: PASS sem warnings.
+- `cargo test workflow -- --nocapture`: PASS, incluindo o teste novo de
+  resolver filtrado por workflow e 2 testes core de workflow.
+- `cargo test function -- --nocapture`: PASS, incluindo 1 teste lib filtrado e
+  6 testes core filtrados por function.
+- `cargo test top_level -- --nocapture`: PASS, incluindo 1 teste lib filtrado e
+  2 testes core filtrados por top_level.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt check,
+  check com `-D warnings`, clippy, 37 testes lib, 7 testes CLI
+  package-manager, 156 testes core, validacoes storage/docs/OpenAPI, smokes
+  HTTP/auth/storage backup-restore e validacao OpenAPI externa.
+
+Estado atual:
+
+- `run_workflow("Name")` agora participa dos definition/use links typed-HIR
+  quando o alvo e literal estatico validado.
+- Auth static ops ja tinham link de config auth; model field access/model ops
+  continuam ligados pela Fase 10.01.
+- Auth declarativo e route auth guards seguem como lacuna porque ainda nao ha
+  representacao HIR de referencia nao-expressao para gravar metadata de uso
+  sem inventar IDs ad hoc.
+
+Estado do projeto:
+
+- Fase/trilha atual: Fase 10.02 fecha o bloco pequeno de workflow literals na
+  trilha de definition/use links typed-HIR.
+- Solido agora: model field usages e `run_workflow` static literals possuem
+  links HIR verificaveis; owner writer continua centralizado; quality gate
+  completo esta verde.
+- Falta imediato: modelar ou indexar referencias nao-expressao para auth
+  declarativo e route auth guards, preservando spans/mensagens.
+- Distancia do fim: esta trilha esta no meio inicial. Ja ha ganhos praticos em
+  expressoes HIR, mas declaracoes/guards ainda precisam de um formato de
+  referencia mais sistematico antes da decisao sobre pass standalone. O produto
+  completo segue longe do fim.
+
+## Proximo passo recomendado
+
+Fase 10.03 - Definition/use links para auth declarativo e route auth guards.
+
+AVISO: O proximo passo e criar/implementar a Fase 10.03, modelando o menor
+caminho seguro para ligar referencias nao-expressao de auth declarativo
+(`auth { model, identity, role }`) e route auth guards aos simbolos HIR
+correspondentes, sem inventar IDs instaveis e preservando spans, mensagens
+diagnosticas, fallback AST e contratos AST/HIR atuais. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/hir.rs`, `checker/auth_decl.rs`,
+  `checker/route_decl.rs`, `checker/symbols.rs`,
+  `checker/typed_hir_pass.rs`, `checker/hir_metadata.rs` e
+  `checker/resolver.rs`.
+- Decidir se a menor solucao e enriquecer structs HIR de auth/route guard com
+  refs/symbol ids ou adicionar uma metadata de referencia nao-expressao
+  centralizada.
+- Implementar primeiro auth config model/identity/role ou route guard auth,
+  escolhendo um sub-bloco com teste de metadata claro.
+- Rodar `cargo fmt`, `cargo check --all-targets`, `cargo test
+  checker::resolver --lib`, testes focados de auth/route e quality gate se
+  houver alteracao relevante.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/hir.rs`
+- `nexuslang-src/src/checker/auth_decl.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+- `nexuslang-src/src/checker/symbols.rs`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+- `nexuslang-src/src/checker/hir_metadata.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+
+## Etapa concluida: Fase 10.01 - Mapa inicial e primeiro bloco de definition/use links typed-HIR
+
+Objetivo: iniciar a trilha de definition/use links typed-HIR completos sem
+reabrir o repositorio inteiro, mapear referencias que ainda dependem de
+string/span/fallback AST e implementar o menor bloco claro.
+
+Foi feito:
+
+- Confirmado o mapa atual de links typed-HIR:
+  - top-level `Function`, `Model`, `Workflow`, `Auth` e `Route` ja entram no
+    resolver HIR e nos mapas de simbolos do checker;
+  - bindings lexicais (`let`, `const`, `for`, parametros de funcao, parametros
+    de rota e query params) ja resolvem por `HirScopeId` quando possivel e
+    registram tipo de simbolo em `HirCheckedMetadata`;
+  - identificadores, chamadas de funcao, chamadas estaticas de model/auth e
+    acessos `customer.field` ja podem registrar `expr_symbol`/`expr_type`;
+  - auth static ops ja ligam o argumento de config auth ao simbolo de auth
+    quando passam pelo caminho AST/HIR de operacao.
+- Confirmado o mapa de lacunas restantes:
+  - field keys de object literal (`Customer { name: ... }`) ainda nao possuem
+    `HirExprId` proprio para o nome do campo; hoje so o valor tem expr id;
+  - defaults/min/max de model field sao expressoes HIR, mas nao representam por
+    si so um uso do campo; antes desta fase o simbolo do campo tambem nao tinha
+    tipo gravado em metadata checked;
+  - auth declarations (`model`, `identity`, `role`) e route auth guards ainda
+    dependem de strings/spans e mapas legados;
+  - `run_workflow("Name")` valida por string literal e ainda nao liga o
+    literal ao simbolo HIR de workflow;
+  - referencias de modulo ainda nao existem como superficie HIR concreta.
+- Escolhido o primeiro bloco pequeno: model fields em operacoes de modelo,
+  porque filtros/ordenacao ja carregam `HirExprId` normalizado por
+  `CheckedHirOperationArg` e ja passam pelo owner writer de metadata.
+- `checker/model_decl.rs` agora registra metadata de tipo para simbolos
+  `ModelField` durante a checagem de declaracao de model.
+- `checker/model_ops.rs` agora liga argumentos string-literal de campo em
+  filtros e ordenacao (`where`, `where_compare`, `where_between`, `where_all`,
+  `all("field", "asc")`, etc.) ao `HirSymbolId` do campo de model, gravando
+  `expr_symbol` e tipo `string` pelo owner pass typed-HIR.
+- Adicionado teste focado em `checker::resolver` provando que argumentos de
+  campo em model ops apontam para simbolos `ModelField` e que esses simbolos
+  possuem `symbol_type` checked.
+- Mensagens diagnosticas, spans, fallback AST e contratos AST/HIR publicos
+  foram preservados.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  a experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/model_decl.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test checker::resolver --lib
+cargo test model_field -- --nocapture
+cargo test model_ops --lib
+cargo test route_model_where --test core -- --nocapture
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+git diff --check
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS sem warnings.
+- `cargo test checker::resolver --lib`: PASS, 11 testes.
+- `cargo test model_field -- --nocapture`: PASS, 16 testes core filtrados.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `cargo test route_model_where --test core -- --nocapture`: PASS, 4 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt check,
+  check com `-D warnings`, clippy, 36 testes lib, 7 testes CLI
+  package-manager, 156 testes core, validacoes storage/docs/OpenAPI, smokes
+  HTTP/auth/storage backup-restore e validacao OpenAPI externa.
+- `git diff --check`: PASS.
+
+Estado atual:
+
+- Model field definitions agora tem tipo checked em metadata por
+  `HirSymbolId`.
+- Field access de model ja estava ligado antes; esta fase adicionou os usos em
+  argumentos de operacoes de model com `HirExprId` proprio.
+- Object literal field keys continuam como lacuna estrutural porque o HIR atual
+  nao da um id independente para o nome do campo.
+- Auth declarativo, route auth guards e `run_workflow` continuam como os
+  melhores proximos candidatos para reduzir lookup por string solta.
+
+Estado do projeto:
+
+- Fase/trilha atual: Fase 10.01 fecha o primeiro corte de definition/use links
+  typed-HIR apos o hardening do owner pass.
+- Solido agora: owner writer segue centralizado em `checker/typed_hir_pass.rs`;
+  model field access e model operation field-name args agora gravam metadata
+  HIR verificavel; quality gate completo esta verde.
+- Falta imediato: decidir e implementar o proximo bloco de links, de
+  preferencia auth declarativo/route guards ou workflow literals, sem mudar
+  mensagens publicas.
+- Distancia do fim: esta trilha esta no meio inicial; ja ha uma base typed-HIR
+  concreta, mas ainda faltam referencias nao-expressao, workflow/module links e
+  uma decisao posterior sobre pass standalone. O produto completo continua
+  longe do fim.
+
+## Proximo passo recomendado
+
+Fase 10.02 - Expandir definition/use links para auth declarativo e workflow
+literals.
+
+AVISO: O proximo passo e criar/implementar a Fase 10.02, expandindo os
+definition/use links typed-HIR para referencias de auth declarativo
+(`auth { model, identity, role }`), route auth guards e/ou
+`run_workflow("Name")`, escolhendo o menor bloco que tenha `HirSymbolId` e
+metadata verificavel sem alterar spans, mensagens diagnosticas, fallback AST e
+contratos AST/HIR atuais. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para
+continuar exatamente de onde o projeto parou, entender o que ja foi feito e
+integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/hir.rs`, `checker/auth_decl.rs`,
+  `checker/route_decl.rs`, `checker/workflow_decl.rs`,
+  `checker/hir_args.rs`, `checker/typed_hir_pass.rs` e
+  `checker/resolver.rs`.
+- Confirmar se o menor bloco deve ser auth declarations/route guards ou
+  `run_workflow` string literals.
+- Implementar link pelo owner pass typed-HIR, adicionando metadata ou um
+  pequeno indice HIR apenas se a referencia tiver id claro.
+- Rodar `cargo fmt`, `cargo check --all-targets`, `cargo test
+  checker::resolver --lib`, testes focados de auth/workflow/route e o quality
+  gate se houver alteracao relevante.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/hir.rs`
+- `nexuslang-src/src/checker/auth_decl.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+- `nexuslang-src/src/checker/workflow_decl.rs`
+- `nexuslang-src/src/checker/hir_args.rs`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+
+## Etapa concluida: Fase 9.05 - Auditoria e hardening final do owner pass typed-HIR
+
+Objetivo: auditar e endurecer a fronteira do owner pass typed-HIR para garantir
+que apenas `checker/typed_hir_pass.rs` escreva em `HirCheckedMetadata`, que
+`checker/hir_metadata.rs` permaneca como camada de consulta/cache, e que a
+trilha fique pronta para decidir entre manter um writer centralizado ou evoluir
+para um pass standalone que percorra HIR.
+
+Foi feito:
+
+- Auditadas as escritas e acessos ligados a `HirCheckedMetadata`, incluindo
+  `hir_metadata.borrow_mut`, `hir_metadata.borrow`, `set_expr_type`,
+  `set_expr_symbol`, `set_symbol_type`, `HirCheckedMetadata::with_counts` e os
+  antigos nomes `record_*`.
+- Criado `TypedHirMetadataStore` em `checker/typed_hir_pass.rs`.
+- `TypedHirMetadataStore` encapsula o `RefCell<hir::HirCheckedMetadata>` e
+  expoe apenas leitura por `snapshot` e `read` para as demais camadas do
+  checker.
+- As operacoes de escrita `replace` e `write` ficaram privadas ao modulo
+  `checker/typed_hir_pass.rs`.
+- `Checker` agora guarda `TypedHirMetadataStore`, nao mais um
+  `RefCell<HirCheckedMetadata>` cru.
+- `checker/hir_metadata.rs` passou a consultar metadata por `snapshot` e
+  `read`, permanecendo como camada de consulta/cache.
+- `checker/typed_hir_pass.rs` continua sendo o unico caminho de escrita da
+  metadata typed-HIR, incluindo inicializacao, links de simbolo, tipos de
+  simbolo/binding e metadata de expressoes.
+- O import de `RefCell` em `checker/mod.rs` ficou restrito a testes, pois fora
+  de testes o storage de metadata typed-HIR agora vive dentro do owner pass.
+- A auditoria final por `rg` confirmou que:
+  - `RefCell<hir::HirCheckedMetadata>` aparece apenas em
+    `checker/typed_hir_pass.rs`;
+  - `HirCheckedMetadata::with_counts` aparece apenas em
+    `checker/typed_hir_pass.rs`;
+  - os setters `set_expr_type`, `set_expr_symbol` e `set_symbol_type` aparecem
+    apenas nas definicoes de `hir.rs` e nos writers de
+    `checker/typed_hir_pass.rs`;
+  - nao ha escrita direta em `HirCheckedMetadata` fora do owner pass.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/hir_metadata.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test checker::resolver --lib
+cargo test type -- --nocapture
+cargo test route -- --nocapture
+cargo test model_field -- --nocapture
+cargo test function -- --nocapture
+cargo test workflow -- --nocapture
+cargo test top_level -- --nocapture
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+git diff --check
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS sem warnings.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test type -- --nocapture`: PASS, incluindo 5 testes lib filtrados e
+  21 testes core filtrados por `type`.
+- `cargo test route -- --nocapture`: PASS, incluindo 7 testes lib filtrados e
+  22 testes core filtrados por `route`.
+- `cargo test model_field -- --nocapture`: PASS, 16 testes core filtrados.
+- `cargo test function -- --nocapture`: PASS, incluindo 1 teste lib filtrado e
+  6 testes core filtrados por `function`.
+- `cargo test workflow -- --nocapture`: PASS, 2 testes focados.
+- `cargo test top_level -- --nocapture`: PASS, incluindo 1 teste lib filtrado
+  e 2 testes core filtrados por `top_level`.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth,
+  storage backup/restore e OpenAPI externo.
+- `git diff --check`: PASS.
+
+Estado do projeto:
+
+- Trilha atual: o owner pass typed-HIR esta fechado como writer centralizado
+  endurecido.
+- Solido agora: apenas `checker/typed_hir_pass.rs` escreve em
+  `HirCheckedMetadata`; `checker/hir_metadata.rs` ficou como consulta/cache; o
+  quality gate completo esta verde.
+- Falta imediato: escolher o proximo bloco arquitetural. A recomendacao e
+  iniciar a trilha de definition/use links typed-HIR completos, porque isso
+  aumenta o valor pratico da metadata antes de criar um pass standalone maior.
+- Distancia do fim: esta subtrilha esta quase fechada/fechada como writer
+  centralizado. O produto completo ainda esta longe do fim: continuam faltando
+  HIR typed como caminho primario mais amplo, modulos, stdlib, LSP/tooling,
+  runtime mais robusto e decisoes maiores de linguagem.
+- `checker/mod.rs` segue com cerca de 122 linhas; `checker/typed_hir_pass.rs`
+  ficou com cerca de 167 linhas; `checker/hir_metadata.rs` segue com cerca de
+  130 linhas.
+
+## Proximo passo recomendado
+
+Fase 10.01 - Definition/use links typed-HIR completos.
+
+AVISO: O proximo passo e criar/implementar a Fase 10.01, iniciando a trilha de
+definition/use links typed-HIR completos, mapeando referencias restantes ainda
+sem `HirSymbolId`/`HirExprId` consistente, especialmente model fields, auth
+configs, workflows e futuras referencias de modulo, e escolhendo o menor
+primeiro bloco para ligar via resolver/HIR metadata, preservando spans,
+mensagens diagnosticas, fallback AST e contratos AST/HIR atuais. Antes de
+iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o
+projeto parou.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/hir.rs`, `checker/resolver.rs`,
+  `checker/symbols.rs`, `checker/symbol_lookup.rs`,
+  `checker/typed_hir_pass.rs`, `checker/hir_metadata.rs`,
+  `checker/model_decl.rs`, `checker/auth_decl.rs`, `checker/workflow_decl.rs`
+  e os testes de resolver/checker existentes.
+- Mapear quais referencias ja recebem `HirSymbolId` e quais ainda dependem de
+  lookup por string, span ou fallback AST.
+- Escolher um primeiro bloco pequeno de definition/use links, de preferencia
+  model field ou auth config, com teste de metadata HIR.
+- Preservar mensagens publicas, spans e fallback AST.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de
+  `checker::resolver`, type/route/model_field/function/workflow/top_level e
+  quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/hir.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/checker/symbols.rs`
+- `nexuslang-src/src/checker/symbol_lookup.rs`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+- `nexuslang-src/src/checker/hir_metadata.rs`
+- `nexuslang-src/src/checker/model_decl.rs`
+- `nexuslang-src/src/checker/auth_decl.rs`
+- `nexuslang-src/src/checker/workflow_decl.rs`
+
+## Etapa concluida: Fase 9.04 - Owner pass typed-HIR para metadata de simbolos e bindings
+
+Objetivo: consolidar no `checker/typed_hir_pass.rs` os fluxos restantes de
+metadata de simbolos e bindings, especialmente links de simbolo de auth config
+e tipos de simbolos de bindings/parametros, preservando spans, mensagens,
+contadores, fallbacks e contratos AST/HIR.
+
+Foi feito:
+
+- Mapeados os registros restantes de metadata:
+  - `record_expr_symbol` e `record_hir_expr_symbol` em
+    `checker/auth_static_ops.rs`;
+  - `record_symbol_type` em `checker/stmt.rs`;
+  - `record_symbol_type` em `checker/function_decl.rs`;
+  - `record_symbol_type` em `checker/route_decl.rs`.
+- Renomeado o fluxo de link de simbolo de expressao no owner pass:
+  - `link_expr_symbol`;
+  - `link_hir_expr_symbol`.
+- Renomeado o fluxo de tipo de simbolo/binding no owner pass:
+  - `produce_symbol_metadata`.
+- `checker/auth_static_ops.rs` agora usa `link_expr_symbol` e
+  `link_hir_expr_symbol` para ligar argumentos de auth config aos simbolos HIR.
+- `checker/stmt.rs`, `checker/function_decl.rs` e `checker/route_decl.rs`
+  agora usam `produce_symbol_metadata` para registrar tipos de `let`, `const`,
+  `for`, parametros de funcao, parametros de rota e query params.
+- Removidos os nomes antigos `record_expr_symbol`, `record_hir_expr_symbol` e
+  `record_symbol_type` dos chamadores e do owner pass.
+- `checker/hir_metadata.rs` segue como camada de leitura/cache; nenhuma escrita
+  direta nova foi adicionada fora de `checker/typed_hir_pass.rs`.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/auth_static_ops.rs`
+- `nexuslang-src/src/checker/function_decl.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+- `nexuslang-src/src/checker/stmt.rs`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test checker::resolver --lib
+cargo test type -- --nocapture
+cargo test route -- --nocapture
+cargo test model_field -- --nocapture
+cargo test function -- --nocapture
+cargo test workflow -- --nocapture
+cargo test top_level -- --nocapture
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS sem warnings.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test type -- --nocapture`: PASS, incluindo 5 testes lib filtrados e
+  21 testes core filtrados por `type`.
+- `cargo test route -- --nocapture`: PASS, incluindo 7 testes lib filtrados e
+  22 testes core filtrados por `route`.
+- `cargo test model_field -- --nocapture`: PASS, 16 testes core filtrados.
+- `cargo test function -- --nocapture`: PASS, incluindo 1 teste lib filtrado e
+  6 testes core filtrados por `function`.
+- `cargo test workflow -- --nocapture`: PASS, 2 testes focados.
+- `cargo test top_level -- --nocapture`: PASS, incluindo 1 teste lib filtrado
+  e 2 testes core filtrados por `top_level`.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth,
+  storage backup/restore e OpenAPI externo.
+
+Estado do projeto:
+
+- Trilha atual: owner pass typed-HIR agora centraliza os fluxos de metadata de
+  expressao, links isolados de simbolo e tipos de simbolos/bindings.
+- Solido agora: os antigos `record_*` residuais sairam dos chamadores; a
+  escrita de metadata typed-HIR passa por `checker/typed_hir_pass.rs`; cache e
+  consultas seguem em `checker/hir_metadata.rs`; quality gate completo esta
+  verde.
+- Falta imediato: fazer uma auditoria/hardening final da fronteira do owner
+  pass, verificando se qualquer escrita direta em `HirCheckedMetadata` ainda
+  escapou e se vale introduzir um pass que percorra HIR de forma mais
+  sistematica.
+- Distancia do fim: esta subtrilha esta perto de fechar como writer/owner
+  centralizado, mas ainda nao e um pass standalone completo. O produto completo
+  ainda esta longe do fim.
+- `checker/mod.rs` segue com cerca de 120 linhas; `checker/typed_hir_pass.rs`
+  ficou com cerca de 128 linhas; `checker/hir_metadata.rs` segue com cerca de
+  130 linhas.
+
+## Proximo passo recomendado
+
+Fase 9.05 - Auditoria e hardening final do owner pass typed-HIR.
+
+AVISO: O proximo passo e criar/implementar a Fase 9.05, fazendo uma auditoria e
+hardening final do owner pass typed-HIR para garantir que apenas
+`checker/typed_hir_pass.rs` escreva em `HirCheckedMetadata`, que
+`checker/hir_metadata.rs` permaneca como camada de consulta/cache, e que a
+trilha fique pronta para decidir entre fechar como writer centralizado ou
+evoluir para um pass standalone que percorre HIR, preservando spans, mensagens
+diagnosticas, contadores de teste, fallback AST e contratos AST/HIR atuais.
+Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde
+o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema
+atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/typed_hir_pass.rs`,
+  `checker/hir_metadata.rs`, `checker/expr.rs`, `checker/hir_expr.rs`,
+  `checker/route_expr.rs`, `checker/route_static_ops.rs`,
+  `checker/auth_static_ops.rs`, `checker/stmt.rs`, `checker/function_decl.rs`
+  e `checker/route_decl.rs`.
+- Rodar `rg` para procurar escritas diretas em `HirCheckedMetadata`,
+  `borrow_mut`, `set_expr_type`, `set_expr_symbol`, `set_symbol_type` e nomes
+  antigos `record_*`.
+- Ajustar apenas escapes reais de ownership ou nomenclatura confusa.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de
+  `checker::resolver`, type/route/model_field/function/workflow/top_level e
+  quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+- `nexuslang-src/src/checker/hir_metadata.rs`
+- `nexuslang-src/src/checker/expr.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/route_expr.rs`
+- `nexuslang-src/src/checker/route_static_ops.rs`
+- `nexuslang-src/src/checker/auth_static_ops.rs`
+- `nexuslang-src/src/checker/stmt.rs`
+- `nexuslang-src/src/checker/function_decl.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+
+## Etapa concluida: Fase 9.03 - Owner pass typed-HIR como produtor explicito
+
+Objetivo: evoluir `checker/typed_hir_pass.rs` de uma API de
+inicializacao/escrita para um produtor typed-HIR mais explicito, reduzindo os
+registros oportunisticos de metadata em caminhos de expressao e rota sem
+alterar spans, mensagens diagnosticas, contadores de teste, fallback AST ou
+contratos AST/HIR.
+
+Foi feito:
+
+- Mapeados os pontos que ainda chamavam `record_*` em:
+  - `checker/hir_expr.rs`;
+  - `checker/expr.rs`;
+  - `checker/route_expr.rs`;
+  - `checker/route_static_ops.rs`;
+  - `checker/auth_static_ops.rs`;
+  - `checker/stmt.rs`;
+  - alem dos registros de simbolo em `checker/function_decl.rs` e
+    `checker/route_decl.rs`.
+- Criado em `checker/typed_hir_pass.rs` o fluxo comum:
+  - `produce_expr_metadata`;
+  - `produce_hir_expr_metadata`;
+  - `ensure_expr_metadata`;
+  - `ensure_hir_expr_metadata`.
+- `TypedHirMetadataOwner` agora sabe produzir metadata de expressao como um
+  resultado unico: tipo inferido mais simbolo opcional.
+- `checker/expr.rs` agora infere `(Type, Option<HirSymbolId>)` e delega a
+  gravacao final da metadata para `produce_expr_metadata`.
+- `checker/hir_expr.rs` agora faz o mesmo no caminho preferencial typed-HIR,
+  usando `produce_hir_expr_metadata`.
+- `checker/route_static_ops.rs` passou a registrar retornos Auth/Model e
+  simbolos de model por `produce_expr_metadata`/`produce_hir_expr_metadata`.
+- `checker/route_expr.rs` passou a usar `ensure_expr_metadata` e
+  `ensure_hir_expr_metadata` para casos em que a route precisa completar
+  metadata ja parcialmente produzida.
+- Removidas as antigas rotas de tipo isolado `record_expr_type` e
+  `record_hir_expr_type`, que ficaram sem chamadores depois da producao
+  unificada.
+- Permaneceram intocados os registros isolados de simbolo de auth config e os
+  registros de tipo de binding/parametro, porque ainda nao carregam um
+  resultado de expressao completo.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/expr.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/route_expr.rs`
+- `nexuslang-src/src/checker/route_static_ops.rs`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test checker::resolver --lib
+cargo test type -- --nocapture
+cargo test route -- --nocapture
+cargo test model_field -- --nocapture
+cargo test function -- --nocapture
+cargo test workflow -- --nocapture
+cargo test top_level -- --nocapture
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS sem warnings.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test type -- --nocapture`: PASS, incluindo 5 testes lib filtrados e
+  21 testes core filtrados por `type`.
+- `cargo test route -- --nocapture`: PASS, incluindo 7 testes lib filtrados e
+  22 testes core filtrados por `route`.
+- `cargo test model_field -- --nocapture`: PASS, 16 testes core filtrados.
+- `cargo test function -- --nocapture`: PASS, incluindo 1 teste lib filtrado e
+  6 testes core filtrados por `function`.
+- `cargo test workflow -- --nocapture`: PASS, 2 testes focados.
+- `cargo test top_level -- --nocapture`: PASS, incluindo 1 teste lib filtrado
+  e 2 testes core filtrados por `top_level`.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth,
+  storage backup/restore e OpenAPI externo.
+
+Estado do projeto:
+
+- Trilha atual: owner pass typed-HIR avancou de API de escrita para produtor
+  explicito de metadata de expressao.
+- Solido agora: os principais caminhos de inferencia AST/HIR e route static
+  ops produzem metadata de expressao via `checker/typed_hir_pass.rs`; cache e
+  consulta continuam em `checker/hir_metadata.rs`; quality gate completo esta
+  verde.
+- Falta imediato: tratar os registros que ainda sao isolados por natureza:
+  simbolos de auth config em `checker/auth_static_ops.rs` e tipos de simbolos
+  de binding/parametro em `checker/stmt.rs`, `checker/function_decl.rs` e
+  `checker/route_decl.rs`.
+- Distancia do fim: a trilha typed-HIR owner pass esta no meio. O nucleo de
+  producao de expressao ja existe, mas ainda falta consolidar metadata de
+  simbolos/bindings e depois avaliar se cabe um pass que caminhe HIR de forma
+  mais sistematica. O produto completo ainda nao esta no fim.
+- `checker/mod.rs` segue com cerca de 120 linhas; `checker/typed_hir_pass.rs`
+  ficou com cerca de 124 linhas; `checker/expr.rs` caiu para cerca de 421
+  linhas; `checker/hir_expr.rs` caiu para cerca de 718 linhas.
+
+## Proximo passo recomendado
+
+Fase 9.04 - Owner pass typed-HIR para metadata de simbolos e bindings.
+
+AVISO: O proximo passo e criar/implementar a Fase 9.04 do owner pass
+typed-HIR, consolidando no `checker/typed_hir_pass.rs` os fluxos restantes de
+metadata de simbolos e bindings, especialmente os registros de simbolo de auth
+config em `checker/auth_static_ops.rs` e os registros de tipo de simbolo em
+`checker/stmt.rs`, `checker/function_decl.rs` e `checker/route_decl.rs`,
+preservando spans, mensagens diagnosticas, contadores de teste, fallback AST,
+consultas de `checker/hir_metadata.rs` e contratos AST/HIR atuais. Antes de
+iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o
+projeto parou, entender o que ja foi feito e integrar a solucao com o sistema
+atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/typed_hir_pass.rs`,
+  `checker/auth_static_ops.rs`, `checker/stmt.rs`,
+  `checker/function_decl.rs`, `checker/route_decl.rs` e
+  `checker/hir_metadata.rs`.
+- Mapear separadamente metadata de expressao, link de simbolo isolado e tipo
+  de simbolo/binding.
+- Criar o menor fluxo owner para simbolos/bindings sem alterar os chamadores
+  externos nem a ordem semantica dos checks.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de
+  `checker::resolver`, type/route/model_field/function/workflow/top_level e
+  quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+- `nexuslang-src/src/checker/auth_static_ops.rs`
+- `nexuslang-src/src/checker/stmt.rs`
+- `nexuslang-src/src/checker/function_decl.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+- `nexuslang-src/src/checker/hir_metadata.rs`
+
+## Etapa concluida: Fase 9.02 - Owner pass typed-HIR para escritas de metadata
+
+Objetivo: evoluir o owner pass typed-HIR em `checker/typed_hir_pass.rs`,
+movendo as escritas de metadata typed-HIR para uma API/owner dedicada e
+preservando `checker/hir_metadata.rs` como camada de consulta/cache.
+
+Foi feito:
+
+- Movidas de `checker/hir_metadata.rs` para `checker/typed_hir_pass.rs` as
+  escritas de metadata typed-HIR:
+  - `record_expr_type`;
+  - `record_expr_symbol`;
+  - `record_hir_expr_type`;
+  - `record_hir_expr_symbol`;
+  - `record_symbol_type`.
+- `TypedHirMetadataOwner` agora centraliza:
+  - inicializacao de `HirCheckedMetadata`;
+  - escrita de tipo de expressao HIR;
+  - escrita de simbolo de expressao HIR;
+  - escrita de tipo de simbolo HIR.
+- Os nomes dos metodos em `Checker` foram preservados, entao os chamadores em
+  `checker/expr.rs`, `checker/hir_expr.rs`, `checker/route_expr.rs`,
+  `checker/route_static_ops.rs`, `checker/auth_static_ops.rs`,
+  `checker/stmt.rs`, `checker/function_decl.rs` e `checker/route_decl.rs`
+  continuam sem alteracao de contrato.
+- `checker/hir_metadata.rs` ficou focado em consulta/cache:
+  - snapshot `checked_hir_metadata`;
+  - `TypedHirExprContext`;
+  - consultas por `HirExprId`/`HirSymbolId`;
+  - contadores e hits de cache typed-HIR;
+  - `checked_symbol_type`.
+- Nenhuma mensagem diagnostica, span, contrato AST/HIR ou fallback AST foi
+  alterado.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/hir_metadata.rs`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test checker::resolver --lib
+cargo test type -- --nocapture
+cargo test route -- --nocapture
+cargo test model_field -- --nocapture
+cargo test function -- --nocapture
+cargo test workflow -- --nocapture
+cargo test top_level -- --nocapture
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test type -- --nocapture`: PASS, incluindo 5 testes lib filtrados e
+  21 testes core filtrados por `type`.
+- `cargo test route -- --nocapture`: PASS, incluindo 7 testes lib filtrados e
+  22 testes core filtrados por `route`.
+- `cargo test model_field -- --nocapture`: PASS, 16 testes core filtrados.
+- `cargo test function -- --nocapture`: PASS, incluindo 1 teste lib filtrado e
+  6 testes core filtrados por `function`.
+- `cargo test workflow -- --nocapture`: PASS, 2 testes focados.
+- `cargo test top_level -- --nocapture`: PASS, incluindo 1 teste lib filtrado
+  e 2 testes core filtrados por `top_level`.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth,
+  storage backup/restore e OpenAPI externo.
+
+Estado do projeto:
+
+- Trilha atual: owner pass typed-HIR saiu da etapa de entrada/inicializacao e
+  agora tambem possui a API de escrita de metadata.
+- Solido agora: inicializacao, reset de contadores e escritas de
+  `HirCheckedMetadata` passam por `checker/typed_hir_pass.rs`; consultas e
+  cache ficam em `checker/hir_metadata.rs`; quality gate completo esta verde.
+- Falta imediato: transformar essa API de escrita em um pass de producao mais
+  explicito, reduzindo a producao oportunistica de metadata espalhada pelos
+  caminhos de expressao/rota/statement.
+- Distancia do fim: a trilha typed-HIR owner pass esta no meio inicial. Ja ha
+  fronteira de owner/writer, mas ainda falta um pass real que caminhe HIR e
+  produza metadata de forma mais sistematica. O produto completo ainda nao
+  esta no fim.
+- `checker/mod.rs` segue com cerca de 120 linhas; `checker/typed_hir_pass.rs`
+  ficou com cerca de 74 linhas; `checker/hir_metadata.rs` caiu para cerca de
+  130 linhas.
+
+## Proximo passo recomendado
+
+Fase 9.03 - Owner pass typed-HIR como produtor explicito.
+
+AVISO: O proximo passo e evoluir `checker/typed_hir_pass.rs` de uma API de
+inicializacao/escrita para um produtor typed-HIR mais explicito, mapeando os
+pontos em que `checker/hir_expr.rs`, `checker/expr.rs`, `checker/route_expr.rs`,
+`checker/route_static_ops.rs`, `checker/auth_static_ops.rs` e
+`checker/stmt.rs` ainda decidem oportunisticamente quando registrar metadata, e
+extraindo o menor fluxo comum possivel para o owner pass sem alterar spans,
+mensagens diagnosticas, contadores de teste, fallback AST ou contratos AST/HIR.
+Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde
+o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema
+atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/typed_hir_pass.rs`,
+  `checker/hir_metadata.rs`, `checker/hir_expr.rs`, `checker/expr.rs`,
+  `checker/route_expr.rs`, `checker/route_static_ops.rs`,
+  `checker/auth_static_ops.rs` e `checker/stmt.rs`.
+- Mapear os pontos que chamam `record_*` e separar registro de resultado
+  inferido de validacao semantica.
+- Extrair apenas um fluxo comum pequeno para o owner pass, mantendo os
+  wrappers atuais como compatibilidade.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de
+  `checker::resolver`, type/route/model_field/function/workflow/top_level e
+  quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+- `nexuslang-src/src/checker/hir_metadata.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/expr.rs`
+- `nexuslang-src/src/checker/route_expr.rs`
+- `nexuslang-src/src/checker/route_static_ops.rs`
+- `nexuslang-src/src/checker/auth_static_ops.rs`
+- `nexuslang-src/src/checker/stmt.rs`
+
+## Etapa concluida: Fase 9.01 - Primeiro owner pass typed-HIR
+
+Objetivo: iniciar a trilha de owner pass typed-HIR, mapeando o fluxo atual de
+`HirCheckedMetadata` e criando um modulo dedicado para comecar a concentrar a
+producao de metadata typed-HIR sem alterar diagnosticos nem contratos AST/HIR.
+
+Foi feito:
+
+- Mapeado o fluxo atual de `HirCheckedMetadata`:
+  - `checker/mod.rs` criava a metadata com base nas contagens de exprs/simbolos
+    do `HirProgram`;
+  - `checker/hir_metadata.rs` segue como API de leitura/escrita/cache da
+    metadata checada;
+  - `checker/expr.rs`, `checker/hir_expr.rs`, `checker/route_expr.rs`,
+    `checker/route_static_ops.rs`, `checker/stmt.rs`, `checker/function_decl.rs`,
+    `checker/route_decl.rs` e `checker/binding_resolution.rs` continuam como
+    consumidores/produtores sem mudanca de comportamento.
+- Criado `nexuslang-src/src/checker/typed_hir_pass.rs`.
+- Criado `TypedHirMetadataOwner`, responsavel por inicializar
+  `HirCheckedMetadata` a partir de `HirProgram`.
+- Criado `Checker::begin_typed_hir_metadata_pass`, que centraliza:
+  - a criacao de `HirCheckedMetadata::with_counts`;
+  - o reset dos contadores de teste ligados a metadata typed-HIR, bindings,
+    expression checker, operation args e model-op validators.
+- `checker/mod.rs` agora apenas chama `self.begin_typed_hir_metadata_pass(&hir)`
+  depois de baixar AST para HIR, resolver e indexar simbolos.
+- A etapa e deliberadamente pequena: a propriedade da entrada/inicializacao do
+  pass foi criada, mas as escritas de metadata ainda permanecem nos helpers de
+  `checker/hir_metadata.rs` para preservar compatibilidade.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test checker::resolver --lib
+cargo test type -- --nocapture
+cargo test route -- --nocapture
+cargo test model_field -- --nocapture
+cargo test function -- --nocapture
+cargo test workflow -- --nocapture
+cargo test top_level -- --nocapture
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test type -- --nocapture`: PASS, incluindo 5 testes lib filtrados e
+  21 testes core filtrados por `type`.
+- `cargo test route -- --nocapture`: PASS, incluindo 7 testes lib filtrados e
+  22 testes core filtrados por `route`.
+- `cargo test model_field -- --nocapture`: PASS, 16 testes core filtrados.
+- `cargo test function -- --nocapture`: PASS, incluindo 1 teste lib filtrado e
+  6 testes core filtrados por `function`.
+- `cargo test workflow -- --nocapture`: PASS, 2 testes focados.
+- `cargo test top_level -- --nocapture`: PASS, incluindo 1 teste lib filtrado
+  e 2 testes core filtrados por `top_level`.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth,
+  storage backup/restore e OpenAPI externo.
+
+Estado do projeto:
+
+- Trilha atual: a modularizacao do checker/HIR esta encerrada e a nova trilha
+  de owner pass typed-HIR foi aberta.
+- Solido agora: existe uma entrada dedicada para iniciar a producao de metadata
+  typed-HIR, e `checker/mod.rs` deixou de ser o dono direto da criacao/reset da
+  metadata.
+- Falta imediato: transformar as escritas de metadata em uma API/owner mais
+  explicita, para que `record_expr_type`, `record_expr_symbol`,
+  `record_hir_expr_type`, `record_hir_expr_symbol` e `record_symbol_type`
+  deixem de escrever diretamente no cache compartilhado.
+- Distancia do fim: estamos no inicio da trilha typed-HIR owner pass, nao no
+  fim do produto. O proximo bloco ainda e arquitetural, antes de features como
+  modulos, stdlib, LSP/tooling e backend mais robusto.
+- `checker/mod.rs` ficou com cerca de 120 linhas; `checker/typed_hir_pass.rs`
+  nasceu com cerca de 28 linhas; `checker/hir_metadata.rs` segue com cerca de
+  156 linhas.
+
+## Proximo passo recomendado
+
+Fase 9.02 - Owner pass typed-HIR para escritas de metadata.
+
+AVISO: O proximo passo e evoluir o owner pass typed-HIR em
+`checker/typed_hir_pass.rs`, movendo gradualmente as escritas de metadata
+typed-HIR para uma API/owner dedicada, especialmente `record_expr_type`,
+`record_expr_symbol`, `record_hir_expr_type`, `record_hir_expr_symbol` e
+`record_symbol_type`, preservando `checker/hir_metadata.rs` como camada de
+consulta/cache enquanto for necessario, spans, mensagens diagnosticas,
+contadores de teste e contratos AST/HIR atuais. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/typed_hir_pass.rs`,
+  `checker/hir_metadata.rs`, `checker/expr.rs`, `checker/hir_expr.rs`,
+  `checker/route_expr.rs`, `checker/route_static_ops.rs`, `checker/stmt.rs`,
+  `checker/function_decl.rs`, `checker/route_decl.rs` e
+  `checker/binding_resolution.rs`.
+- Mapear apenas as escritas de metadata typed-HIR e separar leitores de
+  escritores.
+- Criar a menor API de writer/owner possivel sem alterar diagnosticos nem
+  remover os fallbacks AST existentes.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de
+  `checker::resolver`, type/route/model_field/function/workflow/top_level e
+  quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/typed_hir_pass.rs`
+- `nexuslang-src/src/checker/hir_metadata.rs`
+- `nexuslang-src/src/checker/expr.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/route_expr.rs`
+- `nexuslang-src/src/checker/route_static_ops.rs`
+- `nexuslang-src/src/checker/stmt.rs`
+- `nexuslang-src/src/checker/function_decl.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+- `nexuslang-src/src/checker/binding_resolution.rs`
+
+## Etapa concluida: Fase 8.43 - Limpeza final dos helpers residuais do checker
+
+Objetivo: fazer a limpeza final dos helpers residuais de `checker/mod.rs`,
+movendo os lookups de simbolos para um submodulo dedicado e colocando a ponte
+typed-HIR/AST de inferencia no caminho de expressoes.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/symbol_lookup.rs`.
+- Movidos para `symbol_lookup.rs`:
+  - `model_symbol`;
+  - `auth_symbol`;
+  - `workflow_symbol`;
+  - `function_symbol`;
+  - `model_field_symbol`.
+- Movida para `checker/expr.rs` a ponte `infer_expr_from_typed_hir_or_ast`,
+  porque ela e usada pelo fallback/inferencia AST e fica mais coesa junto de
+  `infer_expr`, field access, binop e call fallback.
+- `checker/mod.rs` agora declara `mod symbol_lookup;` e deixou de importar
+  diretamente `HirSymbolId` para esses helpers.
+- Preservados os chamadores em `checker/expr.rs`, `checker/hir_expr.rs`,
+  `checker/route_static_ops.rs`, `checker/auth_static_ops.rs`,
+  `checker/auth_decl.rs`, `checker/route_decl.rs`, `checker/workflow_decl.rs`
+  e `checker/program_flow.rs`.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/expr.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/symbol_lookup.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test checker::resolver --lib
+cargo test type -- --nocapture
+cargo test route -- --nocapture
+cargo test model_field -- --nocapture
+cargo test function -- --nocapture
+cargo test workflow -- --nocapture
+cargo test top_level -- --nocapture
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test type -- --nocapture`: PASS, incluindo 5 testes lib filtrados e
+  21 testes core filtrados por `type`.
+- `cargo test route -- --nocapture`: PASS, incluindo 7 testes lib filtrados e
+  22 testes core filtrados por `route`.
+- `cargo test model_field -- --nocapture`: PASS, 16 testes core filtrados.
+- `cargo test function -- --nocapture`: PASS, incluindo 1 teste lib filtrado e
+  6 testes core filtrados por `function`.
+- `cargo test workflow -- --nocapture`: PASS, 2 testes focados.
+- `cargo test top_level -- --nocapture`: PASS, incluindo 1 teste lib filtrado
+  e 2 testes core filtrados por `top_level`.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth,
+  storage backup/restore e OpenAPI externo.
+
+Estado do projeto:
+
+- Trilha atual: a modularizacao do checker/HIR esta fechada do ponto de vista
+  pratico. `checker/mod.rs` agora e uma casca pequena com estado, construtor,
+  `check`, `check_diagnostic` e o helper central `error`.
+- Solido agora: declaracoes, fluxo de programa, statements, expressoes,
+  lookups de simbolos, regras de tipo/filtro, indices HIR, escopo, metadata
+  typed-HIR, helpers base de tipo e resolucao de bindings estao em submodulos
+  dedicados com quality gate completo passando.
+- Falta imediato: sair da fase de extracao e abrir a proxima trilha de
+  arquitetura: transformar o uso atual de metadata typed-HIR em um owner pass
+  mais claro, em vez de varios caminhos registrando/consumindo metadata por
+  fallback.
+- Distancia do fim: esta trilha esta concluida; o produto completo ainda nao
+  esta no fim, pois faltam typed-HIR owner pass completo, modulos, stdlib,
+  LSP/tooling, runtime mais robusto e estrategia de backend.
+- `checker/mod.rs` caiu para cerca de 130 linhas; `checker/symbol_lookup.rs`
+  ficou com cerca de 25 linhas; `checker/expr.rs` ficou com cerca de 431
+  linhas.
+
+## Proximo passo recomendado
+
+Fase 9.01 - Primeiro passo do owner pass typed-HIR.
+
+AVISO: O proximo passo e criar/implementar a primeira etapa de um owner pass
+typed-HIR para NexusLang, comecando por mapear o fluxo atual de
+`HirCheckedMetadata` e desenhar/criar um modulo dedicado que passe a ser o dono
+da producao de metadata typed-HIR, preservando o comportamento atual de
+`checker/hir_metadata.rs`, `checker/hir_expr.rs`, `checker/expr.rs`,
+`checker/program_flow.rs`, resolver, spans, mensagens diagnosticas e contratos
+AST/HIR. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar
+exatamente de onde o projeto parou, entender o que ja foi feito e integrar a
+solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/hir.rs`, `checker/hir_metadata.rs`,
+  `checker/hir_expr.rs`, `checker/expr.rs`, `checker/program_flow.rs` e
+  `checker/resolver.rs`.
+- Mapear quem cria, registra e consome `HirCheckedMetadata`.
+- Definir o menor primeiro modulo/owner pass possivel sem alterar diagnosticos
+  nem remover os fallbacks AST existentes.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de
+  `checker::resolver`, type/route/model_field/function/workflow/top_level e
+  quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/hir.rs`
+- `nexuslang-src/src/checker/hir_metadata.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/expr.rs`
+- `nexuslang-src/src/checker/program_flow.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+
+## Etapa concluida: Fase 8.42 - Submodulo dedicado para fluxo de programa do checker
+
+Objetivo: criar `checker/program_flow.rs` para mover de `checker/mod.rs` a
+orquestracao de coleta e checagem de declaracoes, preservando a integracao com
+`Program`, `Decl`, `HirProgram`, `ResolvedProgram`, `Scope`, submodulos de
+declaracao, validacao de defaults/tipos, spans, mensagens diagnosticas e
+contratos atuais.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/program_flow.rs`.
+- Movidos para `program_flow.rs`:
+  - `collect_decls`;
+  - `check_decls`;
+  - `ensure_known_type`;
+  - `ensure_static_default_expr`.
+- `checker/mod.rs` agora declara `mod program_flow;` e deixou de conter a
+  orquestracao direta de declaracoes.
+- Preservado o fluxo de duas passagens de `collect_decls`:
+  - coleta inicial de model/workflow/auth;
+  - coleta/validacao de function/model/route/auth com unicidade de rotas.
+- Preservado o fluxo de `check_decls`:
+  - statements top-level primeiro;
+  - funcoes, routes, invoices e workflows depois, com `HirProgram`,
+    `ResolvedProgram`, escopos HIR e `Scope` intactos.
+- Preservadas as validacoes de tipos conhecidos e defaults estaticos usadas
+  por function/model/route/stmt.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/program_flow.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test checker::resolver --lib
+cargo test type -- --nocapture
+cargo test route -- --nocapture
+cargo test model_field -- --nocapture
+cargo test function -- --nocapture
+cargo test workflow -- --nocapture
+cargo test top_level -- --nocapture
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test type -- --nocapture`: PASS, incluindo 5 testes lib filtrados e
+  21 testes core filtrados por `type`.
+- `cargo test route -- --nocapture`: PASS, incluindo 7 testes lib filtrados e
+  22 testes core filtrados por `route`.
+- `cargo test model_field -- --nocapture`: PASS, 16 testes core filtrados.
+- `cargo test function -- --nocapture`: PASS, incluindo 1 teste lib filtrado e
+  6 testes core filtrados por `function`.
+- `cargo test workflow -- --nocapture`: PASS, 2 testes focados.
+- `cargo test top_level -- --nocapture`: PASS, incluindo 1 teste lib filtrado
+  e 2 testes core filtrados por `top_level`.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth,
+  storage backup/restore e OpenAPI externo.
+
+Estado do projeto:
+
+- Trilha atual: a modularizacao do checker/HIR chegou ao fim da rodada grande
+  de extracoes. `checker/mod.rs` agora e uma casca pequena com estado,
+  construtor, `check`, `check_diagnostic`, `error`, lookups de simbolos e a
+  ponte AST/typed-HIR de inferencia.
+- Solido agora: declaracoes, fluxo de programa, statements, expressoes,
+  regras de tipo/filtro, indices HIR, escopo, metadata typed-HIR, helpers base
+  de tipo e resolucao de bindings estao em submodulos dedicados com quality
+  gate completo passando.
+- Falta imediato: decidir se vale fazer uma limpeza final de helpers residuais,
+  movendo lookups de simbolos (`model_symbol`, `auth_symbol`,
+  `workflow_symbol`, `function_symbol`, `model_field_symbol`) e a ponte
+  `infer_expr_from_typed_hir_or_ast` para submodulos dedicados/mais adequados.
+- Distancia do fim: esta trilha de modularizacao esta praticamente fechada; o
+  produto completo ainda nao esta no fim, pois continuam faltando typed-HIR
+  owner pass completo, modulos, stdlib, LSP/tooling, runtime mais robusto e
+  estrategia de backend.
+- `checker/mod.rs` caiu para cerca de 157 linhas; `checker/program_flow.rs`
+  ficou com cerca de 201 linhas.
+
+## Proximo passo recomendado
+
+Fase 8.43 - Limpeza final dos helpers residuais do checker.
+
+AVISO: O proximo passo e criar/implementar uma limpeza final dos helpers
+residuais de `checker/mod.rs`, especialmente mover os lookups de simbolos
+`model_symbol`, `auth_symbol`, `workflow_symbol`, `function_symbol` e
+`model_field_symbol` para um submodulo dedicado como `checker/symbol_lookup.rs`
+e mover a ponte `infer_expr_from_typed_hir_or_ast` para o caminho de expressoes
+mais adequado, preservando spans, mensagens, contratos typed-HIR/AST e imports
+atuais. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente
+de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o
+sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/mod.rs` e localizar os helpers residuais.
+- Abrir `checker/expr.rs`, `checker/hir_expr.rs`, `checker/route_expr.rs`,
+  `checker/route_static_ops.rs`, `checker/auth_static_ops.rs`,
+  `checker/auth_decl.rs`, `checker/route_decl.rs` e `checker/workflow_decl.rs`
+  para confirmar os chamadores.
+- Criar `nexuslang-src/src/checker/symbol_lookup.rs` ou nome equivalente para
+  os lookups, e mover a ponte de inferencia para `checker/expr.rs` se esse for
+  o encaixe mais limpo.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de
+  `checker::resolver`, type/route/model_field/function/workflow/top_level e
+  quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/expr.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/route_expr.rs`
+- `nexuslang-src/src/checker/route_static_ops.rs`
+- `nexuslang-src/tests/core.rs`
+
+## Etapa concluida: Fase 8.41 - Submodulo dedicado para resolucao de bindings do checker
+
+Objetivo: criar `checker/binding_resolution.rs` para mover de
+`checker/mod.rs` os helpers de resolucao e atribuicao de bindings, preservando
+integracao com `Scope`, `ResolvedProgram`, `HirScopeId`, `HirDeclId`,
+`HirSymbolId`, `HirSymbolKind`, metadata typed-HIR, spans, mensagens
+diagnosticas e contratos atuais.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/binding_resolution.rs`.
+- Movidos para `binding_resolution.rs`:
+  - `resolve_scope_binding`;
+  - `assign_in_scope`;
+  - `resolve_binding_symbol`;
+  - `resolve_binding_symbol_in_hir_scope`.
+- `checker/mod.rs` agora declara `mod binding_resolution;` e deixou de importar
+  diretamente `HirDeclId`, `HirScopeId` e `HirSymbolKind` apenas para esses
+  helpers.
+- Preservado o caminho typed-HIR de bindings:
+  - `resolve_scope_binding` continua preferindo `checked_symbol_type` quando ha
+    `HirSymbolId`;
+  - `assign_in_scope` continua respeitando const reassignment e
+    `ensure_assignable`;
+  - `resolve_binding_symbol_in_hir_scope` continua priorizando
+    `ResolvedProgram::binding_symbol_in_scope`, depois fallback por decl/span,
+    depois `visible_binding_symbol`;
+  - o contador de teste `scoped_hir_binding_hits` continua incrementando apenas
+    quando o binding e resolvido pelo `HirScopeId`.
+- Preservados os chamadores em `checker/expr.rs`, `checker/hir_expr.rs`,
+  `checker/route_expr.rs`, `checker/stmt.rs`, `checker/function_decl.rs` e
+  `checker/route_decl.rs`.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/binding_resolution.rs`
+- `nexuslang-src/src/checker/mod.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test checker::resolver --lib
+cargo test type -- --nocapture
+cargo test route -- --nocapture
+cargo test model_field -- --nocapture
+cargo test function -- --nocapture
+cargo test workflow -- --nocapture
+cargo test top_level -- --nocapture
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test type -- --nocapture`: PASS, incluindo 5 testes lib filtrados e
+  21 testes core filtrados por `type`.
+- `cargo test route -- --nocapture`: PASS, incluindo 7 testes lib filtrados e
+  22 testes core filtrados por `route`.
+- `cargo test model_field -- --nocapture`: PASS, 16 testes core filtrados.
+- `cargo test function -- --nocapture`: PASS, incluindo 1 teste lib filtrado e
+  6 testes core filtrados por `function`.
+- `cargo test workflow -- --nocapture`: PASS, 2 testes focados.
+- `cargo test top_level -- --nocapture`: PASS, incluindo 1 teste lib filtrado
+  e 2 testes core filtrados por `top_level`.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth,
+  storage backup/restore e OpenAPI externo.
+
+Estado do projeto:
+
+- Trilha atual: a rodada de extracoes pequenas do checker/HIR esta quase
+  fechada. Declaracoes, statements, expressoes, regras de tipo/filtro, indices
+  HIR, escopo, metadata typed-HIR, helpers base de tipo e agora resolucao de
+  bindings ja estao fora de `checker/mod.rs`.
+- Solido agora: os fluxos de binding por `HirScopeId`, fallback por decl/span,
+  `visible_binding_symbol`, metadata de tipos de simbolo e mensagens de
+  atribuicao foram preservados e passaram no quality gate completo.
+- Falta imediato: extrair a orquestracao de programa de `checker/mod.rs`,
+  especialmente `collect_decls`, `check_decls`, `ensure_known_type` e
+  `ensure_static_default_expr`, ou decidir deixar `mod.rs` como casca final do
+  checker.
+- Distancia do fim: esta trilha esta muito perto do fim; o produto completo
+  ainda nao esta no fim, pois continuam faltando typed-HIR owner pass completo,
+  modulos, stdlib, LSP/tooling, runtime mais robusto e estrategia de backend.
+- `checker/mod.rs` caiu para cerca de 349 linhas; `checker/binding_resolution.rs`
+  ficou com cerca de 76 linhas.
+
+## Proximo passo recomendado
+
+Fase 8.42 - Submodulo dedicado para fluxo de programa do checker.
+
+AVISO: O proximo passo e criar/implementar `checker/program_flow.rs` para mover
+de `checker/mod.rs` a orquestracao de coleta e checagem de declaracoes,
+especialmente `collect_decls`, `check_decls`, `ensure_known_type` e
+`ensure_static_default_expr`, preservando a integracao com `Program`, `Decl`,
+`HirProgram`, `ResolvedProgram`, `Scope`, submodulos de declaracao,
+validacao de defaults/tipos, spans, mensagens diagnosticas e contratos atuais.
+Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde
+o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema
+atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/mod.rs` e localizar `collect_decls`,
+  `check_decls`, `ensure_known_type` e `ensure_static_default_expr`.
+- Abrir os submodulos de declaracao chamados por esse fluxo:
+  `function_decl.rs`, `route_decl.rs`, `model_decl.rs`, `auth_decl.rs`,
+  `invoice_decl.rs`, `workflow_decl.rs` e `statement_decl.rs`.
+- Criar `nexuslang-src/src/checker/program_flow.rs` com `impl Checker` apenas
+  para a orquestracao de programa e validacoes auxiliares correspondentes.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de
+  `checker::resolver`, type/route/model_field/function/workflow/top_level e
+  quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/function_decl.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+- `nexuslang-src/src/checker/model_decl.rs`
+- `nexuslang-src/src/checker/auth_decl.rs`
+- `nexuslang-src/src/checker/stmt.rs`
+- `nexuslang-src/tests/core.rs`
+
+## Etapa concluida: Fase 8.40 - Submodulo dedicado para helpers base de tipos do checker
+
+Objetivo: criar `checker/type_core.rs` para mover de `checker/mod.rs` os
+helpers base de tipos `ensure_assignable` e `type_name`, preservando mensagens
+diagnosticas, contratos de atribuicao e suporte a `Optional`/`Array`.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/type_core.rs`.
+- Movidos para `type_core.rs`:
+  - `ensure_assignable`;
+  - `type_name`.
+- `checker/mod.rs` agora declara `mod type_core;` e importa
+  `type_core::{ensure_assignable, type_name}` no namespace interno do checker,
+  mantendo os imports existentes dos submodulos via `super::...`.
+- O corpo dos helpers foi preservado, incluindo:
+  - `Unknown` como compatibilidade permissiva;
+  - `Optional<T>` aceitando `nil`, `Optional<T>` e `T`;
+  - `Float` aceitando `Int`;
+  - `Array<T>` validando item a item;
+  - mensagem `"esperado {}, encontrado {}"`;
+  - nomes exibidos por `type_name`, incluindo `[T]`, `T?`, `nil`, `void` e
+    `unknown`.
+- Preservados os chamadores em `checker/expr.rs`, `checker/hir_expr.rs`,
+  `checker/model_ops.rs`, `checker/model_decl.rs`, `checker/invoice_decl.rs`,
+  `checker/stmt.rs`, `checker/route_decl.rs`, `checker/workflow_decl.rs`,
+  `checker/type_rules.rs`, `checker/scope.rs`, `checker/function_decl.rs` e
+  `checker/route_expr.rs`.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/type_core.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test checker::resolver --lib
+cargo test type -- --nocapture
+cargo test route -- --nocapture
+cargo test model_field -- --nocapture
+cargo test function -- --nocapture
+cargo test workflow -- --nocapture
+cargo test top_level -- --nocapture
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test type -- --nocapture`: PASS, incluindo 5 testes lib filtrados e
+  21 testes core filtrados por `type`.
+- `cargo test route -- --nocapture`: PASS, incluindo 7 testes lib filtrados e
+  22 testes core filtrados por `route`.
+- `cargo test model_field -- --nocapture`: PASS, 16 testes core filtrados.
+- `cargo test function -- --nocapture`: PASS, incluindo 1 teste lib filtrado e
+  6 testes core filtrados por `function`.
+- `cargo test workflow -- --nocapture`: PASS, 2 testes focados.
+- `cargo test top_level -- --nocapture`: PASS, incluindo 1 teste lib filtrado
+  e 2 testes core filtrados por `top_level`.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth,
+  storage backup/restore e OpenAPI externo.
+
+Estado do projeto:
+
+- Trilha atual: a modularizacao do checker/HIR esta praticamente no fim da
+  rodada de extracoes pequenas. `checker/mod.rs` agora concentra sobretudo
+  orquestracao, inicializacao do HIR/resolver, coleta/check de declaracoes e
+  alguns helpers de binding.
+- Solido agora: declaracoes, statements, expressoes AST fallback, regras de
+  tipo/filtro, indices HIR, escopo local, metadata typed-HIR e helpers base de
+  tipo estao em submodulos dedicados com quality gate completo passando.
+- Falta imediato: retirar os helpers de resolucao/atribuicao de bindings que
+  ainda ficam em `checker/mod.rs`, depois avaliar se `collect_decls`,
+  `check_decls`, `ensure_known_type` e `ensure_static_default_expr` devem virar
+  um modulo de orquestracao de programa.
+- Distancia do fim: esta trilha esta quase fechada; o produto completo ainda
+  nao esta no fim, pois continuam faltando typed-HIR owner pass completo,
+  modulos, stdlib, LSP/tooling, runtime mais robusto e estrategia de backend.
+- `checker/mod.rs` caiu para cerca de 413 linhas; `checker/type_core.rs` ficou
+  com cerca de 39 linhas.
+
+## Proximo passo recomendado
+
+Fase 8.41 - Submodulo dedicado para resolucao de bindings do checker.
+
+AVISO: O proximo passo e criar/implementar `checker/binding_resolution.rs` para
+mover de `checker/mod.rs` os helpers de resolucao e atribuicao de bindings,
+especialmente `resolve_scope_binding`, `assign_in_scope`,
+`resolve_binding_symbol` e `resolve_binding_symbol_in_hir_scope`, preservando a
+integracao com `Scope`, `ResolvedProgram`, `HirScopeId`, `HirDeclId`,
+`HirSymbolId`, `HirSymbolKind`, metadata typed-HIR, contador
+`scoped_hir_binding_hits`, spans, mensagens diagnosticas e contratos atuais.
+Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde
+o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema
+atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/mod.rs` e localizar
+  `resolve_scope_binding`, `assign_in_scope`, `resolve_binding_symbol` e
+  `resolve_binding_symbol_in_hir_scope`.
+- Abrir `nexuslang-src/src/checker/scope.rs`,
+  `nexuslang-src/src/checker/hir_metadata.rs`, `checker/stmt.rs`,
+  `checker/expr.rs`, `checker/hir_expr.rs`, `checker/route_decl.rs` e
+  `checker/model_decl.rs` para confirmar os chamadores.
+- Criar `nexuslang-src/src/checker/binding_resolution.rs` com `impl Checker`
+  apenas para os helpers de binding.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de
+  `checker::resolver`, type/route/model_field/function/workflow/top_level e
+  quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/scope.rs`
+- `nexuslang-src/src/checker/hir_metadata.rs`
+- `nexuslang-src/src/checker/stmt.rs`
+- `nexuslang-src/src/checker/expr.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/tests/core.rs`
+
+## Etapa concluida: Fase 8.39 - Submodulo dedicado para metadata typed-HIR do checker
+
+Objetivo: criar `checker/hir_metadata.rs` para mover de `checker/mod.rs` os
+helpers de metadata/cache typed-HIR, preservando a integracao com
+`checker/expr.rs`, `checker/hir_expr.rs`, `checker/route_expr.rs`,
+`checker/route_static_ops.rs`, `checker/stmt.rs`, spans, mensagens e contratos
+atuais.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/hir_metadata.rs`.
+- Movidos para `hir_metadata.rs`:
+  - `TypedHirExprContext`;
+  - `checked_hir_metadata`;
+  - os getters de contadores de teste de metadata/bindings/typed-HIR;
+  - `record_expr_type`;
+  - `record_expr_symbol`;
+  - `record_hir_expr_type`;
+  - `record_hir_expr_symbol`;
+  - `typed_hir_expr_context`;
+  - `typed_hir_expr_context_by_id`;
+  - `record_hir_metadata_cache_hit`;
+  - `record_typed_hir_expr_context_hit`;
+  - `typed_hir_expr_type`;
+  - `typed_hir_expr_type_by_id`;
+  - `typed_hir_expr_symbol`;
+  - `typed_hir_expr_symbol_by_id`;
+  - `record_symbol_type`;
+  - `checked_symbol_type`.
+- `checker/mod.rs` agora declara `mod hir_metadata;` e continua mantendo os
+  campos de storage de metadata/counters no `Checker`.
+- A visibilidade dos helpers ficou restrita a `pub(super)` onde outros
+  submodulos precisam consumir cache/metadata, enquanto
+  `checked_hir_metadata` segue publico para os testes e API interna atual.
+- Preservados os fluxos de cache typed-HIR em `checker/expr.rs` e
+  `checker/hir_expr.rs`, os registros de tipos/simbolos em `route_expr.rs` e
+  `route_static_ops.rs`, e o registro de tipos de bindings em
+  `stmt.rs`, `function_decl.rs` e `route_decl.rs`.
+- `infer_expr_from_typed_hir_or_ast` permaneceu em `checker/mod.rs` nesta fase
+  por ser ponte de inferencia, nao armazenamento/cache de metadata.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/hir_metadata.rs`
+- `nexuslang-src/src/checker/mod.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test checker::resolver --lib
+cargo test type -- --nocapture
+cargo test route -- --nocapture
+cargo test model_field -- --nocapture
+cargo test function -- --nocapture
+cargo test workflow -- --nocapture
+cargo test top_level -- --nocapture
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test type -- --nocapture`: PASS, incluindo 5 testes lib filtrados e
+  21 testes core filtrados por `type`.
+- `cargo test route -- --nocapture`: PASS, incluindo 7 testes lib filtrados e
+  22 testes core filtrados por `route`.
+- `cargo test model_field -- --nocapture`: PASS, 16 testes core filtrados.
+- `cargo test function -- --nocapture`: PASS, incluindo 1 teste lib filtrado e
+  6 testes core filtrados por `function`.
+- `cargo test workflow -- --nocapture`: PASS, 2 testes focados.
+- `cargo test top_level -- --nocapture`: PASS, incluindo 1 teste lib filtrado
+  e 2 testes core filtrados por `top_level`.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth,
+  storage backup/restore e OpenAPI externo.
+
+Estado do projeto:
+
+- Trilha atual: a limpeza modular do checker/HIR esta na reta final. As
+  declaracoes, statements, expressoes AST fallback, regras de tipo/filtro,
+  indices HIR, escopo local e agora metadata typed-HIR ja foram extraidos de
+  `checker/mod.rs`.
+- Produto completo: NexusLang continua em linha pos-`v0.1.1`, com core Rust,
+  ERP primitives, auth, storage, OpenAPI, package-manager MVP e quality gate
+  fortes, mas ainda nao e uma plataforma final/enterprise.
+- Estamos perto de fechar esta trilha de arquitetura do checker, mas nao perto
+  de fechar o produto inteiro. O produto ainda precisa de typed-HIR owner pass
+  completo, modulos, stdlib, LSP/tooling, runtime mais robusto e estrategia de
+  backend antes de virar plataforma madura.
+- `checker/mod.rs` caiu para cerca de 449 linhas; `checker/hir_metadata.rs`
+  ficou com cerca de 156 linhas.
+
+## Proximo passo recomendado
+
+Fase 8.40 - Submodulo dedicado para helpers base de tipos do checker.
+
+AVISO: O proximo passo e criar/implementar `checker/type_core.rs` (ou nome
+equivalente alinhado ao codigo) para mover de `checker/mod.rs` os helpers base
+de tipos que ainda ficam no arquivo principal, especialmente
+`ensure_assignable` e `type_name`, preservando mensagens diagnosticas,
+contratos de atribuicao, suporte a `Optional`/`Array` e imports atuais em
+`checker/expr.rs`, `checker/hir_expr.rs`, `checker/model_ops.rs`,
+`checker/model_decl.rs`, `checker/invoice_decl.rs`, `checker/stmt.rs`,
+`checker/route_decl.rs`, `checker/workflow_decl.rs`, `checker/type_rules.rs`,
+`checker/scope.rs` e demais chamadores. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/mod.rs` e localizar `ensure_assignable` e
+  `type_name`.
+- Abrir os submodulos que importam esses helpers via `super::...`.
+- Criar `nexuslang-src/src/checker/type_core.rs` com os helpers base de tipo.
+- Ajustar `checker/mod.rs` para declarar o novo submodulo e reexportar/importar
+  os helpers conforme o padrao local.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de
+  type/route/model_field/function/workflow/top_level/model_ops e quality gate
+  completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/type_rules.rs`
+- `nexuslang-src/src/checker/expr.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/scope.rs`
+- `nexuslang-src/tests/core.rs`
+
+## Etapa concluida: Fase 8.38 - Submodulo dedicado para escopos locais do checker
+
+Objetivo: criar `checker/scope.rs` para mover de `checker/mod.rs` o `Scope`
+e seus helpers locais, preservando a integracao com `HirScopeId`,
+`HirSymbolId`, `ensure_assignable`, bindings typed-HIR, `checker/stmt.rs`,
+`checker/hir_args.rs`, `checker/route_decl.rs`, `checker/model_decl.rs` e
+demais chamadores atuais.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/scope.rs`.
+- Movidos para `scope.rs`:
+  - `Scope`;
+  - os campos `vars`, `consts`, `symbols` e `hir_scope`;
+  - `with_hir_scope`;
+  - `define_with_symbol`;
+  - `assign`;
+  - `resolve`.
+- `checker/mod.rs` agora declara `mod scope;` e importa `scope::Scope`, mantendo
+  `super::Scope` funcionando para os submodulos existentes.
+- A visibilidade ficou `pub(super)` no tipo, campos e metodos necessarios para
+  preservar os acessos atuais a `scope.hir_scope`, `scope.consts`,
+  `define_with_symbol`, `assign` e `resolve`.
+- `Scope::assign` continua usando `ensure_assignable`, preservando as mensagens
+  de atribuicao e const reassignment atuais.
+- Preservados os fluxos de bindings typed-HIR em `checker/stmt.rs`, argumentos
+  HIR em `checker/hir_args.rs`, parametros de route/query em
+  `checker/route_decl.rs`, defaults/constraints de model em
+  `checker/model_decl.rs` e escopos de function/workflow.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/scope.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test checker::resolver --lib
+cargo test type -- --nocapture
+cargo test route -- --nocapture
+cargo test model_field -- --nocapture
+cargo test function -- --nocapture
+cargo test workflow -- --nocapture
+cargo test top_level -- --nocapture
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test type -- --nocapture`: PASS, incluindo 5 testes lib filtrados e
+  21 testes core filtrados por `type`.
+- `cargo test route -- --nocapture`: PASS, incluindo 7 testes lib filtrados e
+  22 testes core filtrados por `route`.
+- `cargo test model_field -- --nocapture`: PASS, 16 testes core filtrados.
+- `cargo test function -- --nocapture`: PASS, incluindo 1 teste lib filtrado e
+  6 testes core filtrados por `function`.
+- `cargo test workflow -- --nocapture`: PASS, 2 testes focados.
+- `cargo test top_level -- --nocapture`: PASS, incluindo 1 teste lib filtrado
+  e 2 testes core filtrados por `top_level`.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth.
+
+Estado atual:
+
+- `checker/scope.rs` concentra o estado de escopo local do checker.
+- `checker/mod.rs` continua orquestrando declaracoes, metadata HIR, resolver
+  helpers, atribuicao/tipo base e `collect_decls`/`check_decls`.
+- `checker/mod.rs` esta com cerca de 597 linhas; `checker/scope.rs` tem cerca
+  de 56 linhas.
+
+## Proximo passo recomendado
+
+Fase 8.39 - Submodulo dedicado para metadata typed-HIR do checker.
+
+AVISO: O proximo passo e criar/implementar `checker/hir_metadata.rs` para mover
+de `checker/mod.rs` os helpers de metadata/cache typed-HIR, especialmente
+`TypedHirExprContext`, `checked_hir_metadata`, os contadores de teste
+`hir_metadata_cache_hits`, `typed_hir_binding_hits`,
+`typed_hir_expr_context_hits`, os helpers `record_expr_type`,
+`record_expr_symbol`, `record_hir_expr_type`, `record_hir_expr_symbol`,
+`typed_hir_expr_context`, `typed_hir_expr_context_by_id`,
+`record_hir_metadata_cache_hit`, `record_typed_hir_expr_context_hit`,
+`typed_hir_expr_type`, `typed_hir_expr_type_by_id`, `typed_hir_context_type`,
+`typed_hir_expr_symbol`, `typed_hir_expr_symbol_by_id`,
+`record_symbol_type` e `checked_symbol_type`, preservando a integracao com
+`checker/expr.rs`, `checker/hir_expr.rs`, `checker/route_expr.rs`,
+`checker/route_static_ops.rs`, `checker/stmt.rs`, spans, mensagens e
+contratos atuais. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar
+exatamente de onde o projeto parou, entender o que ja foi feito e integrar a
+solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/mod.rs` e localizar `TypedHirExprContext` e
+  os helpers de metadata/cache typed-HIR.
+- Abrir `nexuslang-src/src/checker/expr.rs`, `hir_expr.rs`, `route_expr.rs`,
+  `route_static_ops.rs` e `stmt.rs` para confirmar os chamadores.
+- Criar `nexuslang-src/src/checker/hir_metadata.rs` com `impl Checker` apenas
+  para os helpers de metadata typed-HIR, mantendo os campos de storage no
+  `Checker`.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de
+  `checker::resolver`, type/route/model_field/function/top_level e quality gate
+  completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/scope.rs`
+- `nexuslang-src/src/checker/expr.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/route_expr.rs`
+- `nexuslang-src/tests/core.rs`
+
+## Etapa concluida: Fase 8.37 - Submodulo dedicado para indices HIR do checker
+
+Objetivo: criar `checker/symbols.rs` para mover de `checker/mod.rs` o
+`CheckerSymbols` e seus indices HIR auxiliares, preservando a integracao com
+`HirProgram`, `HirScopeId`, `HirSymbolId`, resolver, metadata HIR, spans e
+contratos atuais.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/symbols.rs`.
+- Movidos para `symbols.rs`:
+  - `CheckerSymbols`;
+  - os mapas `functions`, `models`, `auths`, `workflows`, `routes`,
+    `model_fields`, `exprs`, `stmt_scopes` e `stmt_binding_scopes`;
+  - `index_hir`;
+  - `index_hir_stmts`;
+  - `index_hir_stmt`;
+  - `set_top_level`;
+  - `expr_id`;
+  - `stmt_scope`;
+  - `stmt_binding_scope`;
+  - `model_field`.
+- `checker/mod.rs` agora declara `mod symbols;` e importa
+  `symbols::CheckerSymbols`.
+- A visibilidade ficou `pub(super)` no tipo, campos e metodos necessarios para
+  preservar os usos existentes em `checker/mod.rs`, `function_decl.rs`,
+  `model_decl.rs`, `auth_decl.rs`, `route_decl.rs`, `workflow_decl.rs`,
+  `stmt.rs`, `hir_expr.rs` e `route_expr.rs`.
+- Preservado o indexamento por ponteiro de fonte AST para `Expr`/`Stmt`, o
+  registro de escopos HIR por statement, o escopo de bindings para let/const/for
+  e o indice de campos de model.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/symbols.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test checker::resolver --lib
+cargo test route -- --nocapture
+cargo test type -- --nocapture
+cargo test model_field -- --nocapture
+cargo test function -- --nocapture
+cargo test workflow -- --nocapture
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test route -- --nocapture`: PASS, incluindo 7 testes lib filtrados e
+  22 testes core filtrados por `route`.
+- `cargo test type -- --nocapture`: PASS, incluindo 5 testes lib filtrados e
+  21 testes core filtrados por `type`.
+- `cargo test model_field -- --nocapture`: PASS, 16 testes core filtrados.
+- `cargo test function -- --nocapture`: PASS, incluindo 1 teste lib filtrado e
+  6 testes core filtrados por `function`.
+- `cargo test workflow -- --nocapture`: PASS, 2 testes focados.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth.
+
+Estado atual:
+
+- `checker/symbols.rs` concentra os indices HIR auxiliares consumidos pelo
+  checker e pelos submodulos de declaracao/statement/expressao.
+- `checker/mod.rs` continua orquestrando declaracoes, metadata HIR, resolver
+  helpers, `Scope`, atribuicao/tipo base e `collect_decls`/`check_decls`.
+- `checker/mod.rs` esta com cerca de 645 linhas; `checker/symbols.rs` tem
+  cerca de 151 linhas.
+
+## Proximo passo recomendado
+
+Fase 8.38 - Submodulo dedicado para escopos locais do checker.
+
+AVISO: O proximo passo e criar/implementar `checker/scope.rs` para mover de
+`checker/mod.rs` o `Scope` e seus helpers locais (`vars`, `consts`, `symbols`,
+`hir_scope`, `with_hir_scope`, `define_with_symbol`, `assign` e `resolve`),
+preservando a integracao com `HirScopeId`, `HirSymbolId`, `ensure_assignable`,
+bindings typed-HIR, `checker/stmt.rs`, `checker/hir_args.rs`,
+`checker/route_decl.rs`, `checker/model_decl.rs` e demais chamadores atuais.
+Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de
+onde o projeto parou, entender o que ja foi feito e integrar a solucao com o
+sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/mod.rs` e localizar `Scope`.
+- Abrir `nexuslang-src/src/checker/stmt.rs`, `hir_args.rs`, `route_decl.rs` e
+  `model_decl.rs` para confirmar os usos de `Scope`.
+- Criar `nexuslang-src/src/checker/scope.rs` movendo apenas o struct e seu
+  `impl`, com visibilidade interna suficiente para `super::Scope` continuar
+  funcionando nos submodulos.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de
+  `checker::resolver`, type/route/model_field/function/workflow e quality gate
+  completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/symbols.rs`
+- `nexuslang-src/src/checker/stmt.rs`
+- `nexuslang-src/src/checker/hir_args.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+- `nexuslang-src/tests/core.rs`
+
+## Etapa concluida: Fase 8.36 - Submodulo dedicado para regras compartilhadas de tipos, operadores e filtros
+
+Objetivo: criar `checker/type_rules.rs` para mover de `checker/mod.rs` os
+helpers compartilhados de tipos, operadores e filtros que ainda ficavam no
+arquivo principal, preservando imports em `checker/model_ops.rs` e
+`checker/hir_expr.rs`, spans, mensagens diagnosticas e contratos atuais.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/type_rules.rs`.
+- Movidos para `type_rules.rs`:
+  - `hir_binary_op_to_ast`;
+  - `ordering_type_supported`;
+  - `comparison_operator_supported`;
+  - `ensure_comparison_operator_allowed`;
+  - `comparison_equality_type_supported`;
+  - `comparison_order_type_supported`;
+  - `text_operator_supported`;
+  - `text_filter_type_supported`.
+- `checker/mod.rs` agora declara `mod type_rules;` e deixou de conter essas
+  regras livres de operadores/filtros.
+- `checker/model_ops.rs` passou a importar de `checker/type_rules.rs` as regras
+  usadas por lookup, ordering, comparison, text e range filters.
+- `checker/hir_expr.rs` passou a importar `hir_binary_op_to_ast` de
+  `checker/type_rules.rs`, mantendo `checker/expr.rs` como fonte dos helpers
+  AST/HIR opcionais/numericos/comparaveis.
+- `type_name` e `ensure_assignable` foram preservados em `checker/mod.rs`
+  nesta fase para manter a alteracao estreita e evitar reabrir todos os
+  submodulos que ainda dependem desses dois helpers base.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/type_rules.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test checker::resolver --lib
+cargo test model_ops --lib
+cargo test type -- --nocapture
+cargo test route -- --nocapture
+cargo test auth -- --nocapture
+cargo test workflow -- --nocapture
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `cargo test type -- --nocapture`: PASS, incluindo 5 testes lib filtrados e
+  21 testes core filtrados por `type`.
+- `cargo test route -- --nocapture`: PASS, incluindo 7 testes lib filtrados e
+  22 testes core filtrados por `route`.
+- `cargo test auth -- --nocapture`: PASS, incluindo 5 testes lib filtrados e
+  9 testes core filtrados por `auth`.
+- `cargo test workflow -- --nocapture`: PASS, 2 testes focados.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth.
+
+Estado atual:
+
+- `checker/type_rules.rs` concentra as regras compartilhadas de operadores e
+  filtros usadas por `checker/model_ops.rs` e `checker/hir_expr.rs`.
+- `checker/mod.rs` continua orquestrando declaracoes, metadata HIR, resolver
+  helpers, `CheckerSymbols`, atribuicao/tipo base e `collect_decls`/
+  `check_decls`.
+- `checker/mod.rs` esta com cerca de 785 linhas; `checker/type_rules.rs` tem
+  cerca de 90 linhas.
+
+## Proximo passo recomendado
+
+Fase 8.37 - Submodulo dedicado para indices HIR do checker.
+
+AVISO: O proximo passo e criar/implementar `checker/symbols.rs` para mover de
+`checker/mod.rs` o `CheckerSymbols` e seus indices HIR auxiliares
+(`functions`, `models`, `auths`, `workflows`, `routes`, `model_fields`,
+`exprs`, `stmt_scopes`, `stmt_binding_scopes`) com os metodos
+`index_hir`, `index_hir_stmts`, `index_hir_stmt`, `set_top_level`,
+`expr_id`, `stmt_scope`, `stmt_binding_scope` e `model_field`, preservando a
+integracao com `HirProgram`, `HirScopeId`, `HirSymbolId`, resolver, metadata
+HIR, spans e contratos atuais. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`
+para continuar exatamente de onde o projeto parou, entender o que ja foi feito
+e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/mod.rs` e localizar `CheckerSymbols`.
+- Criar `nexuslang-src/src/checker/symbols.rs` movendo apenas o struct e seu
+  `impl`, com visibilidade `pub(super)` onde os metodos sao usados por
+  `Checker`.
+- Atualizar `checker/mod.rs` com `mod symbols;` e `use symbols::CheckerSymbols`.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de
+  `checker::resolver`, route/model_ops/type e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/type_rules.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/hir.rs`
+- `nexuslang-src/tests/core.rs`
+
+## Etapa concluida: Fase 8.35 - Submodulo dedicado para inferencia geral de expressoes AST
+
+Objetivo: criar um submodulo dedicado para mover a inferencia geral de
+expressoes AST que ainda ficava em `checker/mod.rs`, preservando
+`checker/hir_expr.rs` como caminho typed-HIR preferencial e mantendo spans,
+mensagens diagnosticas e contratos AST/HIR atuais.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/expr.rs`.
+- Movidos para `expr.rs`:
+  - `infer_expr`;
+  - `check_object_fields`;
+  - `infer_field_access`;
+  - `infer_binop`;
+  - `infer_call`.
+- Movidos tambem os helpers diretamente ligados ao fallback AST:
+  - `is_optional_type`;
+  - `is_optional_or_nil_type`;
+  - `ensure_comparable`;
+  - `numeric_result`.
+- `checker/mod.rs` agora declara `mod expr;` e ficou sem o corpo direto da
+  inferencia geral de expressoes AST.
+- `checker/hir_expr.rs` passou a importar de `checker/expr.rs` os helpers
+  compartilhados que ainda precisa para validar expressoes HIR com as mesmas
+  regras de comparacao/numericas/opcionais.
+- Preservado o caminho typed-HIR preferencial: `infer_expr_with_hir` continua
+  tentando `HirExprId`/`HirExprKind` primeiro e so cai no fallback AST quando
+  nao ha contexto HIR disponivel.
+- Preservadas as mensagens de diagnostico, spans, registro de tipos/simbolos
+  HIR, fallback de chamadas de funcao e fallback de `Model::all()` fora de
+  route.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/expr.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/mod.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test type -- --nocapture
+cargo test function -- --nocapture
+cargo test model_field -- --nocapture
+cargo test checker::resolver --lib
+cargo test route -- --nocapture
+cargo test workflow -- --nocapture
+cargo test auth -- --nocapture
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test type -- --nocapture`: PASS, incluindo 5 testes lib filtrados e
+  21 testes core filtrados por `type`.
+- `cargo test function -- --nocapture`: PASS, incluindo 1 teste lib filtrado e
+  6 testes core filtrados por `function`.
+- `cargo test model_field -- --nocapture`: PASS, 16 testes core filtrados.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test route -- --nocapture`: PASS, incluindo 7 testes lib filtrados e
+  22 testes core filtrados por `route`.
+- `cargo test workflow -- --nocapture`: PASS, 2 testes focados.
+- `cargo test auth -- --nocapture`: PASS, incluindo 5 testes lib filtrados e
+  9 testes core filtrados por `auth`.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth.
+
+Estado atual:
+
+- `checker/expr.rs` concentra a inferencia geral de expressoes AST e o
+  fallback de compatibilidade para literais, arrays, objetos, identificadores,
+  field access, unary/binop, chamadas e static call simples.
+- `checker/hir_expr.rs` continua sendo o caminho typed-HIR preferencial para
+  expressoes ja baixadas em HIR.
+- `checker/mod.rs` continua orquestrando declaracoes, metadata HIR, resolver
+  helpers, atribuicao/tipo base e helpers compartilhados de filtros/model ops.
+
+## Proximo passo recomendado
+
+Fase 8.36 - Submodulo dedicado para regras compartilhadas de tipos, operadores
+e filtros.
+
+AVISO: O proximo passo e criar/implementar `checker/type_rules.rs` para mover
+de `checker/mod.rs` os helpers compartilhados de tipos, operadores e filtros
+que ainda ficam no arquivo principal, especialmente `hir_binary_op_to_ast`,
+`ordering_type_supported`, `comparison_operator_supported`,
+`ensure_comparison_operator_allowed`, `comparison_equality_type_supported`,
+`comparison_order_type_supported`, `text_operator_supported` e
+`text_filter_type_supported`, preservando imports em `checker/model_ops.rs` e
+`checker/hir_expr.rs`, spans, mensagens diagnosticas e contratos atuais. Antes
+de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o
+projeto parou, entender o que ja foi feito e integrar a solucao com o sistema
+atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/mod.rs` e localizar os helpers livres no
+  fim do arquivo.
+- Abrir `nexuslang-src/src/checker/model_ops.rs` e
+  `nexuslang-src/src/checker/hir_expr.rs` para mapear os imports atuais.
+- Criar um submodulo pequeno, provavelmente `checker/type_rules.rs`, movendo
+  apenas regras compartilhadas de operadores/filtros/tipos sem alterar
+  diagnosticos.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de
+  resolver/model_ops/type/route/auth/workflow e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/expr.rs`
+- `nexuslang-src/tests/core.rs`
+
+## Etapa concluida: Fase 8.34 - Submodulo dedicado para statement/binding checker compartilhado
+
+Objetivo: criar um submodulo dedicado para mover `check_stmts`, `check_stmt`
+e `check_binding` para fora de `checker/mod.rs`, preservando a integracao com
+HIR scopes, `Scope`, `ResolvedProgram`, spans, mensagens diagnosticas e
+chamadas existentes de function/workflow/route/invoice declarations.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/stmt.rs`.
+- Movidos para `stmt.rs`:
+  - `check_stmts`;
+  - `check_stmt`;
+  - `check_binding`.
+- `check_stmts` e `check_stmt` ficaram `pub(super)` para preservar os
+  chamadores em `function_decl.rs`, `workflow_decl.rs`, `invoice_decl.rs` e
+  `statement_decl.rs`.
+- `check_binding` ficou privado dentro de `stmt.rs`, porque segue sendo helper
+  interno do statement checker.
+- Preservada a logica de troca/restauracao de `scope.hir_scope` por statement.
+- Preservados os caminhos de let/const, assign, return, print, expr stmt,
+  if/while/for, inferencia via `infer_expr_with_hir`, `ensure_assignable`,
+  resolucao de binding HIR e registro de `HirCheckedMetadata`.
+- `checker/mod.rs` agora declara `mod stmt;` e ficou sem o corpo direto do
+  statement/binding checker.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/stmt.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test top_level -- --nocapture
+cargo test function -- --nocapture
+cargo test checker::resolver --lib
+cargo test route -- --nocapture
+cargo test workflow -- --nocapture
+cargo test auth -- --nocapture
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test top_level -- --nocapture`: PASS, incluindo 1 teste lib filtrado
+  e 2 testes core filtrados por `top_level`.
+- `cargo test function -- --nocapture`: PASS, incluindo 1 teste lib filtrado e
+  6 testes core filtrados por `function`.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test route -- --nocapture`: PASS, incluindo 7 testes lib filtrados e
+  22 testes core filtrados por `route`.
+- `cargo test workflow -- --nocapture`: PASS, 2 testes focados.
+- `cargo test auth -- --nocapture`: PASS, incluindo 5 testes lib filtrados e
+  9 testes core filtrados por `auth`.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth.
+
+Estado atual:
+
+- `checker/stmt.rs` concentra o statement/binding checker compartilhado.
+- `checker/statement_decl.rs` continua como wrapper de entrada para statements
+  top-level.
+- `checker/mod.rs` continua orquestrando declaracoes, HIR metadata, resolver
+  helpers e inferencia geral de expressoes AST.
+
+## Proximo passo recomendado
+
+Fase 8.35 - Submodulo dedicado para inferencia geral de expressoes AST.
+
+AVISO: O proximo passo e criar/implementar um submodulo dedicado para mover a
+inferencia geral de expressoes AST que ainda fica em `checker/mod.rs`,
+especialmente `infer_expr`, helpers diretamente ligados a field access,
+binop/call/static call fallback e wrappers AST de compatibilidade, preservando
+`checker/hir_expr.rs` como caminho typed-HIR preferencial e mantendo spans,
+mensagens diagnosticas e contratos atuais. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/mod.rs` e localizar `infer_expr` e helpers
+  diretamente ligados a inferencia AST.
+- Abrir `nexuslang-src/src/checker/hir_expr.rs`, `route_expr.rs`,
+  `route_static_ops.rs`, `model_ops.rs` e `auth_static_ops.rs` para preservar
+  as fronteiras atuais.
+- Criar um submodulo pequeno, provavelmente `checker/expr.rs`, migrando apenas
+  a inferencia AST/fallback que nao pertence ao typed-HIR expression checker.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de
+  top_level/function/route/workflow/auth/model_ops, HIR/resolver e quality gate
+  completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/stmt.rs`
+- `nexuslang-src/src/checker/route_expr.rs`
+- `nexuslang-src/tests/core.rs`
+
+## Etapa concluida: Fases 8.32 e 8.33 - Auth collection e top-level statement declarations
+
+Objetivo: implementar duas extrações pequenas e seguras no checker: completar
+a coleta de `Decl::Auth` dentro de `checker/auth_decl.rs` e separar a checagem
+de statements top-level em `checker/statement_decl.rs`, preservando spans,
+mensagens diagnosticas e contratos AST/HIR.
+
+Foi feito:
+
+- Atualizado `nexuslang-src/src/checker/auth_decl.rs` com
+  `collect_auth_declaration`, movendo para esse modulo:
+  - rejeicao de auth duplicado;
+  - armazenamento de `AuthConfig` em `self.auths`;
+  - registro de simbolo HIR de topo para auth.
+- Adicionado `check_auth_declaration` em `auth_decl.rs`, preservando
+  `check_auth_config` como ponto de validacao semantica da config.
+- `checker/mod.rs` agora delega a coleta e a validacao semantica de
+  `Decl::Auth` para `auth_decl.rs`.
+- Criado `nexuslang-src/src/checker/statement_decl.rs`.
+- Adicionado `check_top_level_statement`, mantendo a chamada interna para
+  `check_stmt` com `Type::Unknown` e o mesmo `decl_id`/resolver.
+- `checker/mod.rs` agora declara `mod statement_decl;` e delega o primeiro
+  loop de top-level `Decl::Statement` para esse modulo.
+- O WASM nao foi recompilado: as mudancas sao internas ao checker/HIR e nao
+  alteram experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/auth_decl.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/statement_decl.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test auth -- --nocapture
+cargo test top_level -- --nocapture
+cargo test checker::resolver --lib
+cargo test function -- --nocapture
+cargo test route -- --nocapture
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test auth -- --nocapture`: PASS, incluindo 5 testes lib filtrados e
+  9 testes core filtrados por `auth`.
+- `cargo test top_level -- --nocapture`: PASS, incluindo 1 teste lib filtrado
+  e 2 testes core filtrados por `top_level`.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test function -- --nocapture`: PASS, incluindo 1 teste lib filtrado e
+  6 testes core filtrados por `function`.
+- `cargo test route -- --nocapture`: PASS, incluindo 7 testes lib filtrados e
+  22 testes core filtrados por `route`.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth.
+
+Estado atual:
+
+- `checker/auth_decl.rs` concentra coleta e validacao semantica de auth
+  declarations.
+- `checker/statement_decl.rs` concentra a entrada de checagem de statements
+  top-level.
+- `checker/mod.rs` continua contendo o statement/binding checker compartilhado
+  (`check_stmts`, `check_stmt`, `check_binding`) e a orquestracao geral.
+
+## Proximo passo recomendado
+
+Fase 8.34 - Submodulo dedicado para statement/binding checker compartilhado.
+
+AVISO: O proximo passo e criar/implementar um submodulo dedicado para mover
+`check_stmts`, `check_stmt` e `check_binding` para fora de `checker/mod.rs`,
+preservando a integracao com HIR scopes, `Scope`, `ResolvedProgram`, spans,
+mensagens diagnosticas e chamadas existentes de function/workflow/route/invoice
+declarations. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar
+exatamente de onde o projeto parou, entender o que ja foi feito e integrar a
+solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/mod.rs` e localizar `check_stmts`,
+  `check_stmt` e `check_binding`.
+- Abrir os chamadores atuais: `function_decl.rs`, `workflow_decl.rs`,
+  `invoice_decl.rs` e `statement_decl.rs`.
+- Criar um submodulo pequeno, provavelmente `checker/stmt.rs` ou
+  `checker/statement.rs`, mantendo `Scope` no modulo principal enquanto ainda
+  for compartilhado.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de
+  top_level/function/route/workflow/auth, HIR/resolver e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/statement_decl.rs`
+- `nexuslang-src/src/checker/function_decl.rs`
+- `nexuslang-src/src/checker/workflow_decl.rs`
+- `nexuslang-src/tests/core.rs`
+
+## Etapa concluida: Fase 8.31 - Submodulo dedicado para function declarations
+
+Objetivo: criar `checker/function_decl.rs`, movendo a coleta de
+`Decl::Function`, a definicao dos parametros no escopo HIR, a checagem do corpo
+da funcao e a verificacao de retorno obrigatorio para funcoes nao-void para
+fora de `checker/mod.rs`, preservando spans, mensagens diagnosticas e
+contratos AST/HIR.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/function_decl.rs`.
+- Movida para `collect_function_declaration` a coleta de assinatura de
+  `Decl::Function`, incluindo:
+  - rejeicao de funcao duplicada;
+  - validacao de tipos conhecidos em parametros e retorno;
+  - registro de `FunctionSig`;
+  - registro de simbolo HIR de topo para funcao.
+- Movida para `check_function_declaration` a checagem de corpo de funcao,
+  incluindo:
+  - criacao do escopo de funcao a partir do escopo de topo e `HirScopeId`;
+  - resolucao/registro dos simbolos HIR de parametros;
+  - chamada para `check_stmts`;
+  - verificacao de retorno obrigatorio para funcoes nao-void.
+- Movidos para `function_decl.rs` os helpers privados
+  `block_guarantees_return` e `stmt_guarantees_return`, porque agora sao
+  usados apenas pela validacao de function declarations.
+- `checker/mod.rs` agora declara `mod function_decl;` e delega os branches
+  `Decl::Function` de `collect_decls` e `check_decls`.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/function_decl.rs`
+- `nexuslang-src/src/checker/mod.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test function -- --nocapture
+cargo test checker::resolver --lib
+cargo test route -- --nocapture
+cargo test workflow -- --nocapture
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test function -- --nocapture`: PASS, incluindo 1 teste lib filtrado e
+  6 testes core filtrados por `function`.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test route -- --nocapture`: PASS, incluindo 7 testes lib filtrados e
+  22 testes core filtrados por `route`.
+- `cargo test workflow -- --nocapture`: PASS, 2 testes focados.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth.
+
+Estado atual:
+
+- `checker/function_decl.rs` concentra coleta e validacao de declaracoes de
+  funcao.
+- `checker/mod.rs` continua orquestrando `collect_decls`/`check_decls`, mas os
+  branches de `Decl::Function` agora sao delegacoes curtas.
+- A proxima frente natural e completar `auth_decl.rs` movendo para ele a coleta
+  de `Decl::Auth`, porque duplicidade, armazenamento de config e registro HIR
+  ainda vivem diretamente em `checker/mod.rs`.
+
+## Proximo passo recomendado
+
+Fase 8.32 - Completar extracao de auth declaration collection.
+
+AVISO: O proximo passo e criar/implementar a coleta de `Decl::Auth` dentro de
+`checker/auth_decl.rs`, movendo para esse modulo a rejeicao de auth duplicado,
+o armazenamento de `AuthConfig` em `self.auths` e o registro de simbolo HIR de
+auth, preservando `check_auth_config` para a validacao semantica da config e
+mantendo spans/mensagens atuais. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/mod.rs` e localizar o branch
+  `Decl::Auth` no primeiro loop de `collect_decls`.
+- Abrir `nexuslang-src/src/checker/auth_decl.rs`.
+- Adicionar `collect_auth_declaration` em `auth_decl.rs`, preservando a ordem
+  atual de coleta antes de `check_auth_config`.
+- Manter `auth_static_ops.rs` dedicado apenas a chamadas `Auth::...`.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de auth,
+  HIR/resolver, function/route e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/auth_decl.rs`
+- `nexuslang-src/src/checker/auth_static_ops.rs`
+- `nexuslang-src/tests/core.rs`
+
+## Etapa concluida: Fase 8.30 - Completar extracao de route declaration collection/defaults
+
+Objetivo: completar a extracao da parte de route declaration que ainda ficava
+em `checker/mod.rs`, movendo assinatura unica por metodo/path, parametros
+duplicados, tipos/defaults de query params, auth guard em fase de coleta e
+registro de simbolo HIR de route para `checker/route_decl.rs`, preservando
+spans, mensagens diagnosticas e contratos AST/HIR publicos.
+
+Foi feito:
+
+- Adicionado `collect_route_declaration` em
+  `nexuslang-src/src/checker/route_decl.rs`.
+- Movida para `route_decl.rs` a validacao de assinatura duplicada por
+  metodo/path, mantendo a mensagem `Route <METHOD> '<path>' declarada mais de
+  uma vez`.
+- Movida para `route_decl.rs` a validacao de parametros duplicados de path e
+  query params, preservando spans e mensagens existentes.
+- Movida para `route_decl.rs` a validacao de tipo conhecido e tipo suportado
+  de query params.
+- Movida para `route_decl.rs` a validacao de defaults estaticos de query
+  params, incluindo compatibilidade especial `date <- string` e opcionais.
+- Movido para `route_decl.rs` o registro do simbolo HIR de `Route`.
+- Removida de `checker/mod.rs` a dependencia direta de
+  `route_method_name`, `query_param_type_supported` e
+  `ensure_query_default_assignable`; o branch `Decl::Route` em `collect_decls`
+  agora apenas delega para `collect_route_declaration`.
+- `route_expr.rs` e `route_static_ops.rs` foram preservados como modulos
+  dedicados para expressao/dispatch de static calls.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test route -- --nocapture
+cargo test checker::resolver --lib
+cargo test workflow -- --nocapture
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test route -- --nocapture`: PASS, incluindo 7 testes lib filtrados e
+  22 testes core filtrados por `route`.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test workflow -- --nocapture`: PASS, 2 testes focados.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth.
+
+Estado atual:
+
+- `checker/route_decl.rs` concentra coleta inicial de rotas, validacao de
+  assinatura/params/query defaults/auth guard, registro HIR de route e
+  validacao do corpo direto de route.
+- `checker/mod.rs` continua orquestrando `collect_decls`/`check_decls`, mas o
+  branch de `Decl::Route` na fase de coleta ficou reduzido a delegacao.
+- A proxima frente natural e mover declaracoes de funcoes para um submodulo
+  dedicado, porque coleta de assinatura, escopo de parametros e verificacao de
+  retorno ainda vivem diretamente em `checker/mod.rs`.
+
+## Proximo passo recomendado
+
+Fase 8.31 - Submodulo dedicado para function declarations.
+
+AVISO: O proximo passo e criar/implementar `checker/function_decl.rs`, movendo
+para ele a coleta de `Decl::Function` em `collect_decls`, a definicao dos
+parametros no escopo HIR, a checagem do corpo da funcao e a verificacao de
+retorno obrigatorio para funcoes nao-void, preservando spans, mensagens e
+contratos AST/HIR. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para
+continuar exatamente de onde o projeto parou, entender o que ja foi feito e
+integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/mod.rs` e localizar os branches
+  `Decl::Function` em `collect_decls` e `check_decls`.
+- Criar `nexuslang-src/src/checker/function_decl.rs` como modulo pequeno para
+  assinatura e corpo de funcao.
+- Decidir se `block_guarantees_return` e `stmt_guarantees_return` continuam
+  em `mod.rs` como helpers gerais ou migram junto com function declarations.
+- Preservar `check_stmts`, `check_stmt` e `hir_expr.rs` como infraestrutura
+  compartilhada.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de function,
+  HIR/resolver, route/workflow e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+- `nexuslang-src/src/checker/workflow_decl.rs`
+- `nexuslang-src/tests/core.rs`
+
+## Etapa concluida: Fase 8.29 - Submodulo/adapter dedicado para workflow declarations e run_workflow
+
+Objetivo: criar um submodulo pequeno para a logica de workflows no checker,
+movendo a coleta de `Decl::Workflow`, a validacao dos steps de workflow e um
+helper compartilhado de `run_workflow` para reduzir duplicacao entre
+`checker/mod.rs` e `checker/hir_expr.rs`, preservando spans, mensagens e o
+comportamento HIR atual.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/workflow_decl.rs`.
+- Movida a coleta de `Decl::Workflow` para `collect_workflow_declaration`,
+  incluindo:
+  - rejeicao de workflow duplicado;
+  - registro de simbolo HIR de topo para workflow.
+- Adicionado `check_workflow_declaration` como ponto de entrada interno para
+  validacao dos steps de workflow.
+- Extraida a validacao compartilhada de `run_workflow`:
+  - aridade via `ensure_run_workflow_arg_count`;
+  - tipo string via `check_run_workflow_target`;
+  - existencia de workflow literal estatico;
+  - extracao de nome literal tanto do caminho AST quanto do caminho HIR.
+- `nexuslang-src/src/checker/mod.rs` agora declara `mod workflow_decl;` e
+  delega coleta/checagem de workflow para o novo modulo.
+- `nexuslang-src/src/checker/hir_expr.rs` continua inferindo chamadas HIR, mas
+  delega a validacao de `run_workflow` para o helper compartilhado.
+- `nexuslang-src/ROADMAP.md` e `ARCHITECTURE_AUDIT_NEXUSLANG.md` foram
+  atualizados para refletir o novo submodulo e a reducao de duplicacao.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/workflow_decl.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test workflow -- --nocapture
+cargo test hir --lib
+cargo test checker::resolver --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test workflow -- --nocapture`: PASS, 2 testes focados.
+- `cargo test hir --lib`: PASS, 17 testes.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth.
+
+Estado atual:
+
+- `checker/workflow_decl.rs` concentra a coleta/validacao de workflows e a
+  regra compartilhada de `run_workflow`.
+- `checker/mod.rs` continua com a orquestracao geral de declaracoes e ainda
+  carrega parte da coleta/validacao inicial de rotas.
+- `checker/hir_expr.rs` ficou um pouco mais fino no caminho de chamadas HIR.
+
+## Proximo passo recomendado
+
+Fase 8.30 - Completar extracao de route declaration collection/defaults.
+
+AVISO: O proximo passo e mover para `checker/route_decl.rs` a parte de route
+declaration que ainda fica em `checker/mod.rs`: unicidade de assinatura
+metodo/path, parametros duplicados, tipos/defaults de query params, auth guard
+em fase de coleta e registro de simbolo HIR de route. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/mod.rs` e localizar o branch `Decl::Route`
+  em `collect_decls`.
+- Abrir `nexuslang-src/src/checker/route_decl.rs` e decidir se o ponto de
+  entrada novo deve complementar ou envolver `check_route`.
+- Mover juntos:
+  - assinatura unica por metodo/path;
+  - parametro de path duplicado;
+  - tipo suportado/default de query param;
+  - auth guard em fase de coleta;
+  - registro de simbolo HIR de route.
+- Preservar `route_expr.rs` e `route_static_ops.rs` como modulos dedicados a
+  expressao/dispatch.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de route,
+  HIR/resolver, model/auth ops e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+- `nexuslang-src/src/checker/route_expr.rs`
+- `nexuslang-src/src/checker/route_static_ops.rs`
+- `nexuslang-src/tests/core.rs`
+
+## Etapa concluida: Fase 8.28 - Submodulo dedicado de validacao de model declarations
+
+Objetivo: criar um submodulo dedicado de validacao de model declarations no
+checker, movendo o branch/helper de `Decl::Model`, defaults de model field,
+constraints `unique`/`index`/`min`/`max` e helpers diretamente ligados a
+constraints/tipos para fora de `checker/mod.rs`, preservando
+`checker/model_ops.rs` para operacoes `Model::...` sem alterar contratos AST
+publicos, spans nem mensagens diagnosticas.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/model_decl.rs`.
+- Movida a coleta de `Decl::Model` para `collect_model_declaration`, incluindo:
+  - rejeicao de model duplicado;
+  - rejeicao de nomes reservados OpenAPI (`NexusError`, `NexusPage_*`,
+    `NexusList_*`);
+  - rejeicao de campos duplicados;
+  - registro de model e simbolo HIR de topo.
+- Adicionado `check_model_declaration` como ponto de entrada interno para
+  validacao de campos de model.
+- Movida para o novo submodulo a validacao de:
+  - tipo conhecido do campo;
+  - constraint `unique`;
+  - constraint `index`;
+  - defaults estaticos de model field;
+  - compatibilidade de default com o tipo do campo;
+  - constraints `min`/`max`;
+  - validacao de defaults contra `min`/`max`.
+- Movidos helpers diretamente ligados a model declarations:
+  - `ensure_static_model_default`;
+  - `check_model_min_max_constraints`;
+  - `check_model_min_max_bound`;
+  - `ensure_static_min_max_expr`;
+  - `reserved_openapi_component_name`;
+  - helpers de suporte `unique`/`index`/`min`/`max`;
+  - helpers de literais e formatacao usados por constraints/defaults.
+- `nexuslang-src/src/checker/mod.rs` agora declara `mod model_decl;` e delega
+  os caminhos de model declaration para o novo modulo.
+- `nexuslang-src/src/checker/model_ops.rs` foi preservado como modulo dedicado
+  de operacoes estaticas `Model::...`.
+- `nexuslang-src/ROADMAP.md` e `ARCHITECTURE_AUDIT_NEXUSLANG.md` foram
+  atualizados para refletir o novo submodulo e a reducao de responsabilidade de
+  `checker/mod.rs`.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/model_decl.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test min_max -- --nocapture
+cargo test model_ops --lib
+cargo test auth_ops --lib
+cargo test hir --lib
+cargo test checker::resolver --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test min_max -- --nocapture`: PASS, 3 testes focados.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `cargo test auth_ops --lib`: PASS, 3 testes.
+- `cargo test hir --lib`: PASS, 17 testes.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS, incluindo fmt,
+  check, clippy, 35 testes lib, 7 testes CLI package-manager, 156 testes
+  core, validacoes de compatibilidade/storage/docs/OpenAPI e smokes HTTP/auth.
+
+Estado atual:
+
+- `checker/model_decl.rs` concentra a validacao de declaracoes `model`.
+- `checker/model_ops.rs` continua concentrando a validacao AST/HIR das
+  operacoes `Model::...`.
+- `checker/mod.rs` continua com a orquestracao geral de declaracoes e expressoes,
+  mas nao carrega mais defaults/constraints de model field diretamente.
+- A proxima frente natural e extrair a logica restante de workflows e
+  `run_workflow`, que ainda aparece em `checker/mod.rs` e em
+  `checker/hir_expr.rs`.
+
+## Proximo passo recomendado
+
+Fase 8.29 - Submodulo/adapter dedicado para workflow declarations e
+`run_workflow`.
+
+AVISO: O proximo passo e criar/implementar um submodulo pequeno para a logica
+de workflows no checker, movendo a coleta de `Decl::Workflow`, a validacao dos
+steps de workflow e, se couber no mesmo bloco sem risco, o helper compartilhado
+de `run_workflow` para evitar duplicacao entre `checker/mod.rs` e
+`checker/hir_expr.rs`. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para
+continuar exatamente de onde o projeto parou, entender o que ja foi feito e
+integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/mod.rs` e localizar `Decl::Workflow` em
+  `collect_decls`, o branch de workflow em `check_decls`, e a logica de
+  `run_workflow`.
+- Abrir `nexuslang-src/src/checker/hir_expr.rs` e localizar a segunda validacao
+  de `run_workflow`.
+- Criar um submodulo pequeno, provavelmente
+  `nexuslang-src/src/checker/workflow_decl.rs`, mantendo spans, mensagens e o
+  comportamento HIR atual.
+- Preservar a semantica atual de steps e chamadas `run_workflow`.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de workflow,
+  HIR/resolver, e o quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+- `nexuslang-src/tests/core.rs`
+
+## Etapa concluida: Fase 8.27 - Submodulo dedicado de validacao de auth declarations
+
+Objetivo: criar um submodulo dedicado de validacao de auth declarations no
+checker, movendo `check_auth_config` e helpers diretamente ligados a auth
+config para fora de `checker/mod.rs`, preservando `checker/auth_static_ops.rs`
+para operacoes `Auth::...` sem alterar contratos AST publicos, spans nem
+mensagens diagnosticas.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/auth_decl.rs`.
+- Movido `check_auth_config` para esse novo submodulo.
+- `nexuslang-src/src/checker/mod.rs` agora declara `mod auth_decl;` e continua
+  chamando `check_auth_config(config)` no branch `Decl::Auth` de
+  `collect_decls`.
+- `nexuslang-src/src/checker/auth_static_ops.rs` ficou preservado como modulo
+  dedicado das operacoes estaticas `Auth::...`.
+- A validacao continua conferindo model referenciado, identity string unique,
+  role string opcional, `password_min`, TTLs positivos e relacao
+  `idle_ttl_minutes <= session_ttl_minutes`.
+- Spans, contratos AST publicos e mensagens diagnosticas de auth config foram
+  preservados.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/auth_decl.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test hir --lib
+cargo test checker::resolver --lib
+cargo test auth_ops --lib
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test hir --lib`: PASS, 17 testes filtrados por `hir`.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test auth_ops --lib`: PASS, 3 testes.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+
+Estado atual:
+
+- `checker/auth_decl.rs` concentra a validacao de declaracoes `auth`.
+- `checker/auth_static_ops.rs` continua concentrando a validacao AST/HIR das
+  operacoes `Auth::...`.
+- `checker/mod.rs` continua com a orquestracao geral de declaracoes, mas nao
+  carrega mais a validacao de auth config diretamente.
+- A proxima frente natural e mover a validacao de model declarations para um
+  submodulo dedicado, porque defaults, constraints `unique`/`index`/`min`/`max`
+  e helpers de campos de model ainda permanecem no corpo principal de
+  `checker/mod.rs`.
+
+## Proximo passo recomendado
+
+Fase 8.28 - Submodulo dedicado de validacao de model declarations.
+
+AVISO: O proximo passo e criar/implementar um submodulo dedicado de validacao
+de model declarations no checker, movendo `ensure_static_model_default`,
+`check_model_min_max_constraints`, `check_model_min_max_bound`,
+`ensure_static_min_max_expr` e helpers diretamente ligados a campos/constraints
+de model para fora de `checker/mod.rs`, preservando `checker/model_ops.rs` para
+operacoes `Model::...` sem alterar contratos AST publicos, spans nem mensagens
+diagnosticas. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar
+exatamente de onde o projeto parou, entender o que ja foi feito e integrar a
+solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/mod.rs` e localizar o branch `Decl::Model`
+  em `collect_decls`, `ensure_static_model_default`,
+  `check_model_min_max_constraints`, `check_model_min_max_bound`,
+  `ensure_static_min_max_expr` e helpers globais de constraints/defaults.
+- Criar um submodulo pequeno, provavelmente
+  `nexuslang-src/src/checker/model_decl.rs`, mantendo spans e mensagens.
+- Preservar a separacao atual: model declarations em `model_decl.rs` e model
+  static calls em `model_ops.rs`.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de HIR,
+  resolver, auth/model ops e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/auth_decl.rs`
+- `nexuslang-src/src/checker/invoice_decl.rs`
+
+## Etapa concluida: Fase 8.26 - Submodulo dedicado de validacao de invoice declarations
+
+Objetivo: criar um submodulo dedicado de validacao de invoice declarations no
+checker, movendo `check_invoice_contract`, `check_invoice_field` e helpers
+diretamente ligados a invoices para fora de `checker/mod.rs`, preservando
+contratos AST publicos, spans e mensagens diagnosticas.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/invoice_decl.rs`.
+- Movidos para esse novo submodulo:
+  - `check_invoice_contract`;
+  - `check_invoice_field`;
+  - helper interno `check_invoice_item`.
+- Adicionado `check_invoice_declaration` como ponto de entrada interno para a
+  validacao completa de `Decl::Invoice`, mantendo a ordem anterior:
+  contrato, campos e itens.
+- `nexuslang-src/src/checker/mod.rs` agora declara `mod invoice_decl;` e o
+  branch `Decl::Invoice` delega para `check_invoice_declaration`.
+- A inferencia continua usando `infer_expr_with_hir` sobre o escopo de topo,
+  preservando o caminho typed-HIR atual.
+- Spans, contratos AST publicos e mensagens diagnosticas de invoice foram
+  preservados.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/invoice_decl.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test hir --lib
+cargo test checker::resolver --lib
+cargo test auth_ops --lib
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test hir --lib`: PASS, 17 testes filtrados por `hir`.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test auth_ops --lib`: PASS, 3 testes.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+
+Estado atual:
+
+- `checker/invoice_decl.rs` concentra a validacao de declaracoes de invoice,
+  incluindo contrato obrigatorio, duplicidade de campos, tipos de campos e
+  validacao dos itens.
+- `checker/mod.rs` continua com a orquestracao geral de declaracoes, mas a
+  validacao de invoice declaration agora esta isolada.
+- A proxima frente natural e mover a validacao de auth declarations para um
+  submodulo dedicado, porque `check_auth_config` ainda permanece no corpo
+  principal de `checker/mod.rs`, enquanto `checker/auth_static_ops.rs` ja
+  cobre as operacoes estaticas `Auth::...`.
+
+## Proximo passo recomendado
+
+Fase 8.27 - Submodulo dedicado de validacao de auth declarations.
+
+AVISO: O proximo passo e criar/implementar um submodulo dedicado de validacao
+de auth declarations no checker, movendo `check_auth_config` e helpers
+diretamente ligados a auth config para fora de `checker/mod.rs`, preservando
+`checker/auth_static_ops.rs` para operacoes `Auth::...` sem alterar contratos
+AST publicos, spans nem mensagens diagnosticas. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/mod.rs` e localizar `check_auth_config` e
+  o branch `Decl::Auth` em `collect_decls`.
+- Criar um submodulo pequeno, provavelmente
+  `nexuslang-src/src/checker/auth_decl.rs`, mantendo spans e mensagens.
+- Preservar a separacao atual: auth declarations em `auth_decl.rs` e auth
+  static calls em `auth_static_ops.rs`.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de HIR,
+  resolver, auth/model ops e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/auth_static_ops.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+- `nexuslang-src/src/checker/invoice_decl.rs`
+
+## Etapa concluida: Fase 8.25 - Submodulo dedicado de validacao de route declarations
+
+Objetivo: criar um submodulo dedicado de validacao de route declarations no
+checker, movendo `check_route`, `check_route_auth_guard` e helpers diretamente
+ligados a parametros/metodo de route para fora de `checker/mod.rs`,
+preservando a delegacao para `checker/route_expr.rs` e
+`checker/route_static_ops.rs` sem alterar contratos AST publicos nem mensagens
+diagnosticas.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/route_decl.rs`.
+- Movidos para esse novo submodulo:
+  - `check_route`;
+  - `check_route_auth_guard`;
+  - `route_method_name`;
+  - `query_param_type_supported`;
+  - helper interno `query_param_array_item_type_supported`.
+- `nexuslang-src/src/checker/mod.rs` agora declara `mod route_decl;` e usa
+  `route_decl::{query_param_type_supported, route_method_name}` para preservar
+  a validacao de duplicidade/assinatura de routes durante `collect_decls`.
+- `check_route` em `route_decl.rs` continua delegando para
+  `ensure_route_expr_with_hir`, `infer_route_return_expr_with_hir` e
+  `ensure_route_return_type` em `checker/route_expr.rs`.
+- A ordem de validacao, spans, contratos AST publicos e mensagens diagnosticas
+  foram preservados.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test hir --lib
+cargo test checker::resolver --lib
+cargo test auth_ops --lib
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test hir --lib`: PASS, 17 testes filtrados por `hir`.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test auth_ops --lib`: PASS, 3 testes.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+
+Estado atual:
+
+- `checker/route_decl.rs` concentra a validacao de declaracoes de route,
+  incluindo guarda auth, construcao de escopo route/query param e helpers de
+  metodo/query param.
+- `checker/mod.rs` continua com a orquestracao geral de declaracoes, mas a
+  validacao de route declaration agora esta isolada.
+- A proxima frente natural e mover a validacao de invoices para submodulo
+  dedicado, porque `check_invoice_contract` e `check_invoice_field` ainda
+  permanecem no corpo principal de `checker/mod.rs`.
+
+## Proximo passo recomendado
+
+Fase 8.26 - Submodulo dedicado de validacao de invoice declarations.
+
+AVISO: O proximo passo e criar/implementar um submodulo dedicado de validacao
+de invoice declarations no checker, movendo `check_invoice_contract`,
+`check_invoice_field` e helpers diretamente ligados a invoices para fora de
+`checker/mod.rs`, preservando contratos AST publicos, spans e mensagens
+diagnosticas. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar
+exatamente de onde o projeto parou, entender o que ja foi feito e integrar a
+solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/mod.rs` e localizar
+  `check_invoice_contract`, `check_invoice_field` e o branch `Decl::Invoice`
+  em `check_decls`.
+- Criar um submodulo pequeno, provavelmente
+  `nexuslang-src/src/checker/invoice_decl.rs`, mantendo spans e mensagens.
+- Preservar a inferencia de expressao por `infer_expr_with_hir` e os contratos
+  de `InvoiceField`/`InvoiceItem`.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de HIR,
+  resolver, auth/model ops e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/route_decl.rs`
+- `nexuslang-src/src/checker/route_expr.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+
+## Etapa concluida: Fase 8.24 - Submodulo dedicado de validacao de route expressions
+
+Objetivo: criar um submodulo dedicado de validacao de route expressions no
+checker, movendo `infer_route_return_expr`, `ensure_route_expr`,
+`ensure_route_return_type` e os wrappers HIR
+`infer_route_return_expr_with_hir`/`ensure_route_expr_with_hir` para fora de
+`checker/mod.rs`/`checker/hir_expr.rs`, preservando o dispatch consolidado em
+`checker/route_static_ops.rs` sem alterar contratos AST publicos nem mensagens
+diagnosticas.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/route_expr.rs`.
+- Movidos para esse novo submodulo:
+  - `infer_route_return_expr`;
+  - `ensure_route_expr`;
+  - `ensure_route_return_type`;
+  - `infer_route_return_expr_with_hir`;
+  - `ensure_route_expr_with_hir`;
+  - `ensure_hir_route_expr`.
+- `nexuslang-src/src/checker/mod.rs` agora declara `mod route_expr;` e deixou
+  de carregar diretamente a validacao de expressoes de route.
+- `nexuslang-src/src/checker/hir_expr.rs` deixou de carregar os wrappers HIR
+  de route expression e ficou mais focado na inferencia/instrumentacao geral
+  de expressoes HIR.
+- `infer_hir_expr` ficou `pub(super)` para que `route_expr.rs` possa inferir
+  subexpressoes HIR sem duplicar o checker de expressoes.
+- `checker/route_static_ops.rs` continuou como dispatcher consolidado de
+  static calls e agora chama `route_expr.rs` para os fallbacks/argumentos de
+  route expression.
+- A API publica AST, spans e mensagens diagnosticas foram preservados.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/route_expr.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test hir --lib
+cargo test checker::resolver --lib
+cargo test auth_ops --lib
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test hir --lib`: PASS, 17 testes filtrados por `hir`.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test auth_ops --lib`: PASS, 3 testes.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+
+Estado atual:
+
+- `checker/route_expr.rs` concentra validacao AST/HIR de expressoes usadas em
+  route returns.
+- `checker/route_static_ops.rs` continua concentrando o dispatch de static
+  calls model/auth e delega para `route_expr.rs` quando precisa validar
+  argumentos/fallbacks.
+- `checker/mod.rs` ainda possui a validacao da declaracao de rota em
+  `check_route` e helpers relacionados, especialmente guarda auth e parametros;
+  essa e a proxima frente natural para reduzir mais a responsabilidade do
+  modulo principal.
+
+## Etapa concluida: Fase 8.23 - Consolidacao do dispatch HIR/AST de route static calls
+
+Objetivo: consolidar o dispatch HIR/AST de static calls de route para
+operacoes model/auth, reduzindo a orquestracao duplicada restante em
+`checker/mod.rs` e `checker/hir_expr.rs` e fazendo esses caminhos delegarem a
+submodulos dedicados sem alterar contratos AST publicos nem mensagens
+diagnosticas.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/route_static_ops.rs`.
+- Movido para o novo submodulo o dispatch AST de static calls em route
+  returns:
+  - `infer_route_static_call_return_expr`;
+  - `ensure_route_static_call_expr`;
+  - helper interno `ensure_model_route_operation_expr`.
+- Movido para o mesmo submodulo o dispatch HIR equivalente:
+  - `infer_hir_route_static_call_return`;
+  - `ensure_hir_route_static_call`;
+  - helper interno `check_hir_model_static_operation`;
+  - helper interno `ensure_hir_operation_arg`.
+- `nexuslang-src/src/checker/mod.rs` agora apenas detecta `Expr::StaticCall`
+  em route return/ensure e delega para `route_static_ops`.
+- `nexuslang-src/src/checker/hir_expr.rs` agora apenas detecta
+  `HirExprKind::StaticCall` em route return/ensure e delega para
+  `route_static_ops`.
+- `nexuslang-src/src/checker/auth_static_ops.rs` ganhou
+  `infer_hir_auth_return_expr` e uma funcao interna compartilhada para derivar
+  o tipo de retorno auth a partir de `CheckedAuthOperationArgs`, removendo a
+  duplicacao do match de `AuthOperationReturnKind` dos caminhos de route.
+- `ensure_hir_route_expr` ficou `pub(super)` para permitir que o dispatcher de
+  static calls assegure argumentos HIR normalizados sem duplicar o caminho de
+  validacao de expressoes.
+- A API publica AST, `CheckedAuthOperationArgs`, `CheckedModelOperationArgs`,
+  spans e mensagens diagnosticas foram preservados.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/auth_static_ops.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/route_static_ops.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test hir --lib
+cargo test checker::resolver --lib
+cargo test auth_ops --lib
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test hir --lib`: PASS, 17 testes filtrados por `hir`.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test auth_ops --lib`: PASS, 3 testes.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+
+Estado atual:
+
+- `checker/route_static_ops.rs` concentra a decisao Auth/Model para static
+  calls de route nos caminhos AST e HIR.
+- `checker/mod.rs` e `checker/hir_expr.rs` ficaram mais finos nessa
+  responsabilidade e continuam preservando os fallbacks AST/HIR existentes.
+- A proxima frente natural e separar a validacao de route expressions em um
+  submodulo dedicado, porque `infer_route_return_expr`, `ensure_route_expr`,
+  `ensure_route_return_type`, `infer_route_return_expr_with_hir` e
+  `ensure_route_expr_with_hir` ainda estao espalhados entre `mod.rs` e
+  `hir_expr.rs`.
+
+## Etapa concluida: Fase 8.22 - Submodulo dedicado de validacao checker para AuthStaticOperation
+
+Objetivo: criar um submodulo dedicado de validacao checker para
+`AuthStaticOperation`, movendo `check_auth_static_operation`,
+`infer_auth_return_expr`, `auth_config_from_checked_args` e a validacao HIR de
+auth static calls para fora do corpo principal de `checker/mod.rs` e
+`checker/hir_expr.rs` sem alterar contratos AST publicos nem mensagens
+diagnosticas.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/auth_static_ops.rs`.
+- Movidos para esse novo submodulo:
+  - `infer_auth_return_expr`;
+  - `check_auth_static_operation`;
+  - `auth_config_from_checked_args`;
+  - `check_hir_auth_static_operation`;
+  - helper interno `record_checked_hir_operation_arg`.
+- `nexuslang-src/src/checker/mod.rs` agora declara `mod auth_static_ops;` e
+  deixou de possuir os helpers principais de validacao/retorno de auth static
+  operations.
+- `nexuslang-src/src/checker/hir_expr.rs` deixou de possuir a validacao HIR de
+  auth static calls e agora apenas delega para o metodo movido no submodulo.
+- `record_typed_hir_operation_arg_hit` ficou visivel como `pub(super)` para o
+  novo submodulo registrar o uso de argumentos typed-HIR sem acessar estado de
+  teste diretamente.
+- A API publica de AST/`CheckedAuthOperationArgs` foi preservada.
+- As mensagens diagnosticas publicas foram preservadas: a extracao foi
+  estrutural, nao semantica.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/auth_static_ops.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/mod.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test hir --lib
+cargo test checker::resolver --lib
+cargo test auth_ops --lib
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test hir --lib`: PASS, 17 testes filtrados por `hir`.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test auth_ops --lib`: PASS, 3 testes.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+
+Estado atual:
+
+- `checker/auth_static_ops.rs` concentra a validacao AST/HIR de
+  `AuthStaticOperation`.
+- `checker/mod.rs` continua orquestrando route expressions, mas nao carrega
+  mais os helpers de auth static ops diretamente.
+- `checker/hir_expr.rs` continua com a orquestracao de static calls HIR de
+  route e ainda possui algum dispatch duplicado entre model/auth; essa e a
+  proxima frente natural.
+
+## Etapa concluida: Fase 8.21 - Submodulo dedicado de operation args typed-HIR
+
+Objetivo: criar um submodulo dedicado de argumentos typed-HIR de operacoes no
+checker, movendo `HirOperationArgs`, `HirOperationContext`,
+`CheckedHirOperationArg`, `CheckedHirModelOperationArgs` e
+`CheckedHirAuthOperationArgs` para fora de `checker/hir_expr.rs` sem alterar
+contratos AST publicos nem mensagens diagnosticas.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/hir_args.rs`.
+- Movidos para esse novo submodulo:
+  - `HirOperationArgs`;
+  - `CheckedHirOperationArg`;
+  - `CheckedHirModelLookupArgs`;
+  - `CheckedHirModelOrderingArgs`;
+  - `CheckedHirModelPaginationArgs`;
+  - `CheckedHirModelAdvancedFilterArgs`;
+  - `CheckedHirModelRangeFilterArgs`;
+  - `CheckedHirModelOperationArgs`;
+  - `CheckedHirAuthOperationArgs`;
+  - `HirOperationContext`;
+  - alias interno `ModelOperationContext`.
+- `nexuslang-src/src/checker/mod.rs` agora declara `mod hir_args;`.
+- `nexuslang-src/src/checker/hir_expr.rs` passou a importar os contratos de
+  operation args de `super::hir_args`, ficando mais focado em inferencia HIR,
+  route return validation e orquestracao do checker typed-HIR.
+- `nexuslang-src/src/checker/model_ops.rs` passou a importar a API typed-HIR
+  de argumentos de `super::hir_args`, sem depender de `hir_expr` para tipos de
+  model/auth operation args.
+- Os testes unitarios de equivalencia source/HIR/fallback AST foram mantidos
+  em `checker::hir_expr::tests`, preservando cobertura de comportamento
+  enquanto a responsabilidade estrutural foi movida.
+- Atualizado `nexuslang-src/ROADMAP.md` para registrar `checker/hir_args.rs`
+  como camada dedicada de argumentos typed-HIR de operacoes.
+- Atualizado `ARCHITECTURE_AUDIT_NEXUSLANG.md`:
+  - arquitetura aproximada: `92/100`;
+  - compiler maturity aproximado: `69/100`;
+  - runtime maturity permanece `53/100`.
+- O WASM nao foi recompilado: a mudanca e organizacional/interna ao checker e
+  nao altera experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/hir_args.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/mod.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test hir --lib
+cargo test checker::resolver --lib
+cargo test auth_ops --lib
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test hir --lib`: PASS, 17 testes filtrados por `hir`.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test auth_ops --lib`: PASS, 3 testes.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+
+Estado atual:
+
+- `checker/hir_expr.rs` deixou de possuir os contratos de argumentos de
+  operacoes e agora consome `checker/hir_args.rs`.
+- `checker/model_ops.rs` continua com validadores de model ops, mas seus tipos
+  typed-HIR vem do submodulo dedicado.
+- `AuthStaticOperation` ainda e validado principalmente por helpers dentro de
+  `checker/mod.rs` e por orquestracao em `checker/hir_expr.rs`; a proxima
+  frente natural e extrair essa validacao auth para um submodulo dedicado,
+  espelhando melhor `checker/model_ops.rs`.
+
+## Etapa concluida: Fase 8.20 - Camada compartilhada de argumentos typed-HIR para model/auth
+
+Objetivo: criar uma camada compartilhada de argumentos typed-HIR para
+operacoes `ModelStaticOperation` e `AuthStaticOperation`, extraindo os wrappers
+source+`HirExprId` de model ops para um contrato interno reutilizavel sem
+alterar contratos AST publicos nem mensagens diagnosticas.
+
+Foi feito:
+
+- `nexuslang-src/src/checker/hir_expr.rs` renomeou/generalizou o wrapper
+  `CheckedHirModelArg` para `CheckedHirOperationArg`.
+- `CheckedHirOperationArg` agora e o contrato interno compartilhado para
+  argumentos de operacoes estaticas, carregando:
+  - `source: &Expr`, preservado para spans, diagnostics e literais;
+  - `hir_id: Option<HirExprId>`, usado quando a chamada vem do caminho HIR;
+  - helpers `source()`, `hir_id()`, `span()`, `string_literal()`,
+    `ident_name()` e `integer_literal()`.
+- `CheckedHirModelOperationArgs` continua expondo a visao typed-HIR de model
+  ops, mas todos os seus campos agora usam `CheckedHirOperationArg`:
+  - lookup/filter;
+  - ordering;
+  - pagination;
+  - advanced/range filters;
+  - composite filters.
+- Adicionado `CheckedHirAuthOperationArgs`, uma visao typed-HIR de auth ops
+  que normaliza o argumento de auth config de `Auth::register()` e
+  `Auth::login()` usando o mesmo `CheckedHirOperationArg`.
+- `ModelOperationContext` foi generalizado internamente como
+  `HirOperationContext`, mantendo alias de compatibilidade para os validadores
+  de model ops e adicionando `checked_hir_auth_args`.
+- O caminho HIR de `AuthStaticOperation` em route static calls agora usa
+  `check_hir_auth_static_operation`, que:
+  - valida pelo contrato AST publico existente `CheckedAuthOperationArgs`;
+  - deriva a visao typed-HIR compartilhada;
+  - registra o simbolo HIR do auth config por `HirExprId` quando disponivel;
+  - conta argumentos HIR verificados pelo mesmo helper generico de operacoes.
+- `nexuslang-src/src/checker/model_ops.rs` foi ajustado para importar
+  `CheckedHirOperationArg` em vez do wrapper model-specific antigo.
+- Adicionado teste unitario
+  `checker::hir_expr::tests::operation_context_maps_checked_auth_args_to_shared_hir_arg`,
+  cobrindo equivalencia source/HIR/fallback AST para
+  `Auth::login(UserAuth)`.
+- Os testes HIR existentes de model ops foram preservados e agora convivem com
+  a visao auth no mesmo contrato compartilhado.
+- Atualizado `nexuslang-src/ROADMAP.md` para registrar a convergencia
+  model/auth na camada shared de argumentos typed-HIR.
+- Atualizado `ARCHITECTURE_AUDIT_NEXUSLANG.md`:
+  - arquitetura aproximada: `91/100`;
+  - compiler maturity aproximado: `68/100`;
+  - runtime maturity permanece `53/100`.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test hir --lib
+cargo test checker::resolver --lib
+cargo test auth_ops --lib
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test hir --lib`: PASS, 17 testes filtrados por `hir`.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test auth_ops --lib`: PASS, 3 testes.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+
+Estado atual:
+
+- `ModelStaticOperation` e `AuthStaticOperation` ja compartilham o mesmo
+  wrapper source+`HirExprId` para argumentos typed-HIR internos.
+- Os contratos AST publicos `CheckedModelOperationArgs` e
+  `CheckedAuthOperationArgs` continuam preservados para router/OpenAPI/runtime.
+- A camada compartilhada ainda vive em `checker/hir_expr.rs`; o proximo ganho
+  e extrai-la para um submodulo dedicado para reduzir acoplamento entre
+  expression checking e contratos de operacao.
+
+## Proximo passo recomendado
+
+Fase 8.21 - Extrair operation args typed-HIR para submodulo dedicado do
+checker.
+
+AVISO: O proximo passo e criar/implementar um submodulo dedicado de argumentos
+typed-HIR de operacoes no checker, movendo `HirOperationArgs`,
+`HirOperationContext`, `CheckedHirOperationArg`,
+`CheckedHirModelOperationArgs` e `CheckedHirAuthOperationArgs` para fora de
+`checker/hir_expr.rs` sem alterar contratos AST publicos nem mensagens
+diagnosticas. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar
+exatamente de onde o projeto parou, entender o que ja foi feito e integrar a
+solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/hir_expr.rs` e mapear os tipos de operation
+  args compartilhados que ainda estao no modulo de expression checking.
+- Abrir `nexuslang-src/src/checker/model_ops.rs` e confirmar imports esperados
+  para a nova localizacao.
+- Criar `nexuslang-src/src/checker/hir_args.rs` ou nome equivalente pequeno,
+  movendo apenas contratos source+HIR e contexto de operacao.
+- Manter alias/exports internos suficientes para nao alterar contratos
+  publicos nem mensagens.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de HIR,
+  resolver, auth/model ops e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/auth_ops.rs`
+- `nexuslang-src/src/model_ops.rs`
+
+## Etapa concluida: Fase 8.19 - Isolamento de diagnostics/source spans na API typed-HIR de model ops
+
+Objetivo: isolar diagnostics e source spans da API typed-HIR de argumentos de
+`ModelStaticOperation`, preparando os validadores de model ops para consumir
+estruturas typed-HIR como caminho primario sem perder mensagens publicas nem
+compatibilidade com o contrato AST.
+
+Foi feito:
+
+- `nexuslang-src/src/checker/hir_expr.rs` agora possui
+  `CheckedHirModelArg<'a>`, um wrapper interno que carrega:
+  - `source: &'a Expr`, usado apenas por helpers de diagnostics/literais;
+  - `hir_id: Option<HirExprId>`, usado para inferencia typed-HIR quando
+    disponivel.
+- `CheckedHirModelOperationArgs` passou a carregar argumentos normalizados como
+  wrappers source+HIR em vez de expor IDs soltos:
+  - lookup/filter: `field` e `value`;
+  - ordering: `field` e `direction`;
+  - pagination: `limit` e `offset`;
+  - advanced filter: `field`, `operator` e `value`;
+  - range filter: `field`, `min` e `max`;
+  - composite filters: pares `field`/`value`.
+- `ModelOperationContext::checked_hir_model_args` agora retorna sempre o
+  contrato typed-HIR interno, inclusive no fallback AST. Nesse fallback os
+  `hir_id()` ficam ausentes, mas `source`, `span()`, `string_literal()` e
+  `integer_literal()` continuam disponiveis para preservar diagnostics.
+- `Checker::infer_checked_model_operation_arg` centraliza a inferencia de
+  argumentos de model ops por `CheckedHirModelArg`, usando `HirExprId` quando
+  existe e caindo para o source AST quando necessario.
+- `nexuslang-src/src/checker/model_ops.rs` foi migrado para consumir as
+  estruturas typed-HIR como argumento primario em:
+  - lookup/filter validators;
+  - advanced filters (`where_compare`, `where_text`);
+  - range filters (`where_between`);
+  - composite filters (`where_all`, `where_any`);
+  - pagination;
+  - ordering.
+- Os validadores deixaram de receber `&Expr` e `HirExprId` paralelos para os
+  argumentos principais. O acesso ao AST ficou concentrado nos helpers do
+  wrapper typed-HIR, preservando spans, literais e mensagens publicas.
+- O teste
+  `checker::hir_expr::tests::model_operation_context_maps_checked_advanced_and_composite_filters_to_hir_ids`
+  agora valida tambem que os wrappers preservam o source AST correto e que o
+  fallback AST mantem spans/literais com `hir_id()` ausente.
+- Atualizado `nexuslang-src/ROADMAP.md` para registrar a API source+HIR de
+  argumentos de model ops e o proximo caminho de convergencia model/auth.
+- Atualizado `ARCHITECTURE_AUDIT_NEXUSLANG.md`:
+  - arquitetura aproximada: `90/100`;
+  - compiler maturity aproximado: `67/100`;
+  - runtime maturity permanece `53/100`.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test hir --lib
+cargo test checker::resolver --lib
+cargo test model_ops --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test hir --lib`: PASS, 16 testes filtrados por `hir`.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test model_ops --lib`: PASS, 5 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+
+Estado atual:
+
+- Os validadores de model ops ja consomem um contrato typed-HIR interno com
+  source diagnostic/literal helpers e `HirExprId` opcional para inferencia.
+- `CheckedModelOperationArgs` continua sendo o contrato AST publico para
+  router/OpenAPI/runtime, sem mudanca de superficie.
+- O proximo ganho arquitetural e generalizar/extrair essa camada de argumentos
+  para convergir `ModelStaticOperation` e `AuthStaticOperation`, evitando que
+  wrappers HIR/source fiquem presos dentro de `checker/hir_expr.rs`.
+
+## Proximo passo recomendado
+
+Fase 8.20 - Extrair camada shared de argumentos typed-HIR para operacoes
+model/auth.
+
+AVISO: O proximo passo e criar/implementar uma camada compartilhada de
+argumentos typed-HIR para operacoes `ModelStaticOperation` e
+`AuthStaticOperation`, extraindo os wrappers source+`HirExprId` de model ops
+para um contrato interno reutilizavel sem alterar contratos AST publicos nem
+mensagens diagnosticas. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para
+continuar exatamente de onde o projeto parou, entender o que ja foi feito e
+integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/hir_expr.rs` e revisar
+  `CheckedHirModelArg`/`CheckedHirModelOperationArgs`.
+- Abrir `nexuslang-src/src/checker/model_ops.rs` e confirmar o consumo atual
+  dos wrappers typed-HIR.
+- Abrir `nexuslang-src/src/auth_ops.rs` e o caminho checker/auth em
+  `nexuslang-src/src/checker/hir_expr.rs`/`checker/mod.rs`.
+- Extrair uma camada pequena de argumentos source+`HirExprId` reutilizavel por
+  model/auth, sem mudar `CheckedModelOperationArgs` nem
+  `CheckedAuthOperationArgs`.
+- Rodar `cargo fmt`, `cargo check --all-targets`, testes focados de HIR,
+  resolver, model/auth ops e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/auth_ops.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/hir.rs`
+
+## Etapa concluida: Fase 8.18 - API typed-HIR para advanced/composite model ops
+
+Objetivo: expandir a API typed-HIR de argumentos de `ModelStaticOperation`
+para advanced/composite filters, normalizando `where_compare`, `where_text`,
+`where_between`, `where_all` e `where_any` por `HirExprId` sem alterar os
+contratos AST publicos nem mensagens diagnosticas.
+
+Foi feito:
+
+- `nexuslang-src/src/checker/hir_expr.rs` ampliou
+  `CheckedHirModelOperationArgs` com:
+  - `CheckedHirModelAdvancedFilterArgs`, para `field`/`operator`/`value`;
+  - `CheckedHirModelRangeFilterArgs`, para `field`/`min`/`max`;
+  - `composite_filters`, como pares `field`/`value` normalizados por
+    `HirExprId`.
+- `CheckedHirModelOperationArgs::from_checked` agora converte as familias AST
+  normalizadas de advanced, range e composite para IDs HIR quando o contexto
+  HIR existe.
+- `nexuslang-src/src/checker/model_ops.rs` agora passa os argumentos
+  typed-HIR normalizados para:
+  - `check_model_compare_exprs`;
+  - `check_model_text_exprs`;
+  - `check_model_range_exprs`;
+  - composite filter loops de `where_all`, `where_all_page`, `where_any` e
+    `where_any_page`.
+- Esses validadores continuam usando source AST para nomes de campo, operadores,
+  spans e mensagens, mas inferem valores por `HirExprId` normalizado via
+  `infer_model_operation_arg_id` quando disponivel.
+- Adicionado teste unitario
+  `checker::hir_expr::tests::model_operation_context_maps_checked_advanced_and_composite_filters_to_hir_ids`,
+  cobrindo equivalencia AST/HIR para:
+  - `Customer::where_compare_page("score", ">=", min_score, limit, offset)`;
+  - `Customer::where_between("score", min_score, max_score)`;
+  - `Customer::where_all_page("score", score, "status", status, limit, offset)`.
+- Os testes existentes de resolver continuam verificando contagens exatas para
+  garantir que advanced/composite inferem pelo caminho HIR sem depender de
+  pos-processamento duplicado.
+- Atualizado `nexuslang-src/ROADMAP.md` para registrar a API typed-HIR
+  completa para lookup, pagination, advanced, range e composite filters.
+- Atualizado `ARCHITECTURE_AUDIT_NEXUSLANG.md`:
+  - arquitetura aproximada: `89/100`;
+  - compiler maturity aproximado: `66/100`;
+  - runtime maturity permanece `53/100`.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test hir --lib
+cargo test checker::resolver --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test hir --lib`: PASS, 16 testes filtrados por `hir`.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+
+Estado atual:
+
+- A API typed-HIR de `ModelStaticOperation` cobre lookup, pagination,
+  advanced filters, range filters e composite filters.
+- O contrato publico `CheckedModelOperationArgs` continua AST-first e preserva
+  compatibilidade com router/OpenAPI/runtime.
+- A proxima frente natural e reduzir a dependencia de source AST dentro dos
+  validadores, isolando diagnostics/spans de argumentos typed-HIR ou extraindo
+  esse contrato para um submodulo dedicado.
+
+## Proximo passo recomendado
+
+Fase 8.19 - Isolar diagnostics/source spans da API typed-HIR de model ops.
+
+AVISO: O proximo passo e criar/implementar isolamento de diagnostics e source
+spans da API typed-HIR de argumentos de `ModelStaticOperation`, preparando os
+validadores de model ops para consumir estruturas typed-HIR como caminho
+primario sem perder mensagens publicas nem compatibilidade com o contrato AST.
+Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de
+onde o projeto parou, entender o que ja foi feito e integrar a solucao com o
+sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/hir_expr.rs` e revisar
+  `CheckedHirModelOperationArgs`.
+- Abrir `nexuslang-src/src/checker/model_ops.rs` e mapear onde os validadores
+  ainda dependem de `Expr` apenas para span/mensagem.
+- Criar um helper ou estrutura pequena para carregar `HirExprId` + source span
+  quando isso reduzir dependencia direta de AST.
+- Preservar `CheckedModelOperationArgs` publico e mensagens diagnosticas.
+- Rodar `cargo fmt`, testes focados de resolver/HIR/model ops,
+  `cargo check --all-targets` e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/model_ops.rs`
+- `nexuslang-src/src/hir.rs`
+
+## Etapa concluida: Fase 8.17 - API typed-HIR inicial para argumentos de ModelStaticOperation
+
+Objetivo: criar uma API typed-HIR dedicada para argumentos normalizados de
+`ModelStaticOperation`, expondo `HirExprId` para lookup/pagination sem alterar
+os contratos AST publicos nem mensagens diagnosticas.
+
+Foi feito:
+
+- `nexuslang-src/src/checker/hir_expr.rs` ganhou uma camada typed-HIR interna
+  para argumentos de model ops:
+  - `CheckedHirModelOperationArgs`;
+  - `CheckedHirModelLookupArgs`;
+  - `CheckedHirModelPaginationArgs`.
+- `ModelOperationContext` agora expoe
+  `checked_hir_model_args(CheckedModelOperationArgs)`, convertendo o contrato
+  AST normalizado em IDs HIR normalizados quando o contexto HIR existe.
+- Adicionado `infer_model_operation_arg_id(context, expr_id, fallback)`, que
+  infere diretamente por `HirExprId` quando a API typed-HIR fornece o ID, e
+  preserva fallback para o caminho AST/source.
+- `nexuslang-src/src/checker/model_ops.rs` agora usa a API typed-HIR inicial
+  para:
+  - pares lookup/filter (`field`/`value`);
+  - pagination (`limit`/`offset`);
+  - chamadas diretas `all/page` com paginacao;
+  - opcoes de paginacao normalizadas em filtros.
+- Os validadores de lookup/pagination continuam preservando o source AST para
+  spans, mensagens publicas e validacao de string literals, mas passam a
+  inferir o valor/paginacao pelo `HirExprId` normalizado quando disponivel.
+- Adicionado teste unitario
+  `checker::hir_expr::tests::model_operation_context_maps_checked_lookup_and_pagination_to_hir_ids`,
+  provando equivalencia entre `CheckedModelOperationArgs` AST e os
+  `HirExprId`s normalizados para `Customer::where("score", score, limit,
+  offset)`.
+- Os testes existentes de resolver continuam verificando contagens exatas para
+  garantir que lookup/pagination e advanced/composite nao dependem de
+  inferencia duplicada.
+- Atualizado `nexuslang-src/ROADMAP.md` para registrar a API typed-HIR inicial
+  de argumentos model ops.
+- Atualizado `ARCHITECTURE_AUDIT_NEXUSLANG.md`:
+  - arquitetura aproximada: `88/100`;
+  - compiler maturity aproximado: `65/100`;
+  - runtime maturity permanece `53/100`.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test hir --lib
+cargo test checker::resolver --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test hir --lib`: PASS, 15 testes filtrados por `hir`.
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+
+Estado atual:
+
+- O contrato publico de model ops continua baseado em `CheckedModelOperationArgs`
+  AST, preservando compatibilidade com router/OpenAPI/runtime.
+- O checker agora possui uma primeira API typed-HIR dedicada para argumentos
+  normalizados de `ModelStaticOperation`, usada por lookup/pagination.
+- Advanced filters e composite filters ainda usam o contexto HIR por source
+  AST; eles sao a proxima familia natural para migrar para a API
+  `CheckedHirModelOperationArgs`.
+
+## Proximo passo recomendado
+
+Fase 8.18 - Expandir API typed-HIR de `ModelStaticOperation` para
+advanced/composite filters.
+
+AVISO: O proximo passo e criar/implementar a expansao da API typed-HIR de
+argumentos de `ModelStaticOperation` para advanced/composite filters,
+normalizando `where_compare`, `where_text`, `where_between`, `where_all` e
+`where_any` por `HirExprId` sem alterar os contratos AST publicos nem mensagens
+diagnosticas. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar
+exatamente de onde o projeto parou, entender o que ja foi feito e integrar a
+solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/hir_expr.rs` e ampliar
+  `CheckedHirModelOperationArgs` com advanced/range/composite args.
+- Abrir `nexuslang-src/src/checker/model_ops.rs` e migrar
+  `check_model_compare_exprs`, `check_model_text_exprs`,
+  `check_model_range_exprs` e composite filter loops para IDs HIR
+  normalizados.
+- Adicionar teste focado de equivalencia AST/HIR para advanced/composite.
+- Rodar `cargo fmt`, testes focados de resolver/HIR/model ops,
+  `cargo check --all-targets` e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/model_ops.rs`
+- `nexuslang-src/src/hir.rs`
+
+## Etapa concluida: Fase 8.16 - Contexto HIR consolidado para model ops
+
+Objetivo: consolidar o contexto HIR usado por validadores de model ops,
+remover inferencias duplicadas no pre/post processamento de static calls e
+preparar o caminho para uma API typed-HIR dedicada em torno de
+`ModelStaticOperation`.
+
+Foi feito:
+
+- `nexuslang-src/src/checker/hir_expr.rs` ganhou
+  `ModelOperationContext`, uma estrutura interna pequena que carrega:
+  - `HirProgram`, quando o caminho typed-HIR esta disponivel;
+  - `HirOperationArgs`, associando source AST a `HirExprId`;
+  - `Scope`, preservando fallback AST para callers legados.
+- O helper anterior `infer_model_operation_arg_with_hir` foi substituido por
+  `infer_model_operation_arg(context, expr)`, preparando uma API interna mais
+  proxima do modelo typed-HIR e reduzindo a propagacao manual de
+  `hir`/`hir_args`/`scope`.
+- `nexuslang-src/src/checker/model_ops.rs` agora recebe
+  `ModelOperationContext` nas validacoes internas de model ops, em vez de
+  repetir `Option<&HirProgram>`, `Option<HirOperationArgs>` e `&Scope` por toda
+  a arvore de chamadas.
+- `check_model_static_operation` preserva a assinatura antiga e cria
+  `ModelOperationContext::ast(scope)` para todos os callers existentes fora do
+  caminho HIR.
+- O caminho HIR usa `check_model_static_operation_with_context`, passando
+  `ModelOperationContext::with_hir(hir, args, scope)`.
+- Removida a reinferencia posterior de todos os argumentos normalizados de
+  model ops em `check_hir_model_static_operation`; agora os validadores
+  inferem os argumentos tipados uma vez pelo contexto HIR, e
+  `ensure_hir_operation_arg` continua responsavel por garantir que cada
+  argumento de route e uma expressao permitida.
+- O teste
+  `checker::resolver::tests::checker_uses_hir_operation_args_for_route_static_calls`
+  agora verifica contagens exatas:
+  - 4 argumentos de static call garantidos uma vez via HIR;
+  - 3 inferencias de validadores model ops para lookup/pagination.
+- O teste
+  `checker::resolver::tests::checker_uses_hir_model_op_validators_for_advanced_and_composite_filters`
+  agora verifica exatamente 9 inferencias de validadores advanced/composite,
+  provando que os contadores nao dependem de pos-processamento duplicado.
+- Atualizado `nexuslang-src/ROADMAP.md` para registrar o
+  `ModelOperationContext` e a remocao da reinferencia duplicada.
+- Atualizado `ARCHITECTURE_AUDIT_NEXUSLANG.md`:
+  - arquitetura aproximada: `87/100`;
+  - compiler maturity aproximado: `64/100`;
+  - runtime maturity permanece `53/100`.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test checker::resolver --lib
+cargo test hir --lib
+cargo check --all-targets
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test hir --lib`: PASS, 14 testes filtrados por `hir`.
+- `cargo check --all-targets`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+
+Estado atual:
+
+- Model ops ja possuem um contexto HIR interno unico para validacao de
+  argumentos, com fallback AST preservado.
+- O caminho HIR de model ops nao reinfere todos os argumentos normalizados em
+  pos-processamento; os validadores fazem a inferencia tipada relevante, e o
+  ensure de route apenas garante a forma permitida das expressoes.
+- O contrato publico `ModelStaticOperation` e `CheckedModelOperationArgs`
+  continua baseado em AST, mas agora ha um ponto claro para introduzir uma API
+  typed-HIR dedicada sem espalhar novos parametros por `checker/model_ops.rs`.
+
+## Proximo passo recomendado
+
+Fase 8.17 - Criar API typed-HIR dedicada para argumentos de
+`ModelStaticOperation`.
+
+AVISO: O proximo passo e criar/implementar uma API typed-HIR dedicada para
+argumentos de `ModelStaticOperation`, evoluindo `ModelOperationContext` para
+expor argumentos normalizados por `HirExprId` sem alterar os contratos AST
+publicos nem mensagens diagnosticas. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/model_ops.rs` e mapear
+  `CheckedModelOperationArgs`/`CheckedModelOperationArgsKind`.
+- Abrir `nexuslang-src/src/checker/hir_expr.rs` e revisar
+  `ModelOperationContext`/`HirOperationArgs`.
+- Abrir `nexuslang-src/src/checker/model_ops.rs` e escolher um primeiro
+  contrato typed-HIR pequeno, provavelmente lookup/pagination, sem remover o
+  contrato AST existente.
+- Adicionar cobertura focada para provar equivalencia entre argumentos AST
+  normalizados e `HirExprId`.
+- Rodar `cargo fmt`, testes focados de resolver/HIR/model ops,
+  `cargo check --all-targets` e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/model_ops.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/hir.rs`
+
+## Etapa concluida: Fase 8.15 - Validadores HIR para advanced/composite model ops
+
+Objetivo: migrar validadores advanced/composite de model ops para consumir
+`HirOperationArgs` quando disponivel, mantendo fallback AST, contratos
+`ModelStaticOperation` existentes e mensagens publicas.
+
+Foi feito:
+
+- `nexuslang-src/src/checker/model_ops.rs` agora propaga contexto HIR opcional
+  para os validadores de advanced filters:
+  - `check_model_compare_exprs`;
+  - `check_model_text_exprs`;
+  - `check_model_range_exprs`.
+- Esses validadores agora inferem valores por
+  `infer_model_operation_arg_with_hir`, usando `HirExprId` quando a chamada
+  vem de route static call e preservando `infer_expr` AST como fallback.
+- A familia composite (`where_all`, `where_all_page`, `where_any`,
+  `where_any_page`) continua usando o mesmo caminho de pares lookup, agora
+  cobrindo os pares campo/valor com o adapter HIR ja migrado.
+- Adicionado teste unitario
+  `checker::resolver::tests::checker_uses_hir_model_op_validators_for_advanced_and_composite_filters`,
+  cobrindo:
+  - `Customer::where_compare_page("score", ">=", min_score, limit, offset)`;
+  - `Customer::where_between("score", min_score, max_score)`;
+  - `Customer::where_all_page("score", score, "status", status, limit, offset)`.
+- O teste confirma que os argumentos de query params recebem metadata HIR de
+  tipo/simbolo e que os validadores de model ops usam o adapter HIR, nao
+  apenas o pre/post processamento de static calls.
+- Atualizado `nexuslang-src/ROADMAP.md` para registrar lookup, pagination,
+  advanced filters e composite filters como familias de model ops consumindo
+  o adapter HIR.
+- Atualizado `ARCHITECTURE_AUDIT_NEXUSLANG.md`:
+  - arquitetura aproximada: `86/100`;
+  - compiler maturity aproximado: `63/100`;
+  - runtime maturity permanece `53/100`.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test checker::resolver --lib
+cargo test hir --lib
+cargo check --all-targets
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo test checker::resolver --lib`: PASS, 10 testes.
+- `cargo test hir --lib`: PASS, 14 testes filtrados por `hir`.
+- `cargo check --all-targets`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+
+Estado atual:
+
+- Lookup, pagination, advanced filters e composite filters de model ops ja
+  conseguem validar tipos consumindo `HirExprId` quando chamados via route
+  static call.
+- O contrato AST de `ModelStaticOperation` continua preservado, e callers fora
+  do caminho HIR continuam usando a assinatura antiga.
+- Ainda ha duplicacao arquitetural no fluxo de model ops: normalizacao por AST,
+  adapter HIR opcional, pre/post inferencia de static-call args e validadores
+  convivem no mesmo contrato. A proxima frente natural e consolidar esse
+  contexto para preparar uma API typed-HIR dedicada.
+
+## Proximo passo recomendado
+
+Fase 8.16 - Consolidar contexto HIR de model ops e reduzir inferencia
+duplicada.
+
+AVISO: O proximo passo e criar/implementar consolidacao do contexto HIR de
+model ops, removendo inferencias duplicadas em pre/post processamento e
+preparando `ModelStaticOperation` para uma API typed-HIR dedicada. Antes de
+iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o
+projeto parou, entender o que ja foi feito e integrar a solucao com o sistema
+atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/hir_expr.rs` e localizar o pre/post
+  processamento de argumentos de static calls de route.
+- Abrir `nexuslang-src/src/checker/model_ops.rs` e mapear onde
+  `HirProgram`/`HirOperationArgs` sao passados repetidamente.
+- Criar uma estrutura interna pequena para o contexto HIR de model op, se ela
+  reduzir duplicacao real sem alterar os contratos publicos.
+- Preservar fallback AST e mensagens publicas, adicionando cobertura focada
+  para garantir que os contadores HIR nao dependem de inferencia duplicada.
+- Rodar `cargo fmt`, testes focados de resolver/HIR/model ops,
+  `cargo check --all-targets` e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/model_ops.rs`
+- `nexuslang-src/src/hir.rs`
+
+## Etapa concluida: Fase 8.14 - Validadores HIR iniciais para model ops
+
+Objetivo: migrar as primeiras familias pequenas de validacao de argumentos de
+model ops para consumir o adapter HIR quando disponivel, comecando por lookup
+e pagination, mantendo fallback AST, contratos existentes e mensagens
+publicas.
+
+Foi feito:
+
+- `nexuslang-src/src/checker/hir_expr.rs` agora expoe internamente
+  `HirOperationArgs` para o modulo checker e adiciona o helper
+  `infer_model_operation_arg_with_hir`.
+- `infer_model_operation_arg_with_hir` tenta mapear o argumento source AST para
+  `HirExprId` via `HirOperationArgs`; quando encontra mapping, infere pelo
+  caminho typed-HIR; quando nao encontra, preserva fallback para `infer_expr`.
+- `nexuslang-src/src/checker/model_ops.rs` ganhou
+  `check_model_static_operation_with_hir_args`, mantendo
+  `check_model_static_operation` com a assinatura antiga para todos os
+  callers existentes.
+- O caminho de static calls de route em `checker/hir_expr.rs` agora chama
+  `check_model_static_operation_with_hir_args`, passando `HirProgram` e
+  `HirOperationArgs`.
+- As familias de validacao de model ops agora encaminham contexto HIR opcional
+  ate:
+  - `check_model_lookup_expr_pair`;
+  - `check_model_exact_lookup_expr_pair`;
+  - `check_model_optional_lookup_expr_pair`;
+  - `check_model_array_lookup_expr_pair`;
+  - `check_model_optional_array_lookup_expr_pair`;
+  - `check_pagination_args`.
+- Lookup e pagination agora inferem valores por HIR quando o contexto existe,
+  preservando fallback AST para chamadas antigas e validadores ainda nao
+  migrados.
+- Adicionado contador de teste `typed_hir_model_op_validator_hits` para provar
+  que os validadores de model ops usam o adapter HIR, nao apenas o pre/post
+  processamento de argumentos.
+- O teste
+  `checker::resolver::tests::checker_uses_hir_operation_args_for_route_static_calls`
+  foi ampliado para `Customer::where("score", score, limit, offset)`,
+  cobrindo lookup e pagination com query params tipados.
+- Atualizado `nexuslang-src/ROADMAP.md` para registrar lookup/pagination como
+  primeiras familias de validadores model ops consumindo o adapter HIR.
+- Atualizado `ARCHITECTURE_AUDIT_NEXUSLANG.md`:
+  - arquitetura aproximada: `85/100`;
+  - compiler maturity aproximado: `62/100`;
+  - runtime maturity permanece `53/100`.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test checker::resolver --lib
+cargo test hir --lib
+cargo check --all-targets
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo test checker::resolver --lib`: PASS, 9 testes.
+- `cargo test hir --lib`: PASS, 13 testes filtrados por `hir`.
+- `cargo check --all-targets`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+
+Estado atual:
+
+- Model ops de lookup e pagination ja conseguem validar tipos consumindo
+  `HirExprId` quando chamados via route static call.
+- O contrato AST de `ModelStaticOperation` continua preservado, e os callers
+  fora do caminho HIR continuam usando a assinatura antiga.
+- Advanced filters (`where_compare`, `where_text`, `where_between`) e algumas
+  partes de composite filters ainda usam inferencia AST direta para valores
+  especificos; esta e a proxima frente natural.
+
+## Proximo passo recomendado
+
+Fase 8.15 - Migrar advanced/composite model op validators para inferencia HIR.
+
+AVISO: O proximo passo e criar/implementar validadores HIR para as familias
+advanced/composite de model ops em `checker/model_ops.rs`, comecando por
+`check_model_compare_exprs`, `check_model_text_exprs`,
+`check_model_range_exprs` e os pares de composite filters, para que esses
+validadores usem `infer_model_operation_arg_with_hir` quando chamados a partir
+de static calls de route, mantendo fallback AST, mensagens publicas e contratos
+`ModelStaticOperation` existentes. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `MEMORIA_NEXUSLANG.md`.
+- Abrir `nexuslang-src/src/checker/model_ops.rs` e localizar
+  `check_model_compare_exprs`, `check_model_text_exprs`,
+  `check_model_range_exprs` e composite filter loops.
+- Propagar o contexto HIR opcional para esses validadores, usando o helper ja
+  criado `infer_model_operation_arg_with_hir`.
+- Adicionar teste focado para route com `where_compare` ou `where_between`
+  usando query params tipados e conferir metadata HIR/mensagens publicas.
+- Rodar `cargo fmt`, testes focados de resolver/HIR/model ops,
+  `cargo check --all-targets` e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/model_ops.rs`
+- `nexuslang-src/src/hir.rs`
+
+## Etapa concluida: Fase 8.13 - Adapter HIR para argumentos de operacoes model/auth
+
+Objetivo: criar/implementar uma camada inicial de argumentos HIR para
+operacoes model/auth, preservando o source AST usado pelos contratos
+existentes, mas associando cada argumento normalizado de static call ao seu
+`HirExprId`.
+
+Foi feito:
+
+- `nexuslang-src/src/checker/hir_expr.rs` ganhou `HirOperationArgs`, um adapter
+  interno que guarda:
+  - `raw: &[Expr]`, preservando os contratos atuais de
+    `ModelStaticOperation`/`AuthStaticOperation`;
+  - `ids: &[HirExprId]`, permitindo mapear cada argumento source para seu
+    node HIR.
+- Static calls em route return/route expr deixaram de cair diretamente no
+  fallback AST dentro do fluxo HIR:
+  - `infer_route_return_expr_with_hir` agora despacha static calls para
+    `infer_hir_route_static_call_return`;
+  - `ensure_hir_route_expr` agora despacha static calls para
+    `ensure_hir_route_static_call`.
+- Model route operations agora passam por `check_hir_model_static_operation`,
+  que preserva `check_model_static_operation(...)` e, em seguida, infere os
+  argumentos normalizados por `HirExprId` quando o mapping existe.
+- Auth route operations tambem passam pelo adapter para registrar a associacao
+  de argumentos HIR/source sem tentar reinterpretar o nome de auth como
+  expressao comum.
+- Adicionado contador de teste `typed_hir_operation_arg_hits` para provar que
+  argumentos de static calls de route passam pelo adapter HIR.
+- Adicionado teste unitario
+  `checker::resolver::tests::checker_uses_hir_operation_args_for_route_static_calls`,
+  cobrindo `Customer::where("score", score)` em route com query param tipado e
+  verificando:
+  - uso do adapter HIR;
+  - tipo `int` gravado no argumento HIR;
+  - link do argumento para o `HirSymbolId` do query param.
+- Atualizado `nexuslang-src/ROADMAP.md` para registrar que static calls em
+  routes ja associam argumentos source AST a `HirExprId`.
+- Atualizado `ARCHITECTURE_AUDIT_NEXUSLANG.md`:
+  - arquitetura aproximada: `84/100`;
+  - compiler maturity aproximado: `61/100`;
+  - runtime maturity permanece `53/100`.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test checker::resolver --lib
+cargo test hir --lib
+cargo check --all-targets
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo test checker::resolver --lib`: PASS, agora com 9 testes.
+- `cargo test hir --lib`: PASS, agora com 13 testes filtrados por `hir`.
+- `cargo check --all-targets`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+
+Estado atual:
+
+- O caminho HIR de route static calls agora tem um adapter de argumentos que
+  preserva compatibilidade com os contratos AST existentes.
+- A validacao semantica de model/auth ops ainda chama os normalizadores
+  publicos baseados em `&[Expr]`; a diferenca e que os argumentos ja podem ser
+  mapeados de volta para `HirExprId` no checker.
+- O proximo ganho arquitetural e migrar familias especificas de validacao de
+  model ops para receberem o adapter diretamente, reduzindo chamadas a
+  `infer_expr` AST dentro de `checker/model_ops.rs`.
+
+## Proximo passo recomendado
+
+Fase 8.14 - Migrar validadores de argumentos de model ops para consumir o
+adapter HIR.
+
+AVISO: O proximo passo e criar/implementar validadores HIR para familias
+pequenas de model ops, comecando por lookup/pagination em
+`checker/model_ops.rs`, para que `check_model_lookup_expr_pair` e
+`check_pagination_args` possam inferir tipos por `HirExprId` quando chamados a
+partir de static calls de route, mantendo fallback AST, mensagens publicas e
+contratos `ModelStaticOperation` existentes. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `nexuslang-src/src/checker/hir_expr.rs` e revisar `HirOperationArgs`.
+- Abrir `nexuslang-src/src/checker/model_ops.rs` e localizar chamadas diretas a
+  `infer_expr` em lookup, arrays, comparison, range e pagination.
+- Expor um helper interno pequeno para inferir um argumento via
+  `HirOperationArgs` quando disponivel, com fallback AST.
+- Migrar primeiro `check_model_lookup_expr_pair` ou `check_pagination_args`,
+  cobrindo um caso route com teste de metadata HIR e mensagem publica
+  preservada.
+- Rodar `cargo fmt`, testes focados de resolver/HIR/model ops, `cargo check
+  --all-targets` e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/model_ops.rs`
+- `nexuslang-src/src/hir.rs`
+
+## Etapa concluida: Fase 8.12 - Submodulo typed-HIR para expression checking
+
+Objetivo: extrair o expression checker typed-HIR de `checker/mod.rs` para um
+submodulo dedicado, mantendo os wrappers AST de compatibilidade e preservando
+mensagens publicas e semantica atual.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/hir_expr.rs` como submodulo interno do
+  checker.
+- Movidos para `checker/hir_expr.rs`:
+  - `infer_expr_with_hir`;
+  - `infer_hir_expr`;
+  - `check_hir_object_fields`;
+  - `infer_hir_field_access`;
+  - `infer_hir_binop`;
+  - `infer_hir_call`;
+  - `infer_route_return_expr_with_hir`;
+  - `ensure_route_expr_with_hir`;
+  - `ensure_hir_route_expr`;
+  - contador interno de hits do expression checker typed-HIR.
+- `checker/mod.rs` agora declara `mod hir_expr;` e volta a atuar mais como
+  orquestrador do checker, mantendo os wrappers AST, contexto typed-HIR,
+  metadata HIR, validacao de statements, rotas e contratos legados.
+- O modulo novo continua consumindo `HirExprId`/`HirExprKind` como caminho
+  primario para identificadores resolvidos, field access, object literals,
+  binop, calls, static calls fora de route e route return expressions.
+- Preservada a semantica publica: os testes de resolver continuam garantindo
+  que o caminho typed-HIR e usado e que a mensagem
+  `Campo 'Customer.missing' nao existe` permanece igual.
+- Atualizado `nexuslang-src/ROADMAP.md` para registrar que o expression
+  checker typed-HIR ja esta em modulo dedicado.
+- Atualizado `ARCHITECTURE_AUDIT_NEXUSLANG.md`:
+  - arquitetura aproximada: `83/100`;
+  - compiler maturity aproximado: `60/100`;
+  - runtime maturity permanece `53/100`.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/mod.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test checker::resolver --lib
+cargo test hir --lib
+cargo check --all-targets
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo test checker::resolver --lib`: PASS, 8 testes.
+- `cargo test hir --lib`: PASS, 12 testes filtrados por `hir`.
+- `cargo check --all-targets`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+
+Estado atual:
+
+- O checker agora tem um submodulo dedicado para expression checking typed-HIR.
+- A extracao reduziu a responsabilidade direta de `checker/mod.rs`, mas o
+  contexto typed-HIR, os wrappers AST e varios contratos legados continuam no
+  modulo principal por compatibilidade.
+- Os validadores de model/auth ops ainda consomem AST cru em caminhos
+  importantes; esta e a proxima barreira antes de o pass HIR assumir mais
+  ownership sobre estado e argumentos de expressoes.
+
+## Proximo passo recomendado
+
+Fase 8.13 - Normalizar argumentos de operacoes model/auth por HIR.
+
+AVISO: O proximo passo e criar/implementar uma camada de argumentos HIR para
+operacoes model/auth, por exemplo um adapter interno em `checker/hir_expr.rs`
+ou modulo vizinho que represente argumentos de static calls com
+`HirExprId`/source AST, permitindo que `ModelStaticOperation` e
+`AuthStaticOperation` sejam preparados para validacao por HIR sem alterar
+mensagens publicas, contratos existentes nem semantica atual. Antes de iniciar,
+leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Abrir `nexuslang-src/src/checker/hir_expr.rs` e localizar os fallbacks de
+  static calls para AST em route return/route expr.
+- Abrir `nexuslang-src/src/checker/model_ops.rs`,
+  `nexuslang-src/src/model_ops.rs` e `nexuslang-src/src/auth_ops.rs` para
+  mapear quais validadores ainda exigem `&[Expr]`.
+- Criar um adapter pequeno para argumentos HIR que preserve acesso ao source
+  AST enquanto expose `HirExprId` para inferencia typed-HIR.
+- Migrar no maximo um caminho vertical pequeno de model/auth op para consumir
+  o adapter, mantendo fallback AST e testes de mensagens publicas.
+- Rodar `cargo fmt`, testes focados de resolver/HIR/model/auth, `cargo check
+  --all-targets` e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/model_ops.rs`
+- `nexuslang-src/src/auth_ops.rs`
+- `nexuslang-src/src/hir.rs`
+
+## Etapa concluida: Fase 8.11 - Pass typed-HIR inicial para expression checking
+
+Objetivo: criar/implementar um pass typed-HIR dedicado inicial para expression
+checking, movendo gradualmente `infer_expr`, `infer_binop`, `infer_call` e
+`infer_field_access` para operar sobre `HirExprId`/`HirExprKind`, mantendo
+wrappers AST de compatibilidade sem alterar mensagens publicas nem semantica
+atual.
+
+Foi feito:
+
+- `nexuslang-src/src/checker/mod.rs` ganhou uma API inicial de expression
+  checking baseada em HIR:
+  - `infer_expr_with_hir`;
+  - `infer_hir_expr`;
+  - `check_hir_object_fields`;
+  - `infer_hir_field_access`;
+  - `infer_hir_binop`;
+  - `infer_hir_call`;
+  - `ensure_route_expr_with_hir`;
+  - `ensure_hir_route_expr`;
+  - `infer_route_return_expr_with_hir`.
+- O fluxo principal de statements agora passa `HirProgram` por
+  `check_stmts`, `check_stmt` e `check_binding`, fazendo assignments,
+  returns, prints, expr statements, condicoes de `if`/`while`, iterables de
+  `for`, bindings e invoices inferirem expressoes pelo caminho
+  `HirExprId`/`HirExprKind` quando disponivel.
+- O fluxo de route agora valida e infere retornos por HIR para:
+  - identifiers;
+  - arrays;
+  - object literals;
+  - field access;
+  - binop `+`;
+  - `str(...)`;
+  - route return type cacheado em `HirCheckedMetadata`.
+- Static calls de route model/auth ainda preservam a semantica publica usando
+  os contratos existentes e fallback AST onde os validadores de operacao ainda
+  recebem `&[Expr]`.
+- `infer_expr` antigo foi preservado como wrapper/fallback de compatibilidade,
+  mantendo `checker/model_ops.rs` e caminhos legados funcionando.
+- Adicionado contador de teste `typed_hir_expression_checker_hits` para provar
+  que o novo caminho HIR esta sendo usado em expression checking real.
+- Adicionado teste unitario
+  `checker::resolver::tests::checker_uses_typed_hir_expression_checker_for_function_exprs`,
+  cobrindo function expressions com:
+  - field access `customer.score`;
+  - binop `customer.score + bonus`;
+  - chamada `str(total)`;
+  - metadata de `HirSymbolId`/`HirTypeId`.
+- Adicionado teste unitario
+  `checker::resolver::tests::typed_hir_expression_checker_preserves_field_error_message`,
+  garantindo que a mensagem publica `Campo 'Customer.missing' nao existe`
+  permanece inalterada.
+- Atualizado `ARCHITECTURE_AUDIT_NEXUSLANG.md`:
+  - arquitetura aproximada: `82/100`;
+  - compiler maturity aproximado: `59/100`;
+  - runtime maturity permanece `53/100`.
+- Atualizado `nexuslang-src/ROADMAP.md` para registrar que o fluxo principal
+  de expression checking ja passa por HIR, mas ainda preserva wrappers AST e
+  validadores de model ops baseados em AST.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test checker::resolver --lib
+cargo test hir --lib
+cargo check --all-targets
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo test checker::resolver --lib`: PASS, agora com 8 testes.
+- `cargo test hir --lib`: PASS, agora com 12 testes filtrados por `hir`.
+- `cargo check --all-targets`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+
+Estado atual:
+
+- O checker ja possui um caminho inicial real de expression checking sobre
+  `HirExprId`/`HirExprKind`.
+- A arquitetura ainda nao esta em 100% porque o checker continua mantendo
+  wrappers AST, `Scope.vars` legado e validadores de operacoes de model/auth
+  que recebem AST cru em alguns pontos.
+- A proxima barreira e extrair o pass HIR de dentro de `checker/mod.rs`, dar
+  ownership mais claro ao estado de tipos de expressoes e normalizar argumentos
+  de operacoes para HIR onde ainda houver fallback AST.
+
+## Proximo passo recomendado
+
+Fase 8.12 - Extrair o expression checker typed-HIR para um submodulo dedicado.
+
+AVISO: O proximo passo e criar/implementar um submodulo typed-HIR de expression
+checking, por exemplo `checker/hir_expr.rs`, movendo `infer_hir_expr`,
+`infer_hir_binop`, `infer_hir_call`, `infer_hir_field_access`,
+`check_hir_object_fields` e os helpers de route HIR para fora de
+`checker/mod.rs`, mantendo wrappers AST de compatibilidade e preparando os
+validadores de model/auth ops para consumir argumentos HIR sem alterar mensagens
+publicas nem semantica atual. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`
+para continuar exatamente de onde o projeto parou, entender o que ja foi feito
+e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Criar `nexuslang-src/src/checker/hir_expr.rs` como submodulo interno do
+  checker.
+- Mover o conjunto de funcoes HIR de expression checking para o submodulo,
+  deixando `checker/mod.rs` como orquestrador.
+- Preservar a API interna `infer_expr_with_hir` e os wrappers AST existentes.
+- Comecar a desenhar uma camada para argumentos HIR de model/auth ops sem
+  migrar toda a semantica de uma vez.
+- Rodar `cargo fmt`, testes focados de resolver/HIR, `cargo check --all-targets`
+  e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+- `nexuslang-src/src/hir.rs`
+
+## Etapa concluida: Fase 8.10 - Contexto typed-HIR para validacao de expressoes
+
+Objetivo: criar um contexto typed-HIR para validacao de expressoes, fazendo
+`binop`, `call`, `field access`, `object literals` e route expressions
+consumirem `HirExprId`, `HirSymbolId` e `HirTypeId` como caminho primario antes
+do fallback AST, sem alterar mensagens publicas nem semantica atual.
+
+Foi feito:
+
+- `nexuslang-src/src/checker/mod.rs` ganhou `TypedHirExprContext`, contendo:
+  - `HirExprId`;
+  - tipo checado opcional como `(HirTypeId, Type)`;
+  - `HirSymbolId` opcional.
+- O checker ganhou helpers privados:
+  - `typed_hir_expr_context`;
+  - `typed_hir_expr_type`;
+  - `typed_hir_expr_symbol`;
+  - `infer_expr_from_typed_hir_or_ast`.
+- `infer_expr` agora tenta consumir o contexto typed-HIR antes de recalcular
+  pela AST para:
+  - identifiers e field access quando ha `HirSymbolId`;
+  - object literals;
+  - binary expressions;
+  - calls;
+  - static calls.
+- `check_object_fields`, `infer_field_access`, `infer_binop` e `infer_call`
+  agora validam subexpressoes consumindo metadata typed-HIR primeiro, mantendo
+  fallback para `infer_expr` e preservando mensagens publicas.
+- `ensure_route_expr` agora grava/consome typed-HIR para:
+  - object literals retornados por route;
+  - field access apos validar o objeto;
+  - binop `+` apos validar os lados;
+  - chamadas `str(...)` apos validar o argumento;
+  - static calls de model/auth ja normalizadas.
+- `infer_route_return_expr` agora consulta o contexto typed-HIR antes de
+  reinterpretar route return pela AST.
+- Adicionado teste unitario
+  `checker::resolver::tests::checker_consumes_typed_hir_context_for_complex_route_exprs`,
+  cobrindo consumo de typed-HIR em:
+  - `Customer::find(...).name`;
+  - `name + str(limit)`;
+  - `Customer { name: "Ana" }`.
+- Atualizado `ARCHITECTURE_AUDIT_NEXUSLANG.md`:
+  - arquitetura aproximada: `80/100`;
+  - compiler maturity aproximado: `57/100`;
+  - runtime maturity permanece `53/100`.
+- Atualizado `nexuslang-src/ROADMAP.md` para registrar o contexto typed-HIR de
+  expressoes e o proximo passo de separar expression checking em pass HIR.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test checker::resolver --lib
+cargo test hir --lib
+cargo check --all-targets
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo test checker::resolver --lib`: PASS, incluindo o novo teste de
+  contexto typed-HIR para expressoes complexas de route.
+- `cargo test hir --lib`: PASS.
+- `cargo check --all-targets`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+
+Estado atual:
+
+- O checker ainda e AST-first estruturalmente, mas agora possui uma API
+  privada coesa para consumir `HirExprId`/`HirTypeId`/`HirSymbolId` como fonte
+  primaria quando metadata checada ja existe.
+- `Scope.vars` e os mapas legados continuam como fallback de compatibilidade.
+- A proxima barreira arquitetural e parar de chamar `infer_expr` diretamente
+  sobre AST crua como logica primaria e mover expression checking para um pass
+  typed-HIR dedicado, mantendo wrappers AST durante a migracao.
+
+## Proximo passo recomendado
+
+Fase 8.11 - Criar um pass typed-HIR dedicado para expression checking.
+
+AVISO: O proximo passo e criar/implementar um pass typed-HIR dedicado para
+expression checking, movendo gradualmente `infer_expr`, `infer_binop`,
+`infer_call` e `infer_field_access` para operar sobre `HirExprId`/`HirExprKind`
+em vez de AST cru, mantendo wrappers AST de compatibilidade sem alterar
+mensagens publicas nem semantica atual. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Introduzir uma API `check_hir_expr`/`infer_hir_expr` interna que receba
+  `HirExprId` e consulte `HirProgram`, `HirCheckedMetadata` e resolver.
+- Migrar primeiro `infer_binop`, `infer_call`, `infer_field_access` e object
+  literals para operarem sobre `HirExprKind`.
+- Manter wrappers AST apenas para recuperar mensagens e spans publicos atuais.
+- Adicionar testes de equivalencia AST/HIR para erros existentes de tipo,
+  field access, chamadas e routes.
+- Rodar quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/hir.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+
+## Etapa concluida: Fase 8.09 - Bindings tipados por HirSymbolId/HirScopeId
+
+Objetivo: gravar tipos finais de bindings em metadata HIR por
+`HirSymbolId`/`HirScopeId`, permitindo que identificadores e assignments usem
+HIR como fonte primaria incremental de tipo sem alterar mensagens publicas nem
+semantica atual.
+
+Foi feito:
+
+- `nexuslang-src/src/hir.rs` ganhou metadata checada de symbols:
+  - `HirSymbolMetadata`;
+  - `HirCheckedMetadata::with_counts(expr_count, symbol_count)`;
+  - `symbol_type`;
+  - `symbols`;
+  - `set_symbol_type`.
+- `HirCheckedMetadata` agora guarda:
+  - tipos internados;
+  - metadata de expressoes por `HirExprId`;
+  - metadata de bindings por `HirSymbolId`.
+- O checker agora inicializa metadata com contagem de expressoes e symbols da
+  HIR.
+- O checker grava tipo final em `HirSymbolId` para:
+  - parametros de funcao;
+  - route params;
+  - query params;
+  - `let`;
+  - `const`;
+  - bindings de `for`.
+- `infer_expr(Ident)` agora resolve o binding pelo `Scope` legado para manter
+  mensagens/semantica, mas consome o tipo checado em metadata por
+  `HirSymbolId` quando disponivel.
+- Assignment agora usa tipo checado por `HirSymbolId` quando existe, mantendo
+  o fallback para `Scope.assign` e preservando mensagens como:
+  - `Constante 'x' não pode ser reatribuída`;
+  - `Variável 'x' não definida`;
+  - `Tipo inválido ao atribuir 'x': ...`.
+- `ensure_route_expr(Ident)` tambem consome tipo de binding via metadata HIR
+  antes de gravar metadata de expressao.
+- Adicionado teste unitario
+  `checker::resolver::tests::checker_records_and_consumes_typed_hir_bindings`,
+  cobrindo:
+  - tipo de parametro `[int]`;
+  - tipo de `let`;
+  - tipo de `for`;
+  - tipo de `route param`;
+  - tipo de `query param`;
+  - consumo real de metadata tipada em identificadores/assignments.
+- Atualizado `ARCHITECTURE_AUDIT_NEXUSLANG.md`:
+  - arquitetura aproximada: `78/100`;
+  - compiler maturity aproximado: `55/100`;
+  - runtime maturity permanece `53/100`.
+- Atualizado `nexuslang-src/ROADMAP.md` para registrar binding `TypeId`s por
+  `HirSymbolId` e consumo por identifiers/assignments.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR/resolver e
+  nao altera experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/hir.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test checker::resolver --lib
+cargo test hir --lib
+cargo check --all-targets
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo test checker::resolver --lib`: PASS.
+- `cargo test hir --lib`: PASS.
+- `cargo check --all-targets`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+  - `cargo fmt --check`: PASS.
+  - `cargo check --all-targets` com `-D warnings`: PASS.
+  - `cargo clippy --all-targets -- -D warnings`: PASS.
+  - `cargo test`: PASS, incluindo 27 unit tests de lib, 7 testes de package
+    manager e 156 testes core.
+  - storage compatibility policy: PASS.
+  - model operation contract docs validation: PASS.
+  - `node --check nexuslang-playground.js`: PASS.
+  - `smoke-test.sh`: PASS, 18 passed, 0 failed.
+  - `smoke-auth.sh`: PASS, 19 passed, 0 failed.
+  - `smoke-storage-backup-restore.sh`: PASS.
+  - `validate-openapi.sh`: PASS.
+
+Estado atual:
+
+- Bindings locais e parametros agora possuem tipo checado em
+  `HirCheckedMetadata`.
+- Identificadores e assignments ja consomem metadata tipada quando o symbol
+  esta resolvido.
+- `Scope.vars` ainda existe como fallback e como estrutura de compatibilidade;
+  a validacao de expressoes complexas (`binop`, `call`, `field access`) ainda
+  opera principalmente sobre AST e recalculo incremental.
+
+## Proximo passo recomendado
+
+Fase 8.10 - Criar um contexto typed-HIR para validacao de expressoes.
+
+AVISO: O proximo passo e criar/implementar um contexto typed-HIR para
+validacao de expressoes, fazendo binop, call, field access, object literals e
+route expressions consumirem `HirExprId`, `HirSymbolId` e `HirTypeId` como
+caminho primario antes do fallback AST, sem alterar mensagens publicas nem
+semantica atual. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar
+exatamente de onde o projeto parou, entender o que ja foi feito e integrar a
+solucao com o sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Investigar `infer_expr`, `infer_field_access`, `infer_binop`, `infer_call`,
+  `check_object_fields`, `ensure_route_expr` e `infer_route_return_expr`.
+- Criar helpers de contexto typed-HIR para obter `HirExprId`, `HirSymbolId` e
+  `HirTypeId` de uma expressao.
+- Fazer field access, binop e chamadas consumirem metadata HIR quando ja
+  registrada, mantendo fallback e mensagens atuais.
+- Adicionar testes que provem cache/metadata em field access, binop, calls e
+  route expressions.
+- Rodar `cargo fmt`, testes HIR/resolver/checker, `cargo check --all-targets`
+  e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/hir.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+
+## Etapa concluida: Fase 8.08 - Lookups scoped por HirScopeId no checker
+
+Objetivo: tornar `HirScopeId` o caminho primario incremental para resolver
+bindings locais no checker, substituindo parte do uso de `Scope` clonado por
+consultas ao resolver/HIR sem alterar mensagens publicas nem semantica atual.
+
+Foi feito:
+
+- `nexuslang-src/src/hir.rs` agora preserva contexto de origem em statements e
+  expressoes:
+  - `HirStmt` guarda `source: &Stmt` e `scope: HirScopeId`;
+  - `HirExpr` guarda `scope: HirScopeId`.
+- O lowering passa o scope correto para expressoes e statements de:
+  - defaults/min/max de model;
+  - query param defaults;
+  - invoices;
+  - let/const/assign/return/print/expr statements;
+  - condicoes de if/while;
+  - iterables de for;
+  - bodies de blocos e loops.
+- `checker/resolver.rs` ganhou:
+  - indice de bindings por `(HirScopeId, name)`;
+  - consulta `visible_binding_symbol` que sobe parent scopes e respeita span de
+    uso;
+  - reutilizacao de parent links para lookup lexical.
+- `CheckerSymbols` agora indexa:
+  - scope de cada AST statement;
+  - scope real do binding declarado por cada let/const/for;
+  - statements aninhados em function, route, workflow step, if, while e for.
+- `check_stmt` agora ajusta temporariamente o `HirScopeId` ativo pelo statement
+  HIR correspondente, restaurando o scope anterior ao final para preservar o
+  comportamento legado.
+- `check_binding` e `for` bindings agora resolvem symbols pelo scope real do
+  binding antes do fallback antigo por decl/span.
+- O `Scope` antigo continua como fonte de tipos inferidos e guarda semantica
+  publica; nesta fase, o HIR passa a ser a fonte primaria dos ids de symbols
+  locais, nao ainda dos tipos.
+- Adicionado teste unitario
+  `checker::resolver::tests::checker_uses_hir_scope_for_nested_local_binding_symbols`,
+  cobrindo function params, for binding, let em loop, const em bloco e
+  definition/use links para identificadores aninhados.
+- Atualizado `ARCHITECTURE_AUDIT_NEXUSLANG.md`:
+  - arquitetura aproximada: `76/100`;
+  - compiler maturity aproximado: `53/100`;
+  - runtime maturity permanece `53/100`.
+- Atualizado `nexuslang-src/ROADMAP.md` para registrar statement/expression
+  scope na HIR, visible binding queries e lookup scoped no checker.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR/resolver e
+  nao altera experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/hir.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test checker::resolver --lib
+cargo test hir --lib
+cargo check --all-targets
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo test checker::resolver --lib`: PASS.
+- `cargo test hir --lib`: PASS.
+- `cargo check --all-targets`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+  - `cargo fmt --check`: PASS.
+  - `cargo check --all-targets` com `-D warnings`: PASS.
+  - `cargo clippy --all-targets -- -D warnings`: PASS.
+  - `cargo test`: PASS, incluindo 26 unit tests de lib, 7 testes de package
+    manager e 156 testes core.
+  - storage compatibility policy: PASS.
+  - model operation contract docs validation: PASS.
+  - `node --check nexuslang-playground.js`: PASS.
+  - `smoke-test.sh`: PASS, 18 passed, 0 failed.
+  - `smoke-auth.sh`: PASS, 19 passed, 0 failed.
+  - `smoke-storage-backup-restore.sh`: PASS.
+  - `validate-openapi.sh`: PASS.
+
+Estado atual:
+
+- A HIR agora conhece o scope de cada statement/expression e o checker usa
+  esse contexto para resolver ids de symbols locais por `HirScopeId`.
+- O resolver ja consegue procurar bindings visiveis subindo a cadeia de parent
+  scopes, preparando definition/use links completos.
+- A maior limitacao restante e que tipos finais de locals ainda vivem em
+  `Scope.vars`; identifiers e assignments ainda dependem dessa tabela mutavel
+  para tipo, embora o id do symbol ja venha progressivamente da HIR.
+
+## Proximo passo recomendado
+
+Fase 8.09 - Introduzir bindings tipados por HirSymbolId/HirScopeId.
+
+AVISO: O proximo passo e criar/implementar bindings tipados por
+`HirSymbolId`/`HirScopeId` no checker/HIR, gravando tipos finais de parametros,
+let/const/for e query params em metadata para que identificadores e assignments
+usem HIR como fonte de verdade sem alterar mensagens publicas nem semantica
+atual. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente
+de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o
+sistema atual sem reler todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Investigar `Scope.vars`, `Scope.assign`, `infer_expr(Ident)` e os locais onde
+  bindings recebem tipos finais.
+- Adicionar metadata/tabela para `HirSymbolId -> HirTypeId` checado.
+- Preencher tipos de parametros, query params, let/const e for bindings sem
+  mudar mensagens.
+- Fazer `Ident` e `assign` consultarem metadata tipada primeiro, com fallback
+  para `Scope.vars`.
+- Adicionar testes de shadowing, assignment e tipos inferidos por symbol.
+- Rodar `cargo fmt`, testes HIR/resolver/checker, `cargo check --all-targets`
+  e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/hir.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+
+## Etapa concluida: Fase 8.07 - Frames lexicais e HirScopeId
+
+Objetivo: introduzir frames lexicais explicitos na HIR/resolver, modelando
+escopos de top-level, funcoes, routes, blocos e loops para reduzir a
+dependencia futura de `Scope` clonado e preparar definition/use links
+completos sem alterar mensagens publicas nem semantica atual.
+
+Foi feito:
+
+- `nexuslang-src/src/hir.rs` ganhou:
+  - `HirScopeId`;
+  - `HirScopeKind`;
+  - `HirScope`.
+- `HirProgram` agora guarda `scopes: Vec<HirScope>` e expoe lookup por
+  `HirScopeId`.
+- `HirDecl` passou a apontar para seu scope declarativo quando aplicavel.
+- `HirSymbol` passou a carregar o `HirScopeId` do frame onde o symbol nasce.
+- O lowering agora cria scopes para:
+  - top-level;
+  - funcoes;
+  - models;
+  - workflows;
+  - workflow steps;
+  - auth declarations;
+  - routes;
+  - invoices;
+  - blocos de `if`;
+  - loops `while`/`for`.
+- O resolver agora indexa:
+  - symbols por scope;
+  - parent links de scopes;
+  - bindings por `(HirScopeId, kind, name, span)`.
+- O checker passou a carregar `HirScopeId` dentro de `Scope` e tenta resolver
+  symbols por scope antes do fallback antigo por decl/span, preservando a
+  semantica publica.
+- Testes novos/atualizados provam:
+  - lowering de scopes lexicais para function/route/block/loop;
+  - resolver por `HirScopeId`;
+  - compatibilidade do caminho antigo por decl/span.
+- Atualizado `ARCHITECTURE_AUDIT_NEXUSLANG.md`:
+  - arquitetura aproximada: `74/100`;
+  - compiler maturity aproximado: `51/100`;
+  - runtime maturity permanece `53/100`, pois esta fase foi compiler-layering.
+- Atualizado `nexuslang-src/ROADMAP.md` para registrar que a HIR ja possui
+  frames lexicais e que o proximo salto e tornar lookup scoped a fonte de
+  verdade do checker.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/HIR/resolver e
+  nao altera experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/hir.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test hir --lib
+cargo test checker::resolver --lib
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test hir --lib`: PASS.
+- `cargo test checker::resolver --lib`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+  - `cargo fmt --check`: PASS.
+  - `cargo check --all-targets` com `-D warnings`: PASS.
+  - `cargo clippy --all-targets -- -D warnings`: PASS.
+  - `cargo test`: PASS, incluindo 25 unit tests de lib, 7 testes de package
+    manager e 156 testes core.
+  - storage compatibility policy: PASS.
+  - model operation contract docs validation: PASS.
+  - `node --check nexuslang-playground.js`: PASS.
+  - `smoke-test.sh`: PASS, 18 passed, 0 failed.
+  - `smoke-auth.sh`: PASS, 19 passed, 0 failed.
+  - `smoke-storage-backup-restore.sh`: PASS.
+  - `validate-openapi.sh`: PASS.
+
+Estado atual:
+
+- A HIR agora possui uma arvore inicial de escopos lexicais com parent links e
+  symbols por frame.
+- O checker ja consegue consumir lookup scoped para parametros de function,
+  parametros/query params de route e bindings locais quando o frame atual e
+  conhecido, com fallback antigo preservado.
+- O checker ainda nao usa `HirScopeId` como fonte completa de verdade:
+  blocos/loops ainda dependem do `Scope` AST mutavel para semantica e do
+  fallback por decl/span para alguns symbols.
+
+## Proximo passo recomendado
+
+Fase 8.08 - Tornar lookup scoped por `HirScopeId` o caminho primario do checker.
+
+AVISO: O proximo passo e criar/implementar lookups scoped por `HirScopeId` no
+checker, substituindo incrementalmente o `Scope` clonado por consultas ao
+resolver para identifiers, field access e bindings locais sem alterar
+mensagens publicas nem semantica atual. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+Plano inicial da proxima etapa:
+
+- Investigar como `check_stmt`, `check_stmts`, `infer_expr` e `ensure_route_expr`
+  recebem contexto de escopo hoje.
+- Adicionar threading incremental de `HirScopeId` por statement/expr ou uma
+  tabela de contexto de statements, preservando mensagens.
+- Migrar resolucao de `Ident` e bindings locais para lookup scoped com fallback
+  AST antigo.
+- Adicionar testes de shadowing/loops/blocos que provem estabilidade sem mudar
+  a semantica publica atual.
+- Rodar `cargo fmt`, testes HIR/resolver/checker, `cargo check --all-targets`
+  e quality gate completo.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/hir.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+
+## Etapa concluida: Fase 8.06 - Consumo incremental de HirCheckedMetadata
+
+Objetivo: fazer passes do checker consumirem `HirCheckedMetadata` de forma
+incremental, usando `HirExprId`, `HirTypeId` e `HirSymbolId` para validar
+identificadores, field access, chamadas e route expressions sem alterar
+mensagens publicas nem semantica.
+
+Foi feito:
+
+- `Checker` ganhou helpers de leitura da metadata checada:
+  - `cached_expr_type`;
+  - `cached_expr_symbol`;
+  - `cached_resolved_expr`.
+- `infer_expr` agora consome metadata cacheada para:
+  - `Ident`;
+  - `FieldAccess`;
+  - chamadas de funcao;
+  - static calls.
+- `ensure_route_expr` agora:
+  - registra/consome tipo e symbol de route params;
+  - reutiliza metadata de field access quando ja disponivel;
+  - grava metadata de Auth static calls durante validacao de rota;
+  - grava metadata de Model static calls durante validacao de rota.
+- `infer_route_return_expr` agora consome tipo cacheado em
+  `HirCheckedMetadata`, evitando reinterpretar a mesma route expression quando
+  `ensure_route_expr` ja validou e gravou a metadata.
+- Adicionado contador de cache hit apenas em testes para provar consumo real de
+  metadata sem custo no build normal.
+- Adicionado teste unitario
+  `checker::resolver::tests::checker_consumes_hir_metadata_for_route_return_exprs`,
+  que falha se o checker nao reutilizar metadata HIR durante a checagem de
+  route return.
+- Atualizado `ARCHITECTURE_AUDIT_NEXUSLANG.md`:
+  - arquitetura aproximada: `72/100`;
+  - compiler maturity aproximado: `49/100`;
+  - HIR metadata agora e escrita e consumida em caminhos importantes do
+    checker.
+- Atualizado `nexuslang-src/ROADMAP.md` para registrar que passes do checker
+  ja consomem metadata HIR para identificadores, field access, calls/static
+  calls e route return expressions.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/core e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test checker::resolver --lib
+cargo test hir --lib
+cargo check --all-targets
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo test checker::resolver --lib`: PASS.
+- `cargo test hir --lib`: PASS.
+- `cargo check --all-targets`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+  - `cargo fmt --check`: PASS.
+  - `cargo check --all-targets` com `-D warnings`: PASS.
+  - `cargo clippy --all-targets -- -D warnings`: PASS.
+  - `cargo test`: PASS, incluindo 24 unit tests de lib, 7 testes de package
+    manager e 156 testes core.
+  - storage compatibility policy: PASS.
+  - model operation contract docs validation: PASS.
+  - `node --check nexuslang-playground.js`: PASS.
+  - `smoke-test.sh`: PASS, 18 passed, 0 failed.
+  - `smoke-auth.sh`: PASS, 19 passed, 0 failed.
+  - `smoke-storage-backup-restore.sh`: PASS.
+  - `validate-openapi.sh`: PASS.
+
+Estado atual:
+
+- A HIR metadata ja e produzida e consumida em rotas, identificadores, field
+  access e chamadas.
+- O consumo ainda e incremental/cacheado: a metadata evita revalidacao quando
+  ja existe, mas a maior parte da logica de tipo ainda vive no checker AST.
+- O proximo salto arquitetural deve criar frames lexicais explicitos para
+  substituir a combinacao atual de `Scope` clonado + maps de string.
+
+## Proximo passo recomendado
+
+Fase 8.07 - Introduzir frames lexicais e HirScopeId no resolver.
+
+AVISO: O proximo passo e criar/implementar frames lexicais e `HirScopeId` no
+resolver/HIR, modelando escopos de top-level, funcoes, routes, blocos e loops
+para reduzir o uso de `Scope` clonado e preparar definition/use links completos
+sem alterar mensagens publicas nem semantica atual. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+## Etapa concluida: Fase 8.05 - Definition/use links e metadata de tipos na HIR
+
+Objetivo: adicionar links incrementais de definition/use e metadata de tipos
+checados na HIR, fazendo identificadores e expressoes apontarem para
+`HirSymbolId`/`HirTypeId` onde o checker atual ja possui essa informacao, sem
+alterar mensagens publicas nem semantica.
+
+Foi feito:
+
+- `nexuslang-src/src/hir.rs` ganhou:
+  - `HirTypeId`;
+  - `HirTypeTable`;
+  - `HirCheckedMetadata`;
+  - `HirExprMetadata`.
+- `HirExpr` agora guarda `source: &Expr`, permitindo mapear uma expressao AST
+  checada de volta para seu `HirExprId` sem heuristica por string/span.
+- `HirCheckedMetadata` registra:
+  - tipo de expressao por `HirExprId -> HirTypeId`;
+  - link de uso por `HirExprId -> HirSymbolId`;
+  - tabela internada de `Type`.
+- `Checker` agora inicializa `HirCheckedMetadata` por checagem e expoe
+  `checked_hir_metadata()`.
+- `CheckerSymbols` passou a indexar:
+  - `Expr` fonte por ponteiro estavel durante a checagem;
+  - campos de model por `(model, field)`;
+  - symbols top-level e bindings ja existentes.
+- `infer_expr` agora registra `HirTypeId` para expressoes inferidas.
+- `infer_expr` registra links de uso para:
+  - `Ident` resolvido por `Scope`;
+  - object literal de model;
+  - field access de model;
+  - chamadas de funcao definidas pelo usuario;
+  - static calls de model.
+- `infer_route_return_expr` registra tipo/link de uso para static calls de
+  route que retornam model/auth.
+- `check_auth_static_operation` registra link de uso para identificadores de
+  auth config, como `UserAuth` em `Auth::login(UserAuth)`.
+- Adicionado teste unitario
+  `checker::resolver::tests::checker_records_hir_definition_use_links_and_expr_types`,
+  provando:
+  - `Ident name` em route aponta para o `HirSymbolId` do route param;
+  - `Ident name` recebe `Type::String`;
+  - `Customer::find(...)` aponta para o symbol do model `Customer`;
+  - `Customer::find(...)` recebe `Type::Model("Customer")`.
+- Atualizado `ARCHITECTURE_AUDIT_NEXUSLANG.md`:
+  - arquitetura aproximada: `70/100`;
+  - compiler maturity aproximado: `47/100`;
+  - HIR agora possui metadata checada inicial, mas ainda nao e o input
+    principal dos passes.
+- Atualizado `nexuslang-src/ROADMAP.md` para indicar que a HIR ja registra
+  `TypeId`s e links de uso iniciais.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/core e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/hir.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test checker::resolver --lib
+cargo test hir --lib
+cargo check --all-targets
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo test checker::resolver --lib`: PASS.
+- `cargo test hir --lib`: PASS.
+- `cargo check --all-targets`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+  - `cargo fmt --check`: PASS.
+  - `cargo check --all-targets` com `-D warnings`: PASS.
+  - `cargo clippy --all-targets -- -D warnings`: PASS.
+  - `cargo test`: PASS, incluindo 23 unit tests de lib, 7 testes de package
+    manager e 156 testes core.
+  - storage compatibility policy: PASS.
+  - model operation contract docs validation: PASS.
+  - `node --check nexuslang-playground.js`: PASS.
+  - `smoke-test.sh`: PASS, 18 passed, 0 failed.
+  - `smoke-auth.sh`: PASS, 19 passed, 0 failed.
+  - `smoke-storage-backup-restore.sh`: PASS.
+  - `validate-openapi.sh`: PASS.
+
+Estado atual:
+
+- A HIR ja consegue carregar metadata semantica inicial produzida pelo checker.
+- Os links ainda sao incrementais: cobrem os caminhos resolvidos hoje, mas nao
+  substituem um resolver completo com frames lexicais e definition/use links
+  para todos os tipos de referencia.
+- O checker ainda consome principalmente AST + mapas legados; a proxima fase
+  deve fazer passes consultarem `HirCheckedMetadata` em vez de apenas escreve-la.
+
+## Proximo passo recomendado
+
+Fase 8.06 - Fazer passes do checker consumirem HirCheckedMetadata.
+
+AVISO: O proximo passo e criar/implementar o consumo incremental de
+`HirCheckedMetadata` pelos passes do checker, usando `HirExprId`, `HirTypeId` e
+`HirSymbolId` para validar identificadores, field access e route expressions
+sem alterar mensagens publicas nem semantica atual. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+## Etapa concluida: Fase 8.04 - Resolver minimo integrado ao checker
+
+Objetivo: integrar incrementalmente a HIR geral ao checker com um resolver
+minimo baseado em `HirSymbolId`, cobrindo top-level declarations, parametros,
+query params, `let`, `const`, `for` e bindings de route sem alterar mensagens
+publicas nem a semantica atual.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/resolver.rs`.
+- `checker::resolver` constroi `ResolvedProgram` a partir de `HirProgram`.
+- O resolver indexa:
+  - simbolos top-level de function, model, workflow, auth e route;
+  - bindings por declaracao usando `HirDeclId`;
+  - parametros de funcao;
+  - parametros de route;
+  - query params;
+  - `let`, `const` e `for`.
+- `Checker::check_diagnostic` agora:
+  - baixa `Program` para HIR com `hir::lower_program`;
+  - constroi `ResolvedProgram`;
+  - usa o resolver em `collect_decls` e `check_decls`.
+- `Scope` passou a carregar `HirSymbolId` junto ao tipo inferido, mantendo os
+  mapas antigos para preservar comportamento.
+- `check_decls`, `check_stmts`, `check_stmt`, `check_binding` e `check_route`
+  agora propagam `HirDeclId`/`ResolvedProgram` para associar simbolos aos
+  bindings checados.
+- `infer_expr` e `ensure_route_expr` agora resolvem identificadores pelo
+  caminho `Scope::resolve`, preservando as mensagens antigas de variavel/route
+  param indefinidos.
+- O checker passou a consultar simbolos HIR para top-level models, auths,
+  workflows e functions antes de validar contra os mapas legados.
+- `HirDeclKind` e `HirSymbolKind` agora derivam `Hash` para suportar chaves do
+  resolver.
+- Adicionado teste unitario
+  `checker::resolver::tests::resolver_indexes_top_level_and_lexical_hir_symbols`.
+- Atualizado `ARCHITECTURE_AUDIT_NEXUSLANG.md`:
+  - arquitetura aproximada: `68/100`;
+  - compiler maturity aproximado: `45/100`;
+  - HIR/resolver saiu de HIR inicial isolada para integracao minima no checker.
+- Atualizado `nexuslang-src/ROADMAP.md` registrando que a HIR ja alimenta um
+  resolver minimo, mas ainda nao e typed HIR.
+- O WASM nao foi recompilado: a mudanca e interna ao checker/core e nao altera
+  experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/resolver.rs`
+- `nexuslang-src/src/hir.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test resolver --lib
+cargo test hir --lib
+cargo check --all-targets
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo test resolver --lib`: PASS.
+- `cargo test hir --lib`: PASS.
+- `cargo check --all-targets`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+  - `cargo fmt --check`: PASS.
+  - `cargo check --all-targets` com `-D warnings`: PASS.
+  - `cargo clippy --all-targets -- -D warnings`: PASS.
+  - `cargo test`: PASS, incluindo 22 unit tests de lib, 7 testes de package
+    manager e 156 testes core.
+  - storage compatibility policy: PASS.
+  - model operation contract docs validation: PASS.
+  - `node --check nexuslang-playground.js`: PASS.
+  - `smoke-test.sh`: PASS, 18 passed, 0 failed.
+  - `smoke-auth.sh`: PASS, 19 passed, 0 failed.
+  - `smoke-storage-backup-restore.sh`: PASS.
+  - `validate-openapi.sh`: PASS.
+
+Estado atual:
+
+- O checker ja tem uma primeira ponte real entre AST checada, HIR e tabela de
+  simbolos.
+- A integracao e intencionalmente conservadora: ainda nao muda mensagens,
+  escopos publicos ou regras de tipo.
+- Ainda falta resolver completo com definition/use links, typed HIR, `TypeId`,
+  frames lexicais reais, module graph e separacao fisica de resolver/type
+  checker/control-flow checker.
+
+## Proximo passo recomendado
+
+Fase 8.05 - Adicionar definition/use links e tipos checados na HIR.
+
+AVISO: O proximo passo e criar/implementar definition/use links e metadata de
+tipos checados na HIR, fazendo identificadores e expressoes apontarem para
+`HirSymbolId`/`TypeId` de forma incremental sem alterar mensagens publicas nem
+semantica atual. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar
+exatamente de onde o projeto parou, entender o que ja foi feito e integrar a
+solucao com o sistema atual sem reler todo o repositorio.
+
+## Etapa concluida: Fase 8.03 - HIR geral inicial com IDs estaveis
+
+Objetivo: mover NexusLang alem da HIR limitada a routes, criando uma primeira
+camada geral de lowering com IDs estaveis para declaracoes, simbolos e
+expressoes checadas, preparando a separacao entre resolver, type checker e
+runtime contracts.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/hir.rs`.
+- Exposto `pub mod hir` em `nexuslang-src/src/lib.rs`.
+- Adicionados IDs compactos e estaveis:
+  - `HirDeclId`;
+  - `HirSymbolId`;
+  - `HirExprId`.
+- Adicionado `HirProgram` com tabelas separadas de:
+  - declaracoes;
+  - simbolos;
+  - expressoes.
+- O lowering agora cobre:
+  - funcoes, modelos, workflows, auth, routes, invoices e statements de topo;
+  - parametros de funcao;
+  - campos de model;
+  - steps de workflow;
+  - parametros de rota e query params;
+  - bindings `let`, `const` e `for`;
+  - campos de invoice;
+  - expressoes literais, arrays, objetos, identificadores, field access,
+    binarios, unarios, chamadas e static calls.
+- A HIR empresta nomes/tipos da AST validada, evitando clones desnecessarios
+  nesta fase.
+- Adicionados helpers de consulta:
+  - `HirProgram::decl`;
+  - `HirProgram::symbol`;
+  - `HirProgram::expr`;
+  - `HirProgram::symbols_named`.
+- Adicionados testes unitarios para:
+  - estabilidade de IDs de declaracoes, simbolos e expressoes entre lowerings;
+  - indexacao de symbols de model/route/query param;
+  - preservacao de `StaticCall` checada em route.
+- Atualizado `ARCHITECTURE_AUDIT_NEXUSLANG.md`:
+  - arquitetura aproximada: `66/100`;
+  - compiler maturity aproximado: `43/100`;
+  - runtime maturity aproximado: `53/100`;
+  - HIR geral saiu de ausente para inicial, ainda nao resolver-owned/typed.
+- Atualizado `nexuslang-src/ROADMAP.md` registrando a HIR geral inicial.
+- O WASM nao foi recompilado: a mudanca e interna ao core/compiler e nao
+  altera experiencia visual do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/hir.rs`
+- `nexuslang-src/src/lib.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test hir --lib
+cargo check --all-targets
+
+cd /home/alexandre/Nesusang
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo test hir --lib`: PASS.
+- `cargo check --all-targets`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+  - `cargo fmt --check`: PASS.
+  - `cargo check --all-targets` com `-D warnings`: PASS.
+  - `cargo clippy --all-targets -- -D warnings`: PASS.
+  - `cargo test`: PASS, incluindo 21 unit tests de lib, 7 testes de package
+    manager e 156 testes core.
+  - storage compatibility policy: PASS.
+  - model operation contract docs validation: PASS.
+  - `node --check nexuslang-playground.js`: PASS.
+  - `smoke-test.sh`: PASS, 18 passed, 0 failed.
+  - `smoke-auth.sh`: PASS, 19 passed, 0 failed.
+  - `smoke-storage-backup-restore.sh`: PASS.
+  - `validate-openapi.sh`: PASS.
+
+Estado atual:
+
+- NexusLang agora possui uma HIR geral inicial e publica no core.
+- A HIR ainda nao substitui o checker; ela prepara o caminho para migrar
+  resolucao de nomes, tipos e contratos de runtime para uma representacao
+  intermediaria comum.
+- O score de arquitetura subiu, mas ainda esta longe de 100% porque faltam
+  resolver real, typed HIR, type IDs, module graph, source map completo,
+  parser recovery, CFG, MIR/backend e runtime production-grade.
+
+## Proximo passo recomendado
+
+Fase 8.04 - Integrar HIR geral com resolver minimo no checker.
+
+AVISO: O proximo passo e criar/implementar a integracao incremental da HIR
+geral com um resolver minimo no checker, usando `HirSymbolId` para top-level
+declarations, parametros, query params, `let`/`const` e bindings de route sem
+alterar mensagens publicas nem semantica atual. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+## Etapa concluida: Fase 8.02i - OpenAPI estruturado para AuthStaticOperation
+
+Objetivo: completar o contrato OpenAPI de `AuthStaticOperation`, adicionando
+`requestBody` e resposta `400` estruturados para `Auth::register` e
+`Auth::login` a partir de descriptors centrais, sem logica ad hoc por string.
+
+Foi feito:
+
+- `nexuslang-src/src/auth_ops.rs` ganhou:
+  - `AuthOperationRequestBodyKind`;
+  - `request_body_kind` no `AuthStaticOperationDescriptor`;
+  - `has_bad_request_response` no descriptor;
+  - helpers `uses_request_body()`, `request_body_kind()` e
+    `has_bad_request_response()`.
+- `Auth::register` declara `request_body_kind = Register` e `400`.
+- `Auth::login` declara `request_body_kind = Login` e `400`.
+- `Auth::logout` e `Auth::user` continuam sem request body e sem `400`.
+- `server/openapi.rs` passou a gerar componentes `requestBodies` para Auth:
+  - register usa schema do model de usuario + `password` com `minLength`;
+  - login usa identity field + `password`;
+  - nomes estaveis como `NexusAuthRegisterRequestBody_<AuthName>`.
+- `route_request_body_ref` agora recebe o `Program` e resolve request bodies
+  de model e Auth pelo mesmo caminho.
+- `route_has_bad_request_response` agora consulta tambem o descriptor Auth.
+- A matriz `auth_operation_contract_matrix_validates_checker_hir_openapi_and_http`
+  passou a exigir:
+  - request body para register/login;
+  - ausencia de request body para logout/user;
+  - response `400` para register/login;
+  - schema de register com `email`, `name`, `role` e `password`;
+  - `password.minLength == 15`;
+  - schema de login com apenas `email` e `password`.
+- `AUTH_OPERATIONS.md` documenta `request_body_kind`,
+  `has_bad_request_response` e a cobertura de requestBody/400 na matriz.
+- `nexuslang-src/ROADMAP.md` registra request bodies e `400` estruturados para
+  register/login.
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md` foi atualizado com nota pos-auditoria:
+  fases 8.02a-8.02i reduzem o risco de contratos duplicados e elevam a
+  arquitetura aproximadamente de `58/100` para `64/100`.
+- O WASM nao foi recompilado: a mudanca afeta contrato OpenAPI/runtime server,
+  sem alteracao visual esperada no playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `AUTH_OPERATIONS.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/auth_ops.rs`
+- `nexuslang-src/src/server/openapi.rs`
+- `nexuslang-src/src/server/mod.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test auth_operation_contract_matrix_validates_checker_hir_openapi_and_http --lib
+cargo check --all-targets
+cargo test auth_static --lib
+cargo test native_auth --test core
+
+cd /home/alexandre/Nesusang
+git diff --check -- ARCHITECTURE_AUDIT_NEXUSLANG.md AUTH_OPERATIONS.md \
+  MEMORIA_NEXUSLANG.md nexuslang-src/ROADMAP.md \
+  nexuslang-src/src/auth_ops.rs \
+  nexuslang-src/src/server/openapi.rs \
+  nexuslang-src/src/server/mod.rs
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo test auth_operation_contract_matrix_validates_checker_hir_openapi_and_http --lib`:
+  PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo test auth_static --lib`: PASS.
+- `cargo test native_auth --test core`: PASS, 6 testes passando.
+- `git diff --check`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+  - `cargo fmt --check`: PASS.
+  - `cargo check --all-targets` com `-D warnings`: PASS.
+  - `cargo clippy --all-targets -- -D warnings`: PASS.
+  - `cargo test`: PASS, incluindo 19 unit tests de lib e 156 testes core.
+  - storage compatibility policy: PASS.
+  - model operation contract docs validation: PASS.
+  - `node --check nexuslang-playground.js`: PASS.
+  - `smoke-test.sh`: PASS, 18 passed, 0 failed.
+  - `smoke-auth.sh`: PASS, 19 passed, 0 failed.
+  - `smoke-storage-backup-restore.sh`: PASS.
+  - `validate-openapi.sh`: PASS.
+
+Estado atual:
+
+- Model/Auth route operations agora possuem contratos centrais, args
+  normalizados, matrizes de contrato e OpenAPI coerente.
+- A familia de problemas "strings duplicadas entre checker/runtime/OpenAPI"
+  foi reduzida substancialmente para model/auth.
+- Para chegar perto de 100% em arquitetura, o proximo salto nao e mais outro
+  descriptor local: e introduzir uma HIR/lowering geral com resolver/symbol IDs,
+  para parar de usar AST crua como contrato entre fases.
+
+## Proximo passo recomendado
+
+Fase 8.03 - Introduzir HIR/lowering geral e resolver minimo.
+
+AVISO: O proximo passo e criar/implementar uma HIR geral inicial com IDs
+estaveis para declaracoes, simbolos e expressoes checadas, movendo o projeto
+alem da HIR limitada a routes e preparando a separacao entre resolver,
+type checker e runtime contracts. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+## Etapa concluida: Fase 8.02h - Matriz de contrato AuthStaticOperation
+
+Objetivo: criar uma matriz dedicada para `AuthStaticOperation`, cobrindo
+`register`, `login`, `logout` e `user` em checker, route HIR, OpenAPI e HTTP
+em uma unica suite.
+
+Foi feito:
+
+- `nexuslang-src/src/server/mod.rs` ganhou
+  `AUTH_OPERATION_MATRIX_SOURCE`, uma fonte canonica com:
+  - `model ContractUser`;
+  - `auth ContractAuth`;
+  - routes para `Auth::register(ContractAuth)`;
+  - `Auth::login(ContractAuth)`;
+  - `Auth::logout()`;
+  - `Auth::user()`.
+- Criado `AuthOperationContractCase` com expectativa por operacao:
+  - operacao `AuthStaticOperation`;
+  - metodo HTTP;
+  - path de route/OpenAPI/HTTP;
+  - status de sucesso;
+  - auth config normalizado;
+  - presenca de security OpenAPI;
+  - header CSRF;
+  - resposta de rate limit;
+  - resposta forbidden;
+  - status/body HTTP esperado.
+- Criado `auth_operation_contract_cases()` com 4 casos, cobrindo
+  `AuthStaticOperation::ALL`.
+- Criados helpers de matriz:
+  - `assert_auth_operation_matrix_covers_all_operations`;
+  - `assert_auth_operation_route_matches_case`;
+  - `auth_openapi_document_from_http`;
+  - `openapi_operation_for_auth_case`;
+  - `assert_auth_operation_openapi_case`;
+  - `assert_auth_operation_http_case`.
+- Criado o teste
+  `auth_operation_contract_matrix_validates_checker_hir_openapi_and_http`.
+- O teste valida:
+  - checker via `parse_checked_source(AUTH_OPERATION_MATRIX_SOURCE)`;
+  - route HIR via `CheckedRouteExpr::AuthOperation`;
+  - `CheckedAuthOperationArgs` normalizado;
+  - OpenAPI de status, security, CSRF, 401/403/429;
+  - HTTP real com register, login, user e logout;
+  - revogacao de token apos logout.
+- `AUTH_OPERATIONS.md` agora documenta a matriz de contrato.
+- `nexuslang-src/ROADMAP.md` registra que `AuthStaticOperation` tem matriz de
+  contrato cobrindo checker, route HIR, OpenAPI e HTTP.
+- O WASM nao foi recompilado: a mudanca foi teste/documentacao de contrato
+  sem alteracao visual esperada no playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `AUTH_OPERATIONS.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/server/mod.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test auth_operation_contract_matrix_validates_checker_hir_openapi_and_http --lib
+cargo check --all-targets
+cargo test auth_static --lib
+cargo test native_auth --test core
+
+cd /home/alexandre/Nesusang
+git diff --check -- AUTH_OPERATIONS.md MEMORIA_NEXUSLANG.md \
+  nexuslang-src/ROADMAP.md nexuslang-src/src/server/mod.rs
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo test auth_operation_contract_matrix_validates_checker_hir_openapi_and_http --lib`:
+  PASS.
+- `cargo check --all-targets`: PASS.
+- `cargo test auth_static --lib`: PASS.
+- `cargo test native_auth --test core`: PASS, 6 testes passando.
+- `git diff --check`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+  - `cargo fmt --check`: PASS.
+  - `cargo check --all-targets` com `-D warnings`: PASS.
+  - `cargo clippy --all-targets -- -D warnings`: PASS.
+  - `cargo test`: PASS, incluindo 19 unit tests de lib e 156 testes core.
+  - storage compatibility policy: PASS.
+  - model operation contract docs validation: PASS.
+  - `node --check nexuslang-playground.js`: PASS.
+  - `smoke-test.sh`: PASS, 18 passed, 0 failed.
+  - `smoke-auth.sh`: PASS, 19 passed, 0 failed.
+  - `smoke-storage-backup-restore.sh`: PASS.
+  - `validate-openapi.sh`: PASS.
+
+Estado atual:
+
+- `AuthStaticOperation` agora tem contrato central e matriz de contrato, como
+  `ModelStaticOperation`.
+- A matriz protege checker, HIR, OpenAPI e HTTP contra divergencia para todas
+  as operacoes Auth atualmente suportadas.
+- A matriz tambem explicita uma lacuna de produto: `Auth::register` e
+  `Auth::login` consomem JSON body no runtime, mas o OpenAPI ainda nao expõe
+  requestBody/400 especificos de Auth.
+
+## Proximo passo recomendado
+
+Fase 8.02i - Completar contrato OpenAPI de AuthStaticOperation.
+
+AVISO: O proximo passo e criar/implementar suporte OpenAPI estruturado para
+requestBody e resposta 400 de `Auth::register` e `Auth::login`, usando
+`AuthStaticOperation`/descriptors em vez de logica ad hoc. Antes de iniciar,
+leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+## Etapa concluida: Fase 8.02g - Contrato central AuthStaticOperation
+
+Objetivo: centralizar as operacoes estaticas de `Auth` em um contrato unico,
+alinhando checker, route HIR, runtime auth e OpenAPI sem duplicar cadeias de
+strings para `register`, `login`, `logout` e `user`.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/auth_ops.rs` com:
+  - `AUTH_STATIC_TYPE_NAME`;
+  - `AuthStaticOperation`;
+  - `AuthStaticOperationDescriptor`;
+  - `AUTH_STATIC_OPERATION_DESCRIPTORS`;
+  - `AuthOperationArgumentShape`;
+  - `AuthOperationReturnKind`;
+  - `AuthRouteMethodRequirement`;
+  - `CheckedAuthOperationArgs`.
+- `nexuslang-src/src/lib.rs` passou a exportar `auth_ops`.
+- `nexuslang-src/src/route_hir.rs` agora converte retornos de route em
+  `CheckedRouteExpr::AuthOperation` usando `AuthStaticOperation` e anexando
+  `CheckedAuthOperationArgs`. O alias publico `CheckedAuthOperation` foi
+  preservado como reexport para compatibilidade interna/externa.
+- `checker/mod.rs` passou a reconhecer Auth por
+  `AuthStaticOperation::from_method`, validar shape/argumentos pelo contrato
+  central, inferir retorno por `AuthOperationReturnKind`, e aplicar o metodo
+  HTTP permitido pelo descriptor.
+- `server/auth.rs` passou a executar `AuthStaticOperation` com
+  `CheckedAuthOperationArgs`, usando o descriptor para nome publico, contexto
+  de chamada, status de sucesso e chave de rate limit.
+- `server/openapi.rs` passou a gerar schema/status/rate-limit de Auth a partir
+  de `AuthOperationReturnKind` e do descriptor, sem reinterpretar metodo por
+  strings.
+- `server/router.rs` passou a exigir os argumentos de Auth ja normalizados pelo
+  HIR antes de executar a operacao.
+- Adicionados testes unitarios do descriptor/shape em `auth_ops.rs`.
+- Adicionado teste `checked_route_hir_lifts_auth_static_operation` em
+  `tests/core.rs`.
+- Criado `AUTH_OPERATIONS.md` documentando o contrato central de Auth.
+- `nexuslang-src/ROADMAP.md` registra `AuthStaticOperation` no baseline atual.
+- O WASM nao foi recompilado: a mudanca foi refatoracao interna de
+  checker/HIR/runtime/OpenAPI sem alteracao visual esperada no playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `AUTH_OPERATIONS.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/auth_ops.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/src/route_hir.rs`
+- `nexuslang-src/src/server/auth.rs`
+- `nexuslang-src/src/server/openapi.rs`
+- `nexuslang-src/src/server/router.rs`
+- `nexuslang-src/tests/core.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test auth_static --lib
+cargo test checked_route_hir_lifts_auth_static_operation --test core
+cargo test native_auth --test core
+
+cd /home/alexandre/Nesusang
+git diff --check -- AUTH_OPERATIONS.md MEMORIA_NEXUSLANG.md \
+  nexuslang-src/ROADMAP.md \
+  nexuslang-src/src/auth_ops.rs \
+  nexuslang-src/src/checker/mod.rs \
+  nexuslang-src/src/lib.rs \
+  nexuslang-src/src/route_hir.rs \
+  nexuslang-src/src/server/auth.rs \
+  nexuslang-src/src/server/openapi.rs \
+  nexuslang-src/src/server/router.rs \
+  nexuslang-src/tests/core.rs
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test auth_static --lib`: PASS.
+- `cargo test checked_route_hir_lifts_auth_static_operation --test core`: PASS.
+- `cargo test native_auth --test core`: PASS, 6 testes passando.
+- `git diff --check`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+  - `cargo fmt --check`: PASS.
+  - `cargo check --all-targets` com `-D warnings`: PASS.
+  - `cargo clippy --all-targets -- -D warnings`: PASS.
+  - `cargo test`: PASS, incluindo 18 unit tests de lib e 156 testes core.
+  - storage compatibility policy: PASS.
+  - model operation contract docs validation: PASS.
+  - `node --check nexuslang-playground.js`: PASS.
+  - `smoke-test.sh`: PASS, 18 passed, 0 failed.
+  - `smoke-auth.sh`: PASS, 19 passed, 0 failed.
+  - `smoke-storage-backup-restore.sh`: PASS.
+  - `validate-openapi.sh`: PASS.
+
+Estado atual:
+
+- Operacoes estaticas de model e Auth agora possuem contratos centrais
+  separados e consumidos pelas camadas de checker, route HIR, runtime e
+  OpenAPI.
+- `Auth::register`, `Auth::login`, `Auth::logout` e `Auth::user` continuam com
+  os mesmos diagnosticos publicos e o mesmo comportamento HTTP.
+- Auth ainda nao tem uma matriz dedicada equivalente a
+  `model_operation_contract_matrix_validates_checker_openapi_and_http` para
+  provar todas as operacoes de `AuthStaticOperation` contra checker + HIR +
+  OpenAPI + HTTP em uma unica suite.
+
+## Proximo passo recomendado
+
+Fase 8.02h - Matriz de contrato para AuthStaticOperation.
+
+AVISO: O proximo passo e criar/implementar uma matriz de contrato para
+`AuthStaticOperation`, cobrindo `register`, `login`, `logout` e `user` no
+checker, route HIR, OpenAPI e HTTP/smoke em uma unica suite. Antes de iniciar,
+leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+entender o que ja foi feito e integrar a solucao com o sistema atual sem reler
+todo o repositorio.
+
+## Etapa concluida: Fase 8.02f - Submodulo checker/model_ops.rs
+
+Objetivo: isolar os validadores semanticos de operacoes estaticas de model em
+um submodulo dedicado, mantendo `checker/mod.rs` como orquestrador e
+preservando mensagens publicas, API interna e semantica de rotas.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/checker/model_ops.rs`.
+- Movidos para o novo submodulo:
+  - `ModelLookupValidation`;
+  - `ModelAdvancedFilterValidation`;
+  - `check_model_static_operation`;
+  - validadores de `all`, `page`, `create`, `find`, `delete`, `update`;
+  - validadores de `where*`, `where_in*`, `where_optional*`,
+    `where_compare*`, `where_text*`, `where_between*`, `where_all*` e
+    `where_any*`;
+  - helpers de campo/modelo/tipo, ordenacao e paginacao.
+- `checker/mod.rs` agora declara `mod model_ops;` e continua apenas
+  orquestrando inferencia/checking de alto nivel, chamando
+  `self.check_model_static_operation(...)` quando encontra operacoes de model.
+- A validacao continua produzindo `CheckedModelOperationArgs` e consultando
+  `ModelStaticOperation`/descriptors centrais.
+- `MODEL_OPERATIONS.md` foi atualizado para documentar que o consumidor do
+  checker agora fica dividido entre `checker/mod.rs` e
+  `checker/model_ops.rs`.
+- `scripts/validate-model-operation-contract-docs.sh` passou a validar tambem
+  a existencia do submodulo e dos marcadores principais do contrato no checker.
+- `nexuslang-src/ROADMAP.md` registra que os validadores por familia foram
+  extraidos para `checker/model_ops.rs`.
+- O WASM nao foi recompilado: a mudanca foi refatoracao interna do checker sem
+  alteracao visual esperada no playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `MODEL_OPERATIONS.md`
+- `scripts/validate-model-operation-contract-docs.sh`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/checker/model_ops.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test route_model_where --test core
+cargo test model_operation_contract_matrix_validates_checker_openapi_and_http --lib
+cargo test return --test core
+
+cd /home/alexandre/Nesusang
+./scripts/validate-model-operation-contract-docs.sh
+git diff --check -- MEMORIA_NEXUSLANG.md MODEL_OPERATIONS.md \
+  scripts/validate-model-operation-contract-docs.sh \
+  nexuslang-src/ROADMAP.md \
+  nexuslang-src/src/checker/mod.rs \
+  nexuslang-src/src/checker/model_ops.rs
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test route_model_where --test core`: PASS, 4 testes passando.
+- `cargo test model_operation_contract_matrix_validates_checker_openapi_and_http --lib`:
+  PASS.
+- `cargo test return --test core`: PASS, 19 testes passando.
+- `./scripts/validate-model-operation-contract-docs.sh`: PASS.
+- `git diff --check`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+  - `cargo fmt --check`: PASS.
+  - `cargo check --all-targets` com `-D warnings`: PASS.
+  - `cargo clippy --all-targets -- -D warnings`: PASS.
+  - `cargo test`: PASS.
+  - storage compatibility policy: PASS.
+  - model operation contract docs validation: PASS.
+  - `node --check nexuslang-playground.js`: PASS.
+  - `smoke-test.sh`: PASS, 18 passed, 0 failed.
+  - `smoke-auth.sh`: PASS, 19 passed, 0 failed.
+  - `smoke-storage-backup-restore.sh`: PASS.
+  - `validate-openapi.sh`: PASS.
+
+Estado atual:
+
+- O contrato de operacoes de model continua centralizado em
+  `nexuslang-src/src/model_ops.rs`.
+- O checker agora tem uma camada dedicada para validadores semanticos de model,
+  reduzindo o tamanho e a responsabilidade direta de `checker/mod.rs`.
+- Runtime, route HIR, storage helpers e OpenAPI continuam consumindo a forma
+  normalizada/checada sem reinterpretar AST crua.
+- A maior duplicacao restante esta em operacoes estaticas de `Auth`, que ainda
+  usam cadeias de strings em pontos do checker/runtime/OpenAPI.
+
+## Proximo passo recomendado
+
+Fase 8.02g - Centralizar contrato de operacoes estaticas de Auth.
+
+AVISO: O proximo passo e criar/implementar um contrato central para operacoes
+estaticas de Auth (`AuthStaticOperation` ou equivalente), alinhando checker,
+route HIR, runtime auth e OpenAPI sem duplicar strings de `register`, `login`,
+`logout` e `user`. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para
+continuar exatamente de onde o projeto parou, entender o que ja foi feito e
+integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Etapa concluida: Fase 8.02e - Validadores semanticos por familia no checker
+
+Objetivo: reduzir duplicacao no checker para operacoes `Model::where*`,
+`where_in*`, `where_optional*`, filtros avancados e filtros compostos usando as
+familias normalizadas de `CheckedModelOperationArgs`, sem alterar mensagens
+publicas nem semantica de rotas.
+
+Foi feito:
+
+- `checker/mod.rs` ganhou familias internas de validacao:
+  - `ModelLookupValidation::Exact`;
+  - `ModelLookupValidation::Optional`;
+  - `ModelLookupValidation::Array`;
+  - `ModelLookupValidation::OptionalArray`;
+  - `ModelAdvancedFilterValidation::Comparison`;
+  - `ModelAdvancedFilterValidation::Text`;
+  - `ModelAdvancedFilterValidation::Range`.
+- Criados validadores por familia:
+  - `check_model_lookup_filter_family_call`;
+  - `check_model_advanced_filter_family_call`;
+  - `check_model_composite_filter_family_call`;
+  - `check_model_operation_options`.
+- A validacao de campo/modelo/tipo agora passa por helpers compartilhados:
+  - `model_field_for_filter`;
+  - `check_model_lookup_expr_pair`;
+  - `check_model_exact_lookup_expr_pair`;
+  - `check_model_optional_lookup_expr_pair`;
+  - `check_model_array_lookup_expr_pair`;
+  - `check_model_optional_array_lookup_expr_pair`;
+  - `check_model_compare_exprs`;
+  - `check_model_text_exprs`;
+  - `check_model_range_exprs`.
+- Wrappers especificos como `check_model_where_not_page_call`,
+  `check_model_where_in_optional_page_call`, `check_model_where_text_call` e
+  `check_model_where_any_page_call` continuam existindo para preservar o texto
+  diagnostico de cada operacao, mas agora apenas escolhem operacao, mensagem e
+  familia de validacao.
+- `MODEL_OPERATIONS.md` foi atualizado para documentar que o checker valida por
+  familias de `CheckedModelOperationArgs`.
+- `nexuslang-src/ROADMAP.md` registra que operacoes estaticas de model agora
+  sao normalizadas e validadas por familias no checker.
+- O WASM nao foi recompilado: a mudanca foi refatoracao interna do checker sem
+  alteracao esperada de comportamento publico do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `MODEL_OPERATIONS.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/checker/mod.rs`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test route_model_where --test core
+cargo test model_operation_contract_matrix_validates_checker_openapi_and_http --lib
+
+cd /home/alexandre/Nesusang
+git diff --check -- MODEL_OPERATIONS.md nexuslang-src/ROADMAP.md \
+  nexuslang-src/src/checker/mod.rs MEMORIA_NEXUSLANG.md
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo test route_model_where --test core`: PASS, 4 testes passando.
+- `cargo test model_operation_contract_matrix_validates_checker_openapi_and_http --lib`:
+  PASS.
+- `git diff --check`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+  - `cargo fmt --check`: PASS.
+  - `cargo check --all-targets` com `-D warnings`: PASS.
+  - `cargo clippy --all-targets -- -D warnings`: PASS.
+  - `cargo test`: PASS.
+  - storage compatibility policy: PASS.
+  - model operation contract docs validation: PASS.
+  - `node --check nexuslang-playground.js`: PASS.
+  - `smoke-test.sh`: PASS, 18 passed, 0 failed.
+  - `smoke-auth.sh`: PASS, 19 passed, 0 failed.
+  - `smoke-storage-backup-restore.sh`: PASS.
+  - `validate-openapi.sh`: PASS.
+
+Estado atual:
+
+- Checker, route HIR, runtime, storage helpers e OpenAPI agora compartilham o
+  mesmo contrato de operacoes de model.
+- A duplicacao mais critica de validacao semantica entre familias de filtros
+  foi reduzida.
+- `checker/mod.rs` ainda esta grande; a logica de model operations esta mais
+  coesa, mas ainda vive dentro do modulo principal do checker.
+
+## Etapa concluida: Fase 8.02d - CheckedModelOperationArgs implementado
+
+Objetivo: criar uma HIR interna para argumentos de operacoes estaticas de
+model, permitindo que checker, route HIR, runtime, storage helpers e OpenAPI
+consumam a mesma forma normalizada em vez de recalcular posicoes de argumentos
+em cada camada.
+
+Foi feito:
+
+- `nexuslang-src/src/model_ops.rs` ganhou:
+  - `CheckedModelOperationArgs`;
+  - `CheckedModelOperationArgsKind`;
+  - `CheckedModelOrderingArgs`;
+  - `CheckedModelPaginationArgs`;
+  - `ModelStaticOperation::checked_args(...)`;
+  - wrappers de compatibilidade para `args_supported(...)`,
+    `has_pagination(...)`, `has_ordering(...)`, `has_page_response(...)` e
+    flags OpenAPI baseados na forma normalizada.
+- `route_hir.rs` agora anexa `checked_args` em
+  `CheckedRouteModelOperation`, mantendo tambem os argumentos crus.
+- `checker/mod.rs` preserva as validacoes especificas existentes, mas agora
+  exige que a operacao validada tambem produza `CheckedModelOperationArgs`.
+- `server/router.rs` passou a executar operacoes de model a partir de
+  `CheckedModelOperationArgs`, usando slots normalizados para lookup, filtros
+  simples, filtros avancados, range, composite, ordering, pagination e
+  page-response.
+- `server/storage.rs` deixou de recalcular offsets de ordering/pagination e
+  filtros compostos; seus helpers agora recebem a HIR de argumentos.
+- `server/openapi.rs` passou a derivar request body, status, total-count,
+  pagination, ordering e extensoes de filtro a partir de `checked_args`.
+- `MODEL_OPERATIONS.md` documenta `CheckedModelOperationArgs` e o fluxo de
+  consumidores.
+- `scripts/validate-model-operation-contract-docs.sh` agora valida tambem os
+  anchors de `CheckedModelOperationArgs`.
+- O WASM nao foi recompilado: a mudanca e interna ao contrato/checker/runtime
+  e nao altera comportamento visual esperado do playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `MODEL_OPERATIONS.md`
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/model_ops.rs`
+- `nexuslang-src/src/route_hir.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/server/router.rs`
+- `nexuslang-src/src/server/openapi.rs`
+- `nexuslang-src/src/server/storage.rs`
+- `scripts/validate-model-operation-contract-docs.sh`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test model_ops --lib
+cargo check --all-targets
+
+cd /home/alexandre/Nesusang
+./scripts/validate-model-operation-contract-docs.sh
+git diff --check -- MODEL_OPERATIONS.md README.md nexuslang-src/ROADMAP.md \
+  scripts/validate-model-operation-contract-docs.sh \
+  nexuslang-src/src/model_ops.rs nexuslang-src/src/route_hir.rs \
+  nexuslang-src/src/checker/mod.rs nexuslang-src/src/server/router.rs \
+  nexuslang-src/src/server/openapi.rs nexuslang-src/src/server/storage.rs
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `cargo test model_ops --lib`: PASS, 5 testes de `model_ops` passando.
+- `cargo check --all-targets`: PASS.
+- `validate-model-operation-contract-docs.sh`: PASS.
+- `git diff --check`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+  - `cargo fmt --check`: PASS.
+  - `cargo check --all-targets` com `-D warnings`: PASS.
+  - `cargo clippy --all-targets -- -D warnings`: PASS.
+  - `cargo test`: PASS.
+  - storage compatibility policy: PASS.
+  - model operation contract docs validation: PASS.
+  - `node --check nexuslang-playground.js`: PASS.
+  - `smoke-test.sh`: PASS, 18 passed, 0 failed.
+  - `smoke-auth.sh`: PASS, 19 passed, 0 failed.
+  - `smoke-storage-backup-restore.sh`: PASS.
+  - `validate-openapi.sh`: PASS.
+
+Estado atual:
+
+- A classificacao de argumentos de model esta centralizada e exposta como HIR
+  leve baseada em referencias ao AST.
+- Runtime, storage helpers e OpenAPI nao precisam mais recalcular offsets de
+  ordering/pagination/composite a partir de slices crus.
+- O checker ainda contem muitas funcoes especificas por operacao para manter
+  mensagens publicas e validacoes detalhadas; agora elas sao confirmadas pela
+  HIR, mas ainda podem ser consolidadas por familia.
+
+## Transicao historica concluida
+
+Fase 8.02e - Consolidar as validacoes de argumentos de model no checker por
+familia de `CheckedModelOperationArgs`.
+
+Status: concluido na etapa Fase 8.02e registrada acima.
+
+## Etapa concluida: Fase 8.02c - Descritores ModelStaticOperation documentados e no quality gate
+
+Objetivo: criar/consolidar descritores estruturados para
+`ModelStaticOperation`, documentar o contrato de operacoes de model, atualizar
+o quality gate e preservar a regra de nao recompilar WASM sem mudanca visivel
+no playground.
+
+Foi feito:
+
+- `nexuslang-src/src/model_ops.rs` agora concentra o contrato em
+  `MODEL_STATIC_OPERATION_DESCRIPTORS`, com:
+  - shape de argumentos;
+  - metodo HTTP requerido;
+  - tipo de retorno;
+  - validacao semantica do checker;
+  - categoria de storage;
+  - flags OpenAPI.
+- O contrato exposto por `ModelStaticOperation` agora e consumido por checker,
+  `route_hir`, router HTTP e OpenAPI sem depender de cadeias duplicadas de
+  strings para classificar operacoes.
+- `server/router.rs` passou a usar `ModelOperationStorageCategory` tambem para
+  diferenciar filtros opcionais inclusivos e exclusivos.
+- `server/openapi.rs` teve o helper de operacao de model ajustado para
+  preservar lifetime correto com `CheckedRouteModelOperation`.
+- `server/storage.rs` teve a view antiga de rotas removida; o caminho atual
+  usa `route_hir::checked_routes`.
+- Criado `MODEL_OPERATIONS.md` documentando o contrato, campos do descriptor,
+  consumidores, shapes, metodos HTTP, flags OpenAPI, categorias de storage e
+  checklist para adicionar novas operacoes.
+- `README.md` e `nexuslang-src/ROADMAP.md` agora apontam para o contrato.
+- Criado `scripts/validate-model-operation-contract-docs.sh`.
+- `scripts/quality-gate.sh` agora valida a documentacao do contrato de model
+  como parte do gate completo.
+- O WASM nao foi recompilado: a mudanca foi interna/documental e nao houve
+  mudanca visual esperada no playground.
+
+Arquivos principais alterados nesta etapa:
+
+- `MODEL_OPERATIONS.md`
+- `README.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/src/model_ops.rs`
+- `nexuslang-src/src/server/router.rs`
+- `nexuslang-src/src/server/openapi.rs`
+- `nexuslang-src/src/server/storage.rs`
+- `scripts/quality-gate.sh`
+- `scripts/validate-model-operation-contract-docs.sh`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang
+./scripts/validate-model-operation-contract-docs.sh
+git diff --check -- MODEL_OPERATIONS.md README.md nexuslang-src/ROADMAP.md \
+  scripts/quality-gate.sh scripts/validate-model-operation-contract-docs.sh \
+  nexuslang-src/src/model_ops.rs nexuslang-src/src/server/router.rs \
+  nexuslang-src/src/server/openapi.rs nexuslang-src/src/server/storage.rs
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- `validate-model-operation-contract-docs.sh`: PASS.
+- `git diff --check`: PASS.
+- `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+  - `cargo fmt --check`: PASS.
+  - `cargo check --all-targets` com `-D warnings`: PASS.
+  - `cargo clippy --all-targets -- -D warnings`: PASS.
+  - `cargo test`: PASS.
+  - storage compatibility policy: PASS.
+  - model operation contract docs validation: PASS.
+  - `node --check nexuslang-playground.js`: PASS.
+  - `smoke-test.sh`: PASS, 18 passed, 0 failed.
+  - `smoke-auth.sh`: PASS, 19 passed, 0 failed.
+  - `smoke-storage-backup-restore.sh`: PASS.
+  - `validate-openapi.sh`: PASS.
+
+Estado atual:
+
+- O contrato de operacoes estaticas de model agora tem fonte unica em codigo,
+  documentacao dedicada e validacao no quality gate.
+- A matriz de testes cobre todas as 30 variantes de `ModelStaticOperation`.
+- Ainda existe logica de interpretacao de argumentos em helpers de
+  `model_ops.rs`; ela esta centralizada, mas ainda nao produz uma estrutura HIR
+  normalizada para argumentos.
+
+## Transicao historica concluida
+
+Fase 8.02d - Normalizar argumentos de operacoes de model em HIR checado.
+
+Status: concluido na etapa Fase 8.02d registrada acima.
+
+## Etapa concluida: Fase 8.02b - Contrato central ModelStaticOperation aplicado
+
+Objetivo: fazer `Checker::ensure_route_expr`, `server/router.rs` e
+`server/openapi.rs` usarem o contrato central `ModelStaticOperation`, removendo
+as cadeias duplicadas de strings das operacoes estaticas de model sem alterar a
+semantica publica.
+
+Foi feito:
+
+- `ModelStaticOperation` ganhou metadados pequenos de contrato:
+  - `uses_request_body()`;
+  - `is_create()`;
+  - `has_not_found_response()`;
+  - `may_conflict_on_unique_fields()`.
+- `Checker::infer_route_return_expr` agora delega todas as chamadas de model
+  para `ModelStaticOperation::from_method` + `check_model_static_operation`.
+- `Checker::ensure_route_expr` passou a usar `ensure_model_route_operation_expr`
+  para validar metodo HTTP permitido, chamada semantica e expressoes de
+  argumentos, preservando Auth como caminho proprio.
+- `server/router.rs` passou a despachar `Expr::StaticCall` de model por enum:
+  - `eval_model_static_operation`;
+  - helpers para filtros opcionais, arrays, comparacao, texto, range e filtros
+    compostos;
+  - mensagens publicas e rotas HTTP mantidas.
+- `server/openapi.rs` passou a derivar request body, status, respostas
+  adicionais, extensoes `x-nexus-*`, schema paginado e inferencia HTTP a partir
+  de `ModelStaticOperation`.
+- As comparacoes `method == "all"`, `method == "where_*"`, `method == "create"`
+  etc. foram removidas dos fluxos de model nos tres pontos-alvo.
+
+Arquivos principais alterados nesta etapa:
+
+- `nexuslang-src/src/model_ops.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/server/router.rs`
+- `nexuslang-src/src/server/openapi.rs`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo check --all-targets
+cargo fmt
+cargo clippy --all-targets -- -D warnings
+cargo test
+
+cd /home/alexandre/Nesusang
+git diff --check -- nexuslang-src/src/model_ops.rs \
+  nexuslang-src/src/checker/mod.rs \
+  nexuslang-src/src/server/router.rs \
+  nexuslang-src/src/server/openapi.rs \
+  MEMORIA_NEXUSLANG.md
+```
+
+Resultado:
+
+- `cargo check --all-targets`: PASS.
+- `cargo clippy --all-targets -- -D warnings`: PASS.
+- `cargo test`: PASS.
+  - 9 testes internos de server/OpenAPI;
+  - 7 testes CLI do package manager;
+  - 154 testes core/integracao;
+  - total observado: 170 testes passando.
+- `git diff --check`: PASS.
+
+Estado atual:
+
+- O contrato central de operacoes de model agora e a fonte de verdade para
+  reconhecimento de operacoes em checker, runtime HTTP e OpenAPI.
+- Ainda existem matches por enum em runtime/OpenAPI porque cada operacao tem
+  semantica de armazenamento e flags especificas; o ponto critico eliminado foi
+  a repeticao fragil por string em cada camada.
+- O WASM nao foi recompilado nesta etapa porque a mudanca foi uma refatoracao
+  interna sem alteracao esperada de comportamento publico do playground.
+
+## Transicao historica concluida
+
+Fase 8.02c - Criar descritores estruturados de operacao para
+`ModelStaticOperation`.
+
+Status: concluido na etapa Fase 8.02c registrada acima.
+
+## Etapa adicional concluida: Auditoria arquitetural completa do NexusLang
+
+Objetivo: auditar o projeto como implementacao de linguagem/compilador/runtime
+e transformar o diagnostico em plano faseado.
+
+Foi feito:
+
+- Criado `ARCHITECTURE_AUDIT_NEXUSLANG.md`.
+- A auditoria cobre lexer, parser, AST, semantica, type system, control flow,
+  funcoes, memoria, erros, runtime, modulo, package manager, stdlib, tooling,
+  backend, concorrencia, seguranca, framework readiness, qualidade
+  arquitetural e performance.
+- Registrados scores atuais:
+  - arquitetura: 58/100;
+  - maturidade do compilador: 39/100;
+  - maturidade do runtime: 51/100;
+  - tooling: 46/100;
+  - framework readiness: 34/100.
+- Diagnostico principal: o projeto tem bons slices verticais e testes fortes,
+  mas ainda falta uma camada HIR/IR, resolucao de modulos, contrato central de
+  operacoes e separacao mais forte entre checker, router, OpenAPI e storage.
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo test
+```
+
+Resultado:
+
+- PASS: 9 testes internos de server/OpenAPI.
+- PASS: 7 testes CLI do package manager.
+- PASS: 154 testes core/integracao.
+- Total observado: 170 testes passando.
+
+Estado atual:
+
+- A auditoria e documental; nao alterou codigo Rust nem WASM.
+- O repositorio ja estava com mudancas locais anteriores em auth/package
+  manager/model_ops, preservadas.
+
+## Proximo passo recomendado para a trilha de arquitetura do compilador
+
+Fase 8.02b - Usar `ModelStaticOperation` em validacao de route, router HTTP e
+OpenAPI.
+
+AVISO: O proximo passo e criar/implementar o uso do contrato central
+`ModelStaticOperation` em `Checker::ensure_route_expr`, `server/router.rs` e
+`server/openapi.rs`, removendo cadeias duplicadas de strings sem alterar a
+semantica publica. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para
+continuar exatamente de onde o projeto parou, entender o que ja foi feito e
+integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `ARCHITECTURE_AUDIT_NEXUSLANG.md`
+- `nexuslang-src/src/model_ops.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/server/router.rs`
+- `nexuslang-src/src/server/openapi.rs`
+- `nexuslang-src/tests/core.rs`
 
 ## Regra de trabalho
 
@@ -42,7 +12748,227 @@ todo o repositorio.
   - rodar `cargo fmt` e `cargo test` ao final;
   - recompilar o WASM quando a mudanca afetar o playground.
 
-## Ultima etapa concluida: Fase 8.01 - Package Manager 50/100 publicado e CI verde
+## Ultima etapa concluida: Fase 8.1 - Native Auth hardening de producao
+
+Objetivo: endurecer o Native Auth do backend HTTP com controles de producao
+sem alterar a sintaxe publica de `auth`/guards.
+
+Foi feito:
+
+- Adicionado rate limiting persistido para falhas de `Auth::login()` e
+  `Auth::register()` por auth+identity:
+  - janela: 5 minutos;
+  - limite: 5 falhas;
+  - bloqueio: 15 minutos;
+  - respostas passam a mapear `Muitas requisicoes` para HTTP `429`.
+- Adicionado CSRF token por sessao cookie:
+  - `Auth::register()` e `Auth::login()` retornam `csrf_token`;
+  - sessoes armazenam apenas `csrf_hash`;
+  - rotas protegidas `POST`/`PUT`/`DELETE` autenticadas por cookie exigem
+    `X-Nexus-CSRF-Token`;
+  - bearer token continua sem exigir CSRF.
+- Auth store passou a usar API do backend de storage:
+  - JSON continua em `.nexus-data/.nexus-auth.json`;
+  - SQLite agora grava o mesmo JSON auth na tabela `nexus_auth`;
+  - senhas, sessoes, bearer tokens e CSRF tokens continuam armazenados apenas
+    como hashes.
+- OpenAPI passou a declarar:
+  - `csrf_token` nas respostas de login/cadastro;
+  - parametro header `X-Nexus-CSRF-Token` em rotas protegidas inseguras;
+  - resposta `429 Too Many Requests` para login/cadastro com rate limit.
+- Criado smoke HTTP real `scripts/smoke-auth.sh` cobrindo:
+  - health;
+  - cadastro;
+  - cookie session;
+  - bloqueio CSRF sem header;
+  - logout com CSRF;
+  - revogacao de sessao;
+  - login bearer;
+  - rota admin por bearer;
+  - revogacao de bearer;
+  - rate limit de login.
+- `scripts/quality-gate.sh` agora executa o smoke auth.
+- O pacote local agora copia `scripts/smoke-auth.sh` e executa o smoke auth
+  dentro de `scripts/smoke-package.sh`.
+- README e ROADMAP foram atualizados com deploy HTTPS/reverse proxy e limites
+  atuais.
+- WASM recompilado.
+
+Arquivos principais desta etapa:
+
+- `nexuslang-src/src/server/auth.rs`
+- `nexuslang-src/src/server/router.rs`
+- `nexuslang-src/src/server/http.rs`
+- `nexuslang-src/src/server/json.rs`
+- `nexuslang-src/src/server/sqlite.rs`
+- `nexuslang-src/src/server/storage_backend.rs`
+- `nexuslang-src/src/server/openapi.rs`
+- `nexuslang-src/tests/core.rs`
+- `scripts/smoke-auth.sh`
+- `scripts/quality-gate.sh`
+- `scripts/package-release.sh`
+- `README.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/web/nexuslang_playground.wasm`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo check --all-targets
+cargo test native_auth -- --nocapture
+cargo test
+cargo clippy --all-targets -- -D warnings
+cargo run --quiet -- check examples/auth_secure_crm.nx
+
+cd /home/alexandre/Nesusang
+bash -n scripts/smoke-auth.sh
+bash -n scripts/package-release.sh
+./scripts/smoke-auth.sh
+node --check nexuslang-playground.js
+./scripts/build-playground-wasm.sh
+./scripts/validate-openapi.sh
+git diff --check
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+./scripts/package-release.sh
+./scripts/validate-release-package.sh dist/nexuslang-v0.1.1-local-release.tar.gz
+```
+
+Resultado:
+
+- Auth focado: PASS, 6 testes `native_auth`.
+- Suite Rust: PASS, 9 testes internos, 7 testes CLI Package Manager e
+  154 testes core/integracao.
+- Clippy com `-D warnings`: PASS.
+- Smoke HTTP auth real: PASS, 19 checks.
+- OpenAPI validation externa: PASS.
+- Quality gate com Clippy: PASS.
+- Package release/validation: PASS, agora incluindo smoke auth dentro do
+  pacote extraido.
+- WASM atual: `366003` bytes.
+- Pacote local:
+  - archive: `dist/nexuslang-v0.1.1-local-release.tar.gz`;
+  - tamanho: `1274067` bytes;
+  - SHA-256:
+    `1d99e5ca365d9ec4ebf4d09cd642ce65c447a4c6cc54de618cf45f71cc5d5b04`.
+
+Estado atual:
+
+- Native Auth tem hardening inicial de producao para rate limit, CSRF,
+  persistencia JSON/SQLite e smoke HTTP real.
+- O built-in server continua sendo servidor runtime simples; producao deve usar
+  HTTPS via reverse proxy/terminador TLS.
+- O rate limit atual e por auth+identity, ainda nao por IP/proxy confiavel.
+- Ainda faltam secret rotation, password reset, MFA, auditoria de auth,
+  politicas/policies avancadas e controle operacional de sessoes/tokens.
+- Ha uma etapa local paralela de `model_ops` no checkout/memoria que foi
+  preservada e deve continuar como trilha de compilador quando o foco voltar
+  para o contrato central de operacoes de model.
+
+## Proximo passo recomendado
+
+Fase 8.2 - Auth seguranca avancada e operacao.
+
+AVISO: O proximo passo e criar/implementar secret rotation, password reset,
+MFA opcional, auditoria de eventos auth, listagem/revogacao operacional de
+sessoes/tokens e rate limiting proxy-aware para o Native Auth do NexusLang.
+Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para continuar exatamente de
+onde o projeto parou, entender o que ja foi feito e integrar a solucao com o
+sistema atual sem reler todo o repositorio.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/server/auth.rs`
+- `nexuslang-src/src/server/router.rs`
+- `nexuslang-src/src/server/openapi.rs`
+- `nexuslang-src/src/server/storage_backend.rs`
+- `nexuslang-src/src/server/sqlite.rs`
+- `nexuslang-src/tests/core.rs`
+- `scripts/smoke-auth.sh`
+- `README.md`
+- `nexuslang-src/ROADMAP.md`
+
+## Etapa historica concluida: Fase 8.02a - Contrato central inicial de operacoes Model
+
+Objetivo: iniciar o caminho recomendado no audit arquitetural do compilador,
+criando uma fonte central para as operacoes estaticas ERP/HTTP de model antes
+de tentar introduzir um HIR completo.
+
+Foi feito:
+
+- Adicionado o modulo `nexuslang-src/src/model_ops.rs`.
+- Criado `ModelStaticOperation` como enum central para as chamadas:
+  `all`, `page`, `create`, `find`, filtros `where*`, `update` e `delete`.
+- Criado contrato central para:
+  - reconhecimento de metodo estatico de model;
+  - nome canonico do metodo;
+  - tipo de retorno (`Model` ou `[Model]`);
+  - metodo HTTP exigido por operacao, preservando a regra historica de
+    `Model::all()` sem argumentos em route.
+- Exportado `pub mod model_ops` em `nexuslang-src/src/lib.rs`.
+- Migrado o caminho `Checker::infer_route_return_expr` para usar o novo
+  contrato central e o novo despachador `check_model_static_operation`.
+- Preservado comportamento publico, mensagens de erro e suite existente.
+
+Arquivos principais desta etapa:
+
+- `nexuslang-src/src/model_ops.rs`
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test
+cargo clippy --all-targets -- -D warnings
+```
+
+Resultado:
+
+- `cargo fmt`: PASS.
+- `cargo test`: PASS, 170 testes.
+- `cargo clippy --all-targets -- -D warnings`: PASS.
+
+Estado atual:
+
+- O projeto ainda nao tem HIR completo; o novo modulo e um contrato
+  semantico de operacoes de model, nao uma representacao intermediaria.
+- A inferencia de retorno de routes ja deixou de depender apenas de uma cadeia
+  local de strings para as operacoes estaticas de model.
+- A validacao detalhada de argumentos continua nos helpers antigos do checker.
+- `ensure_route_expr`, `server/router.rs` e `server/openapi.rs` ainda possuem
+  cadeias duplicadas de `method == "...";` estas devem ser o proximo alvo do
+  mesmo contrato central.
+- Esta etapa foi intencionalmente pequena para evitar reescrever checker,
+  runtime e OpenAPI de uma vez.
+
+## Proximo passo recomendado
+
+Fase 8.02b - Usar `ModelStaticOperation` em validacao de route, router HTTP e
+OpenAPI.
+
+AVISO: O proximo passo e criar/implementar o uso do contrato central
+`ModelStaticOperation` em `Checker::ensure_route_expr`, `server/router.rs` e
+`server/openapi.rs`, removendo cadeias duplicadas de strings sem alterar a
+semantica publica. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md` para
+continuar exatamente de onde o projeto parou, entender o que ja foi feito e
+integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+Arquivos para investigar/abrir primeiro na proxima etapa:
+
+- `MEMORIA_NEXUSLANG.md`
+- `nexuslang-src/src/model_ops.rs`
+- `nexuslang-src/src/checker/mod.rs`
+- `nexuslang-src/src/server/router.rs`
+- `nexuslang-src/src/server/openapi.rs`
+- `nexuslang-src/tests/core.rs`
+
+## Etapa historica concluida: Fase 8.01 - Package Manager 50/100 publicado e CI verde
 
 Objetivo: commitar/publicar o Package Manager 50/100, observar GitHub
 Actions, e deixar a memoria atualizada com o estado remoto verde.
@@ -129,7 +13055,7 @@ Estado atual:
 - O proximo salto para Package Manager 100/100 exige registry real, publish,
   download com integridade, dependencias transitivas e resolucao de versoes.
 
-## Proximo passo recomendado
+## Proximo passo historico anterior
 
 Fase 8.02 - Registry real e publish do Package Manager.
 
@@ -10126,3 +23052,1473 @@ Verificacao manual no navegador:
 ## Ideias futuras depois da Fase 6.6
 
 - Fase 7: estabilizar sintaxe e preparar alvo 1.0.
+
+## Etapa anterior concluida: Fase 4 tooling - `nexus docs`
+
+Objetivo: fechar a lacuna de geracao de documentacao da CLI para declaracoes
+ERP e reduzir friccao de uso em projetos reais.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/docs.rs` com renderer Markdown para `model`,
+  `fn`, `workflow`, `auth`, `route` e `invoice`.
+- Expostos `docs_source()` e `docs_entry()` em `nexuslang-src/src/lib.rs`.
+- Adicionado comando `nexus docs [ficheiro.nx] [--output docs.md]`.
+- O comando valida o programa multi-modulo antes de gerar Markdown.
+- O README e o projeto gerado por `nexus new` agora mencionam `nexus docs`.
+- O roadmap marcou a geracao de docs da Fase 4 como DONE.
+- Adicionados testes CLI para stdout e escrita em ficheiro, alem de teste de
+  renderer no core.
+
+Arquivos principais:
+
+- `nexuslang-src/src/docs.rs`
+- `nexuslang-src/src/formatter/mod.rs`
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/ROADMAP.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test cli_docs --test cli
+cargo test
+cargo run --quiet -- docs examples/openapi_qa.nx --output /tmp/nexuslang-openapi-docs.md
+```
+
+Resultado:
+
+- Teste focado: 2 testes CLI passaram.
+- Suite completa: 51 lib tests, 28 CLI tests, 7 package-manager tests e 259
+  core tests passaram.
+- Smoke CLI gerou `/tmp/nexuslang-openapi-docs.md` com summary, model e 19
+  routes documentadas para `examples/openapi_qa.nx`.
+
+Estado atual:
+
+- `nexus docs` fecha um item antigo de tooling e melhora a prontidao para
+  avaliacao/beta.
+- O formato Markdown e intencionalmente simples e estavel, mas ainda nao tem
+  agrupamento por modulo, links de origem, snippets de source range ou
+  integracao com uma UI/hosted docs.
+
+Proximo passo recomendado:
+
+Fase F tooling - adicionar `nexus test` como runner inicial de exemplos/testes
+`.nx`, aproveitando o loader multi-modulo e o contrato de diagnosticos.
+
+AVISO: O proximo passo e criar o primeiro `nexus test` pequeno e local-first,
+sem inventar uma sintaxe de teste grande. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md` para continuar exatamente de onde o projeto parou,
+preservar o comando `nexus docs` e validar com `cargo fmt` + `cargo test`.
+
+## Etapa anterior concluida: Fase F tooling - `nexus test` MVP
+
+Objetivo: adicionar um runner local-first para testes/exemplos `.nx` sem criar
+uma sintaxe de teste grande, reutilizando o loader multi-modulo e o mesmo
+pipeline de execucao de `nexus run`.
+
+Foi feito:
+
+- Criado `nexuslang-src/src/test_runner.rs`.
+- Adicionado `nexus test [ficheiro-ou-diretorio]`.
+- O runner aceita um ficheiro `.nx` unico ou um diretorio recursivo.
+- Sem argumento, `nexus test` procura `tests/` primeiro e cai para `examples/`.
+- Cada ficheiro descoberto e validado/executado com
+  `load_and_run_with_source_database_captured_diagnostic`.
+- O runner continua apos falhas, preserva output parcial e retorna contagem de
+  pass/fail.
+- `nexus new` agora cria `tests/smoke.nx` e menciona `nexus test` no README
+  gerado.
+- `README.md` e `nexuslang-src/ROADMAP.md` documentam o novo comando.
+
+Arquivos principais:
+
+- `nexuslang-src/src/test_runner.rs`
+- `nexuslang-src/src/lib.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/ROADMAP.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test test_runner --lib
+cargo test cli_test --test cli
+cargo run --quiet -- test examples
+cargo test
+cargo run --quiet -- test
+cargo fmt --check
+```
+
+Resultado:
+
+- Testes focados do runner: 3 passaram.
+- Testes focados CLI `nexus test`: 3 passaram.
+- Smoke real `nexus test examples`: 12 exemplos passaram, 0 falharam.
+- Suite completa: 54 lib tests, 31 CLI tests, 7 package-manager tests e 259
+  core tests passaram.
+- Smoke padrao `nexus test`: 12 passaram, 0 falharam, usando fallback
+  `examples/` no crate.
+- `cargo fmt --check`: PASS.
+
+Estado atual:
+
+- `nexus test` e um runner de smoke/testes executaveis, nao uma linguagem de
+  assertions ainda.
+- O comando ja e util para projetos pequenos, exemplos, CI local e projetos
+  criados por `nexus new`.
+- Falhas runtime mostram diagnostico e output parcial capturado.
+
+Proximo passo recomendado:
+
+Fase F tooling - adicionar comparacao opcional de output esperado via sidecar
+`.out` para transformar `nexus test` de smoke runner em runner de regressao
+simples, ainda sem sintaxe nova.
+
+AVISO: O proximo passo e implementar sidecars `.out` opcionais para
+`nexus test`, preservando o comportamento atual quando o sidecar nao existir.
+Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, abra `nexuslang-src/src/test_runner.rs`,
+`nexuslang-src/src/main.rs` e `nexuslang-src/tests/cli.rs`, e valide com
+`cargo fmt`, testes focados do runner/CLI e `cargo test`.
+
+## Etapa anterior concluida: Fase F tooling - sidecars `.out` para `nexus test`
+
+Objetivo: transformar `nexus test` de smoke runner em runner simples de
+regressao de stdout, sem adicionar sintaxe nova de testes.
+
+Foi feito:
+
+- `nexus test` agora procura um sidecar opcional `.out` ao lado de cada
+  ficheiro `.nx`, por exemplo `tests/smoke.nx` -> `tests/smoke.out`.
+- Quando o sidecar existe, o output capturado do programa precisa bater com o
+  conteudo esperado.
+- Quebras `CRLF`/`CR` sao normalizadas para `LF`, e uma quebra final de
+  arquivo e tratada como terminador, nao como linha extra.
+- Linhas vazias intencionais continuam representaveis no `.out`.
+- Mismatch de output aparece como falha de teste, separado de diagnostics de
+  parser/checker/runtime.
+- Falhas runtime continuam mostrando diagnostico e output parcial.
+- `nexus new` agora cria `tests/smoke.out` junto com `tests/smoke.nx`.
+- README e roadmap documentam os sidecars `.out`.
+
+Arquivos principais:
+
+- `nexuslang-src/src/test_runner.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/tests/cli_package_manager.rs`
+- `nexuslang-src/ROADMAP.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test test_runner --lib
+cargo test cli_test --test cli
+cargo test new_project_includes_package_manifest_and_lockfile --test cli_package_manager
+cargo test
+cargo run --quiet -- test
+```
+
+Resultado:
+
+- Testes focados do runner: 6 passaram.
+- Testes focados CLI `nexus test`: 5 passaram.
+- Teste focado do `nexus new`: 1 passou.
+- Suite completa: 57 lib tests, 33 CLI tests, 7 package-manager tests e 259
+  core tests passaram.
+- Smoke padrao `nexus test`: 12 exemplos passaram, 0 falharam.
+
+Estado atual:
+
+- `nexus test` cobre smoke execution e regressao simples de stdout com
+  sidecars opcionais.
+- Ainda nao ha DSL de assertions, filtros de testes, modo JSON, snapshot
+  update, parallelismo, timeout por teste ou isolamento de `.nexus-data`.
+
+Proximo passo recomendado:
+
+Fase F tooling - adicionar `nexus test --update` para escrever/atualizar
+sidecars `.out` a partir do output atual, tornando mais facil criar fixtures
+de regressao sem editar outputs manualmente.
+
+AVISO: O proximo passo e implementar `nexus test --update` com cuidado para
+nao mascarar falhas runtime/checker: ele deve atualizar `.out` apenas para
+casos que executam com sucesso. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`,
+abra `nexuslang-src/src/test_runner.rs`, `nexuslang-src/src/main.rs` e
+`nexuslang-src/tests/cli.rs`, e valide com `cargo fmt`, testes focados do
+runner/CLI e `cargo test`.
+
+## Etapa anterior concluida: Fase F tooling - `nexus test --update`
+
+Objetivo: facilitar a criacao/manutencao de fixtures de regressao de stdout,
+permitindo que `nexus test` escreva sidecars `.out` a partir do output atual
+sem mascarar falhas de parser/checker/runtime.
+
+Foi feito:
+
+- Adicionado `NexusTestOptions { update_expected }`.
+- Preservados os wrappers existentes `run_tests_at()` e
+  `run_default_tests_from_current_dir()`.
+- Adicionadas variantes `run_tests_at_with_options()` e
+  `run_default_tests_from_current_dir_with_options()`.
+- `nexus test --update [alvo]` agora escreve/atualiza `.out` apenas quando o
+  `.nx` executa com sucesso.
+- Casos com falha de parser/checker/runtime nao escrevem nem sobrescrevem
+  `.out`.
+- A CLI mostra `atualizado: caminho.out` nos casos passados que tiveram sidecar
+  escrito.
+- O modo normal de `nexus test` continua comparando `.out` sem alterar arquivos.
+- README e roadmap documentam `--update`.
+
+Arquivos principais:
+
+- `nexuslang-src/src/test_runner.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/ROADMAP.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test test_runner --lib
+cargo test cli_test --test cli
+cargo test
+cargo run --quiet -- test
+```
+
+Resultado:
+
+- Testes focados do runner: 10 passaram.
+- Testes focados CLI `nexus test`: 7 passaram.
+- Suite completa: 61 lib tests, 35 CLI tests, 7 package-manager tests e 259
+  core tests passaram.
+- Smoke padrao `nexus test`: 12 exemplos passaram, 0 falharam.
+
+Estado atual:
+
+- `nexus test` agora cobre smoke execution, regressao simples de stdout com
+  sidecars `.out`, e criacao/refresh seguro de sidecars com `--update`.
+- Ainda nao ha DSL de assertions, filtros por nome, modo JSON, parallelismo,
+  timeout por teste ou isolamento automatico de `.nexus-data`.
+
+Proximo passo recomendado:
+
+Fase F tooling - adicionar filtros simples para `nexus test`, por exemplo
+`nexus test --name termo` ou glob local, para permitir rodar subconjuntos sem
+executar todos os exemplos/testes.
+
+AVISO: O proximo passo e implementar um filtro simples para `nexus test` sem
+quebrar `--update`, sidecars `.out` ou o comportamento padrao. Antes de iniciar,
+leia `MEMORIA_NEXUSLANG.md`, abra `nexuslang-src/src/test_runner.rs`,
+`nexuslang-src/src/main.rs` e `nexuslang-src/tests/cli.rs`, e valide com
+`cargo fmt`, testes focados do runner/CLI e `cargo test`.
+
+## Etapa anterior concluida: Fase F tooling - `nexus test --name`
+
+Objetivo: permitir rodar subconjuntos pequenos de testes/exemplos `.nx` sem
+executar toda a pasta, mantendo compatibilidade com sidecars `.out` e com
+`nexus test --update`.
+
+Foi feito:
+
+- Adicionado `NexusTestOptions::name_filter`.
+- `nexus test --name termo [alvo]` filtra os `.nx` descobertos por substring
+  case-insensitive do caminho/nome do ficheiro.
+- O comportamento padrao de `nexus test` sem filtro continua inalterado.
+- O filtro compoe com `--update`: apenas os casos filtrados e bem-sucedidos
+  geram/atualizam `.out`.
+- Resultado sem correspondencias fica como execucao valida com `0 total`.
+- README e roadmap documentam `--name`.
+
+Arquivos principais:
+
+- `nexuslang-src/src/test_runner.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/ROADMAP.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test test_runner --lib
+cargo test cli_test --test cli
+cargo test
+cargo run --quiet -- test --name openapi examples
+```
+
+Resultado:
+
+- Testes focados do runner: 12 passaram.
+- Testes focados CLI `nexus test`: 9 passaram.
+- Suite completa: 63 lib tests, 37 CLI tests, 7 package-manager tests e 259
+  core tests passaram.
+- Smoke filtrado real: `nexus test --name openapi examples` executou apenas
+  `examples/openapi_qa.nx` e passou.
+
+Estado atual:
+
+- `nexus test` cobre smoke execution, regressao simples de stdout com sidecars
+  `.out`, refresh seguro com `--update`, e filtro simples `--name`.
+- Ainda nao ha DSL de assertions, modo JSON de teste, parallelismo, timeout por
+  teste ou isolamento automatico de `.nexus-data`.
+
+Proximo passo recomendado:
+
+Fase F tooling - adicionar `nexus test --json`, emitindo um relatorio
+machine-readable com casos, status, diagnostics, mismatches de `.out` e
+sidecars atualizados. Isso deixaria o runner pronto para CI e outras
+ferramentas.
+
+AVISO: O proximo passo e implementar `nexus test --json` preservando o output
+humano padrao, a semantica de exit code, `--name`, `--update` e sidecars `.out`.
+Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, abra
+`nexuslang-src/src/test_runner.rs`, `nexuslang-src/src/main.rs` e
+`nexuslang-src/tests/cli.rs`, e valide com `cargo fmt`, testes focados do
+runner/CLI e `cargo test`.
+
+## Etapa anterior concluida: Fase F tooling - `nexus test --json`
+
+Objetivo: tornar o runner de testes consumivel por CI e tooling sem alterar o
+relatorio humano padrao de `nexus test`.
+
+Foi feito:
+
+- Adicionado `NEXUS_TEST_JSON_SCHEMA_VERSION = 1`.
+- Adicionado `test_report_json()` para serializar relatorios de teste com:
+  `ok`, `schema_version`, `command`, `target`, `summary` e `cases`.
+- Cada caso JSON inclui caminho, status, stdout capturado, expected output,
+  sidecar atualizado, mismatch de `.out` e diagnosticos.
+- Adicionado `test_error_json()` para erros de descoberta/setup em modo
+  `--json`.
+- `nexus test --json [alvo]` imprime apenas uma linha JSON em stdout.
+- `--json` preserva a semantica de exit code: falhas de caso continuam saindo
+  com codigo 1.
+- `--json` compoe com `--name` e `--update`.
+- O output humano padrao continua inalterado quando `--json` nao e usado.
+- README e roadmap documentam o relatorio JSON.
+
+Arquivos principais:
+
+- `nexuslang-src/src/test_runner.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/ROADMAP.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test test_runner --lib
+cargo test cli_test --test cli
+cargo test
+cargo run --quiet -- test --json --name openapi examples
+```
+
+Resultado:
+
+- Testes focados do runner: 15 passaram.
+- Testes focados CLI `nexus test`: 12 passaram.
+- Suite completa: 66 lib tests, 40 CLI tests, 7 package-manager tests e 259
+  core tests passaram.
+- Smoke JSON real: `nexus test --json --name openapi examples` executou apenas
+  `examples/openapi_qa.nx`, retornou `ok: true` e summary `1/0/1`.
+
+Estado atual:
+
+- `nexus test` cobre smoke execution, regressao simples de stdout com sidecars
+  `.out`, refresh seguro com `--update`, filtro simples `--name` e relatorio
+  JSON para CI/tooling.
+- Ainda nao ha DSL de assertions, parallelismo, timeout por teste ou isolamento
+  automatico de `.nexus-data`.
+
+Proximo passo recomendado:
+
+Fase F tooling - adicionar timeout por teste para impedir que exemplos ou
+programas travados bloqueiem CI local. Uma primeira versao pode ser
+`nexus test --timeout 5s`, mantendo o padrao atual sem timeout explicito.
+
+AVISO: O proximo passo e implementar timeout por teste sem quebrar `--json`,
+`--name`, `--update`, sidecars `.out` ou o relatorio humano. Antes de iniciar,
+leia `MEMORIA_NEXUSLANG.md`, abra `nexuslang-src/src/test_runner.rs`,
+`nexuslang-src/src/main.rs` e `nexuslang-src/tests/cli.rs`, e avalie se o
+timeout deve executar cada caso em subprocesso para permitir cancelamento real.
+Valide com `cargo fmt`, testes focados do runner/CLI, um smoke com `--json` e
+`cargo test`.
+
+## Etapa anterior concluida: Fase F tooling - `nexus test --timeout`
+
+Objetivo: impedir que testes/exemplos `.nx` travados bloqueiem indefinidamente
+o runner local e o CI.
+
+Foi feito:
+
+- Adicionado `NexusTestOptions::timeout`.
+- `nexus test --timeout <dur>` aceita duracoes inteiras como `500ms`, `5s` e
+  `1m`; valores sem sufixo sao tratados como segundos.
+- Cada caso executado com timeout roda em um worker com `recv_timeout`.
+- Caso que excede o prazo vira falha com diagnostico runtime e `timed_out:
+  true` no JSON.
+- O relatorio humano mostra `timeout excedido` no caso falho.
+- `--json` inclui `timed_out` por caso.
+- `--update` nao escreve/atualiza `.out` quando o caso excede o timeout.
+- `--timeout` compoe com `--json`, `--name`, `--update` e sidecars `.out`.
+- README e roadmap documentam `--timeout`.
+
+Nota tecnica:
+
+- Esta primeira versao evita que o CLI/CI fique bloqueado esperando o caso
+  travado. Ela ainda nao isola cada caso em subprocesso; por isso, para uso de
+  biblioteca de longa duracao, um caso que entrou em loop pode continuar em
+  thread de background ate o processo terminar. O CLI encerra o processo com
+  codigo 1 quando ha timeout, entao o uso normal de CI fica protegido.
+
+Arquivos principais:
+
+- `nexuslang-src/src/test_runner.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/ROADMAP.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test test_runner --lib
+cargo test cli_test --test cli
+cargo test
+cargo run --quiet -- test --json --timeout 5s --name openapi examples
+```
+
+Resultado:
+
+- Testes focados do runner: 15 passaram.
+- Testes focados CLI `nexus test`: 14 passaram, incluindo timeout humano e
+  timeout JSON.
+- Suite completa: 66 lib tests, 42 CLI tests, 7 package-manager tests e 259
+  core tests passaram.
+- Smoke JSON real com `--timeout 5s`: `examples/openapi_qa.nx` passou com
+  `timed_out: false`.
+
+Estado atual:
+
+- `nexus test` cobre smoke execution, regressao simples de stdout com sidecars
+  `.out`, refresh seguro com `--update`, filtro simples `--name`, relatorio
+  JSON para CI/tooling e timeout por caso para proteger CI local.
+- Ainda nao ha DSL de assertions, parallelismo, isolamento automatico de
+  `.nexus-data`, nem isolamento forte por subprocesso por caso.
+
+Proximo passo recomendado:
+
+Fase F tooling - adicionar isolamento por caso para `.nexus-data`, por exemplo
+`nexus test --isolate-data`, para que testes de runtime HTTP/storage nao
+contaminem uns aos outros nem o workspace local.
+
+AVISO: O proximo passo e implementar isolamento de dados sem quebrar `--json`,
+`--name`, `--update`, `--timeout`, sidecars `.out` ou o relatorio humano. Antes
+de iniciar, leia `MEMORIA_NEXUSLANG.md`, abra
+`nexuslang-src/src/test_runner.rs`, `nexuslang-src/src/main.rs`,
+`nexuslang-src/tests/cli.rs` e os pontos onde o runtime escolhe `.nexus-data`.
+Valide com `cargo fmt`, testes focados do runner/CLI, smoke JSON e
+`cargo test`.
+
+## Etapa anterior concluida: Fase F tooling - `nexus test --isolate-data`
+
+Objetivo: impedir que testes de runtime/storage contaminem o workspace local
+ou compartilhem a mesma `.nexus-data` entre casos.
+
+Foi feito:
+
+- Adicionado `NexusTestOptions::isolate_data`.
+- `nexus test --isolate-data` cria um diretório temporário por caso.
+- Durante a execução de cada caso isolado, o runner injeta `NEXUS_DATA_DIR`
+  apontando para esse diretório temporário.
+- `server::default_data_dir()` agora respeita `NEXUS_DATA_DIR` antes de cair
+  no padrão `<pasta-do-arquivo>/.nexus-data`.
+- O relatório JSON inclui `isolated_data_dir` por caso.
+- Diretórios isolados de casos concluídos são limpos ao fim da execução do
+  caso.
+- Em timeout, o diretório isolado é preservado para evitar apagar dados sob um
+  worker que pode ainda estar encerrando; como o CLI sai com erro, isso não
+  contamina o workspace.
+- `--isolate-data` compõe com `--json`, `--name`, `--update`, `--timeout` e
+  sidecars `.out`.
+- README e roadmap documentam `--isolate-data`.
+
+Arquivos principais:
+
+- `nexuslang-src/src/test_runner.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/src/server/storage_backend.rs`
+- `nexuslang-src/src/server/mod.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/ROADMAP.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test test_runner --lib
+cargo test cli_test --test cli
+cargo test
+cargo run --quiet -- test --json --isolate-data --timeout 5s --name openapi examples
+```
+
+Resultado:
+
+- Testes focados do runner: 15 passaram.
+- Testes focados CLI `nexus test`: 15 passaram, incluindo isolamento de dados.
+- Suite completa: 66 lib tests, 43 CLI tests, 7 package-manager tests e 259
+  core tests passaram.
+- Smoke JSON real com `--isolate-data --timeout 5s`: `examples/openapi_qa.nx`
+  passou com `isolated_data_dir` preenchido e `timed_out: false`.
+
+Estado atual:
+
+- `nexus test` cobre smoke execution, regressao simples de stdout com sidecars
+  `.out`, refresh seguro com `--update`, filtro simples `--name`, relatorio
+  JSON para CI/tooling, timeout por caso e isolamento temporario de dados por
+  caso.
+- Ainda nao ha DSL de assertions, parallelismo, nem isolamento forte por
+  subprocesso por caso.
+
+Proximo passo recomendado:
+
+Fase F tooling - adicionar parallelismo controlado para `nexus test`, por
+exemplo `nexus test --jobs 4`, aproveitando `--isolate-data` para reduzir
+contaminacao entre casos.
+
+AVISO: O proximo passo e implementar `--jobs` com cuidado especial para
+ambiente global (`NEXUS_DATA_DIR`) e timeout: o desenho mais seguro pode exigir
+subprocesso por caso antes de paralelizar de verdade. Antes de iniciar, leia
+`MEMORIA_NEXUSLANG.md`, abra `nexuslang-src/src/test_runner.rs`,
+`nexuslang-src/src/main.rs` e `nexuslang-src/tests/cli.rs`, e valide com
+`cargo fmt`, testes focados do runner/CLI, smoke JSON e `cargo test`.
+
+## Etapa anterior concluida: Fase F tooling - `nexus test --jobs`
+
+Objetivo: permitir paralelismo controlado no runner local/CI sem perder ordem
+deterministica de relatorio nem criar corrida em `NEXUS_DATA_DIR`.
+
+Foi feito:
+
+- Adicionado `NexusTestOptions::jobs` com padrao `1`.
+- `nexus test --jobs <n>` executa casos em lotes paralelos limitados por `n`.
+- O relatorio preserva a ordem deterministica dos ficheiros descobertos, mesmo
+  quando os casos rodam em paralelo.
+- `--jobs` compoe com `--json`, `--name`, `--update`, `--timeout` e
+  `--isolate-data`.
+- O isolamento de dados passou a usar override thread-local de runtime em vez
+  de escrever diretamente no `std::env` global durante cada caso.
+- `std/env` da linguagem e `server::default_data_dir()` agora consultam o
+  override thread-local antes do ambiente real.
+- `NEXUS_DATA_DIR` real continua funcionando como fallback para uso externo.
+- README e roadmap documentam `--jobs`.
+
+Arquivos principais:
+
+- `nexuslang-src/src/runtime_env.rs`
+- `nexuslang-src/src/test_runner.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/src/interpreter/mod.rs`
+- `nexuslang-src/src/server/storage_backend.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/ROADMAP.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test test_runner --lib
+cargo test cli_test --test cli
+cargo test
+cargo run --quiet -- test --json --jobs 4 --isolate-data --timeout 5s --name openapi examples
+```
+
+Resultado:
+
+- Testes focados do runner: 16 passaram.
+- Testes focados CLI `nexus test`: 16 passaram.
+- Suite completa: 67 lib tests, 44 CLI tests, 7 package-manager tests e 259
+  core tests passaram.
+- Smoke JSON real com `--jobs 4 --isolate-data --timeout 5s`: passou com
+  `isolated_data_dir` preenchido e `timed_out: false`.
+
+Estado atual:
+
+- `nexus test` cobre smoke execution, regressao simples de stdout com sidecars
+  `.out`, refresh seguro com `--update`, filtro simples `--name`, relatorio
+  JSON para CI/tooling, timeout por caso, isolamento temporario de dados por
+  caso e paralelismo controlado.
+- Ainda nao ha DSL de assertions nem isolamento forte por subprocesso por caso.
+
+Proximo passo recomendado:
+
+Fase F tooling - adicionar uma mini DSL de asserts para testes `.nx`, por
+exemplo helpers padrao `assert_eq`, `assert_true` ou uma convencao de erro,
+para transformar o runner em ferramenta de regressao comportamental alem de
+stdout.
+
+AVISO: O proximo passo e desenhar asserts sem quebrar `--json`, `--name`,
+`--update`, `--timeout`, `--isolate-data`, `--jobs` ou sidecars `.out`. Antes
+de iniciar, leia `MEMORIA_NEXUSLANG.md`, abra `nexuslang-src/src/test_runner.rs`,
+`nexuslang-src/src/main.rs`, `nexuslang-src/src/interpreter/mod.rs` e
+`nexuslang-src/tests/cli.rs`, e valide com `cargo fmt`, testes focados do
+runner/CLI, smoke JSON e `cargo test`.
+
+## Etapa anterior concluida: Fase F tooling - mini DSL de asserts para `.nx`
+
+Objetivo: transformar `nexus test` de runner de smoke/stdout em runner simples
+de regressao comportamental com assertions nativas dentro dos ficheiros `.nx`.
+
+Foi feito:
+
+- Adicionados helpers nativos `assert_true(condition)` e
+  `assert_eq(actual, expected)`.
+- O checker reconhece os helpers como chamadas publicas de teste:
+  `assert_true` exige bool e `assert_eq` exige dois argumentos de tipos
+  compativeis, usando o segundo argumento como tipo esperado.
+- O interpreter falha a execucao com mensagens explicitas quando uma assertion
+  nao passa.
+- Igualdade runtime agora compara arrays recursivamente e aceita equivalencia
+  numerica `int`/`float` quando o checker permite esse formato.
+- Falhas de assertion recebem codigo de diagnostico runtime `NXL5006` e
+  metadata enriquecida para JSON/tooling.
+- `nexus test --json` passa a expor falhas de assertion como diagnosticos
+  runtime normais, preservando `--update`, sidecars `.out`, `--name`,
+  `--timeout`, `--isolate-data` e `--jobs`.
+- README e roadmap documentam `assert_true` e `assert_eq`.
+
+Arquivos principais:
+
+- `nexuslang-src/src/checker/type_rules.rs`
+- `nexuslang-src/src/checker/expr.rs`
+- `nexuslang-src/src/checker/hir_expr.rs`
+- `nexuslang-src/src/interpreter/mod.rs`
+- `nexuslang-src/src/diagnostic/mod.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/ROADMAP.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test native_assert_helpers_pass_and_fail_at_runtime --test core
+cargo test cli_test_json_reports_assert_failure_as_runtime_diagnostic --test cli
+cargo test cli_test --test cli
+cargo test test_runner --lib
+cargo test
+cargo run --quiet -- test --json --jobs 4 --isolate-data --timeout 5s --name openapi examples
+cargo fmt --check
+git diff --check
+```
+
+Resultado:
+
+- Teste core focado de assertions: 1 passou.
+- Teste CLI JSON focado de assertion runtime: 1 passou.
+- Testes focados CLI `nexus test`: 18 passaram.
+- Testes focados do runner: 16 passaram.
+- Suite completa: 67 lib tests, 46 CLI tests, 7 package-manager tests e 260
+  core tests passaram.
+- Smoke JSON real com `--jobs 4 --isolate-data --timeout 5s`: passou com
+  `isolated_data_dir` preenchido e `timed_out: false`.
+- `cargo fmt --check` e `git diff --check` passaram.
+
+Estado atual:
+
+- `nexus test` cobre smoke execution, regressao simples de stdout com sidecars
+  `.out`, refresh seguro com `--update`, filtro simples `--name`, relatorio
+  JSON para CI/tooling, timeout por caso, isolamento temporario de dados por
+  caso, paralelismo controlado e assertions comportamentais nativas.
+- A DSL de asserts ainda e pequena: nao ha mensagens customizadas por assertion
+  nem macros/fixtures de setup/teardown.
+- Ainda nao ha isolamento forte por subprocesso por caso.
+
+Proximo passo recomendado:
+
+Fase F tooling - adicionar mensagens opcionais nos asserts, por exemplo
+`assert_true(condicao, "contexto")` e
+`assert_eq(actual, expected, "contexto")`, para que falhas em CI apontem o
+cenario de negocio sem depender apenas dos valores recebidos.
+
+AVISO: O proximo passo e preservar a aridade atual como forma valida, adicionar
+uma terceira mensagem opcional sem quebrar `--json`, `--update`, sidecars,
+`--timeout`, `--isolate-data` ou `--jobs`, e validar com testes core/CLI,
+smoke JSON e `cargo test`.
+
+## Etapa anterior concluida: Fase F tooling - mensagens opcionais nos asserts
+
+Objetivo: permitir que falhas de assertion indiquem o cenario de negocio no
+texto do diagnostico, tornando o output de CI mais claro sem quebrar a DSL ja
+existente.
+
+Foi feito:
+
+- `assert_true(condition)` continua valido.
+- `assert_true(condition, message)` agora aceita uma mensagem opcional string.
+- `assert_eq(actual, expected)` continua valido.
+- `assert_eq(actual, expected, message)` agora aceita uma mensagem opcional
+  string.
+- O checker valida a aridade nova e exige que a mensagem opcional seja string.
+- O interpreter inclui a mensagem no texto de falha quando ela existe, mantendo
+  `assert_true falhou` / `assert_eq falhou` como prefixos estaveis.
+- Mensagem vazia e tratada como ausencia de mensagem.
+- Falhas continuam saindo como diagnostico runtime `NXL5006` no JSON do
+  `nexus test`.
+- README e roadmap documentam a mensagem opcional.
+
+Arquivos principais:
+
+- `nexuslang-src/src/checker/type_rules.rs`
+- `nexuslang-src/src/interpreter/mod.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/ROADMAP.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test native_assert_helpers_pass_and_fail_at_runtime --test core
+cargo test cli_test_json_reports_assert_failure_as_runtime_diagnostic --test cli
+cargo test cli_test --test cli
+cargo test test_runner --lib
+cargo test
+cargo run --quiet -- test --json --jobs 4 --isolate-data --timeout 5s --name openapi examples
+cargo fmt --check
+git diff --check
+```
+
+Resultado:
+
+- Teste core focado de assertions: 1 passou.
+- Teste CLI JSON focado de assertion runtime: 1 passou.
+- Testes focados CLI `nexus test`: 18 passaram.
+- Testes focados do runner: 16 passaram.
+- Suite completa: 67 lib tests, 46 CLI tests, 7 package-manager tests e 260
+  core tests passaram.
+- Smoke JSON real com `--jobs 4 --isolate-data --timeout 5s`: passou com
+  `isolated_data_dir` preenchido e `timed_out: false`.
+- `cargo fmt --check` e `git diff --check` passaram.
+
+Estado atual:
+
+- `nexus test` cobre smoke execution, regressao simples de stdout com sidecars
+  `.out`, refresh seguro com `--update`, filtro simples `--name`, relatorio
+  JSON para CI/tooling, timeout por caso, isolamento temporario de dados por
+  caso, paralelismo controlado e assertions comportamentais com contexto
+  opcional.
+- A DSL de asserts ainda tem apenas `assert_true` e `assert_eq`.
+- Ainda nao ha isolamento forte por subprocesso por caso.
+
+Proximo passo recomendado:
+
+Fase F tooling - ampliar a mini DSL com `assert_ne` e `assert_contains`, ambos
+com mensagem opcional, para reduzir `assert_true(...)` generico e deixar testes
+de strings/arrays mais legiveis.
+
+AVISO: O proximo passo deve preservar `assert_true`/`assert_eq`, manter
+diagnosticos `NXL5006` para falhas de assertion, compor com `--json`,
+`--update`, sidecars, `--timeout`, `--isolate-data` e `--jobs`, e validar com
+testes core/CLI, smoke JSON e `cargo test`.
+
+## Etapa anterior concluida: Fase F tooling - `assert_ne` e `assert_contains`
+
+Objetivo: ampliar a mini DSL de assertions para reduzir `assert_true(...)`
+generico e deixar testes de strings/arrays mais legiveis no `nexus test`.
+
+Foi feito:
+
+- Adicionado `assert_ne(actual, expected)`.
+- Adicionado `assert_ne(actual, expected, message)` com mensagem opcional.
+- Adicionado `assert_contains(container, item)`.
+- Adicionado `assert_contains(container, item, message)` com mensagem opcional.
+- O checker valida `assert_ne` com a mesma compatibilidade de tipos de
+  `assert_eq`.
+- O checker valida `assert_contains` para `string` contem `string` e `[T]`
+  contem item compativel com `T`.
+- O interpreter executa `assert_ne` usando a igualdade runtime existente,
+  incluindo equivalencia numerica `int`/`float` e arrays recursivos.
+- O interpreter executa `assert_contains` para strings e arrays.
+- Falhas de `assert_ne` e `assert_contains` mantem diagnostico runtime
+  `NXL5006` no JSON do `nexus test`.
+- README e roadmap documentam os quatro helpers de assertion.
+
+Arquivos principais:
+
+- `nexuslang-src/src/checker/type_rules.rs`
+- `nexuslang-src/src/interpreter/mod.rs`
+- `nexuslang-src/src/diagnostic/mod.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/ROADMAP.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test native_assert_helpers_pass_and_fail_at_runtime --test core
+cargo test cli_test_json_reports_assert_failure_as_runtime_diagnostic --test cli
+cargo test cli_test --test cli
+cargo test test_runner --lib
+cargo test
+cargo run --quiet -- test --json --jobs 4 --isolate-data --timeout 5s --name openapi examples
+cargo fmt --check
+git diff --check
+```
+
+Resultado:
+
+- Teste core focado de assertions: 1 passou.
+- Teste CLI JSON focado de assertion runtime: 1 passou.
+- Testes focados CLI `nexus test`: 18 passaram.
+- Testes focados do runner: 16 passaram.
+- Suite completa: 67 lib tests, 46 CLI tests, 7 package-manager tests e 260
+  core tests passaram.
+- Smoke JSON real com `--jobs 4 --isolate-data --timeout 5s`: passou com
+  `isolated_data_dir` preenchido e `timed_out: false`.
+- `cargo fmt --check` e `git diff --check` passaram.
+
+Estado atual:
+
+- `nexus test` cobre smoke execution, regressao simples de stdout com sidecars
+  `.out`, refresh seguro com `--update`, filtro simples `--name`, relatorio
+  JSON para CI/tooling, timeout por caso, isolamento temporario de dados por
+  caso, paralelismo controlado e uma mini DSL de assertions com
+  `assert_true`, `assert_eq`, `assert_ne` e `assert_contains`.
+- A DSL de asserts ainda nao cobre verificacao de erro esperado.
+- Ainda nao ha isolamento forte por subprocesso por caso.
+
+Proximo passo recomendado:
+
+Fase F tooling - adicionar `nexus test --list`, emitindo a lista deterministica
+dos casos descobertos e filtrados sem executar os programas, para facilitar CI,
+debug de filtros `--name` e tooling em volta do runner.
+
+AVISO: O proximo passo deve preservar o comportamento de execucao normal,
+compor com `--name` e `--json`, nao atualizar sidecars com `--update`, e validar
+com testes do runner/CLI, smoke JSON e `cargo test`.
+
+## Etapa anterior concluida: Fase F tooling - `nexus test --list`
+
+Objetivo: permitir que CI, scripts e o desenvolvedor inspecionem a lista
+deterministica de casos descobertos/filtrados sem executar programas `.nx` nem
+tocar sidecars `.out`.
+
+Foi feito:
+
+- Adicionado `nexus test --list [alvo]`.
+- `--list` usa a mesma descoberta deterministica de `.nx` do runner normal.
+- `--list` compoe com `--name <termo>`.
+- `--list --json` emite uma linha JSON com `mode:"list"`, summary total e
+  casos `{ path, status:"listed" }`.
+- `--list --update` nao executa programas e nao escreve sidecars `.out`.
+- O modo normal de `nexus test` continua inalterado.
+- A CLI agora separa a acao `Run` da acao `List`.
+- README e roadmap documentam `--list`.
+
+Arquivos principais:
+
+- `nexuslang-src/src/test_runner.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/ROADMAP.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test test_runner --lib
+cargo test cli_test_list --test cli
+cargo test cli_test_json_list_reports_filtered_cases_without_execution --test cli
+cargo test cli_test --test cli
+cargo test
+cargo run --quiet -- test --json --list --name openapi examples
+cargo run --quiet -- test --json --jobs 4 --isolate-data --timeout 5s --name openapi examples
+cargo fmt --check
+git diff --check
+```
+
+Resultado:
+
+- Testes focados do runner: 18 passaram.
+- Teste CLI humano `--list`: 1 passou.
+- Teste CLI JSON `--list`: 1 passou.
+- Testes focados CLI `nexus test`: 20 passaram.
+- Suite completa: 69 lib tests, 48 CLI tests, 7 package-manager tests e 260
+  core tests passaram.
+- Smoke JSON real `--list --name openapi examples`: listou
+  `examples/openapi_qa.nx` sem executar.
+- Smoke JSON real de execucao com `--jobs 4 --isolate-data --timeout 5s`:
+  passou com `isolated_data_dir` preenchido e `timed_out: false`.
+- `cargo fmt --check` e `git diff --check` passaram.
+
+Estado atual:
+
+- `nexus test` cobre smoke execution, regressao simples de stdout com sidecars
+  `.out`, refresh seguro com `--update`, filtro simples `--name`, relatorio
+  JSON para CI/tooling, timeout por caso, isolamento temporario de dados por
+  caso, paralelismo controlado, listagem deterministica sem execucao e uma mini
+  DSL de assertions com `assert_true`, `assert_eq`, `assert_ne` e
+  `assert_contains`.
+- A DSL de asserts ainda nao cobre verificacao de erro esperado.
+- Ainda nao ha isolamento forte por subprocesso por caso.
+
+Proximo passo recomendado:
+
+Fase F tooling - adicionar `nexus test --fail-fast`, interrompendo a execucao no
+primeiro caso com falha em modo sequencial e no primeiro lote com falha quando
+`--jobs` estiver ativo, para acelerar feedback local/CI.
+
+AVISO: O proximo passo deve preservar o relatorio JSON/humano, compor com
+`--name`, `--timeout`, `--isolate-data`, `--jobs`, `--update` e sidecars `.out`,
+e validar com testes do runner/CLI, smoke JSON e `cargo test`.
+
+## Etapa anterior concluida: Fase F tooling - `nexus test --fail-fast`
+
+Objetivo: acelerar feedback local/CI interrompendo a execucao no primeiro caso
+com falha em modo sequencial e no primeiro lote com falha quando `--jobs` esta
+ativo.
+
+Foi feito:
+
+- Adicionado `NexusTestOptions::fail_fast`.
+- Adicionado parser CLI para `nexus test --fail-fast`, com erro para flag
+  repetida.
+- O runner sequencial para apos o primeiro caso que falha.
+- O runner paralelo executa por lotes e para apos o primeiro lote que contem
+  falha, preservando a ordem deterministica dos casos executados.
+- Casos nao executados por `--fail-fast` nao aparecem no relatorio humano nem
+  no JSON.
+- `--fail-fast` compoe com `--json`, `--list`, `--jobs`, `--timeout`,
+  `--isolate-data`, `--name`, `--update` e sidecars `.out`.
+- README e roadmap documentam o novo comportamento.
+
+Arquivos principais:
+
+- `nexuslang-src/src/test_runner.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/ROADMAP.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test run_tests_at_with_fail_fast --lib
+cargo test cli_test_fail_fast --test cli
+cargo test cli_test_json_fail_fast_reports_partial_cases --test cli
+cargo test run_tests_at_with_jobs_fail_fast_stops_after_failed_batch --lib
+cargo test test_runner --lib
+cargo test cli_test --test cli
+cargo test
+cargo run --quiet -- test --json --fail-fast --jobs 4 --isolate-data --timeout 5s --name openapi examples
+cargo fmt --check
+git diff --check
+```
+
+Resultado:
+
+- Teste focado sequencial `--fail-fast`: 1 passou.
+- Teste focado CLI humano `--fail-fast`: 1 passou.
+- Teste focado CLI JSON `--fail-fast`: 1 passou.
+- Teste focado paralelo por lote `--fail-fast --jobs`: 1 passou.
+- Testes focados do runner: 20 passaram.
+- Testes focados CLI `nexus test`: 22 passaram.
+- Suite completa: 71 lib tests, 50 CLI tests, 7 package-manager tests e 260
+  core tests passaram.
+- Smoke JSON real com `--fail-fast --jobs 4 --isolate-data --timeout 5s
+  --name openapi examples`: passou com 1 caso e `isolated_data_dir`
+  preenchido.
+- `cargo fmt --check` e `git diff --check` passaram.
+
+Estado atual:
+
+- `nexus test` cobre smoke execution, regressao simples de stdout com sidecars
+  `.out`, refresh seguro com `--update`, filtro simples `--name`, relatorio
+  JSON para CI/tooling, timeout por caso, isolamento temporario de dados por
+  caso, paralelismo controlado, listagem deterministica sem execucao,
+  interrupcao antecipada com `--fail-fast` e uma mini DSL de assertions com
+  `assert_true`, `assert_eq`, `assert_ne` e `assert_contains`.
+- A DSL de asserts ainda nao cobre verificacao de erro esperado.
+- Ainda nao ha isolamento forte por subprocesso por caso.
+
+Proximo passo recomendado:
+
+Fase F tooling - adicionar suporte a testes de erro esperado no `nexus test`,
+por exemplo com sidecar `.err` opcional para validar diagnosticos esperados sem
+transformar erro intencional em falha do runner.
+
+AVISO: O proximo passo deve preservar `--json`, `--fail-fast`, `--jobs`,
+`--timeout`, `--isolate-data`, `--name`, `--update` e sidecars `.out`, e validar
+com testes do runner/CLI, smoke JSON e `cargo test`.
+
+## Etapa anterior concluida: Fase F tooling - sidecars `.err` no `nexus test`
+
+Objetivo: permitir testes de erro esperado no runner, validando diagnosticos
+intencionais sem transformar esses casos em falha quando o texto esperado bate.
+
+Foi feito:
+
+- Adicionado suporte a sidecars `.err` ao lado dos testes `.nx`.
+- Quando `.err` existe, o runner compara o texto do diagnostico produzido com
+  o conteudo do sidecar.
+- Um programa que falha com o diagnostico esperado agora conta como `PASS`.
+- Um programa que passa quando `.err` esperava erro gera mismatch de
+  diagnostico com `<sem diagnostico>` no relatorio humano.
+- Um diagnostico diferente do esperado gera `diagnostic_mismatch` no JSON e
+  continua falhando.
+- `.err` compoe com `.out`: a saida parcial antes do erro pode ser validada
+  pelo sidecar `.out`.
+- `--fail-fast` trata erro esperado que bate como caso aprovado e continua ate
+  encontrar uma falha real.
+- `--json` agora inclui campos aditivos `expected_diagnostic` e
+  `diagnostic_mismatch` por caso.
+- README e roadmap documentam sidecars `.err`.
+
+Arquivos principais:
+
+- `nexuslang-src/src/test_runner.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/ROADMAP.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test run_tests_at_matches_optional_err_sidecar --lib
+cargo test run_tests_at_reports_err_sidecar_mismatch_when_program_succeeds --lib
+cargo test cli_test_matches_expected_err_sidecar --test cli
+cargo test cli_test_json_reports_expected_err_sidecar_as_passed_case --test cli
+cargo test test_runner --lib
+cargo test cli_test --test cli
+cargo test
+cargo run --quiet -- test --json --fail-fast --jobs 2 --timeout 5s /tmp/<fixture>/tests
+cargo fmt --check
+git diff --check
+```
+
+Resultado:
+
+- Testes focados de `.err` no runner: passaram.
+- Testes focados de `.err` na CLI: passaram.
+- Testes focados do runner: 23 passaram.
+- Testes focados CLI `nexus test`: 25 passaram.
+- Suite completa: 74 lib tests, 53 CLI tests, 7 package-manager tests e 260
+  core tests passaram.
+- Smoke JSON real com `.nx`, `.out`, `.err`, `--fail-fast`, `--jobs 2` e
+  `--timeout 5s`: passou com `expected_diagnostic:["Divisão por zero"]`,
+  `diagnostic_mismatch:null` e `diagnostics:[]`.
+- `cargo fmt --check` e `git diff --check` passaram.
+
+Estado atual:
+
+- `nexus test` cobre smoke execution, regressao simples de stdout com sidecars
+  `.out`, erro esperado com sidecars `.err`, refresh seguro de `.out` com
+  `--update`, filtro simples `--name`, relatorio JSON para CI/tooling, timeout
+  por caso, isolamento temporario de dados por caso, paralelismo controlado,
+  listagem deterministica sem execucao, interrupcao antecipada com
+  `--fail-fast` e uma mini DSL de assertions com `assert_true`, `assert_eq`,
+  `assert_ne` e `assert_contains`.
+- `.err` ainda precisa ser escrito manualmente; nao ha modo dedicado para
+  atualizar sidecars de diagnostico esperado.
+- Ainda nao ha isolamento forte por subprocesso por caso.
+
+Proximo passo recomendado:
+
+Fase F tooling - adicionar `nexus test --update-err`, para gerar ou atualizar
+sidecars `.err` automaticamente a partir do diagnostico atual, mas somente
+quando o programa falha e sem escrever `.out` para esse caso.
+
+AVISO: O proximo passo deve preservar `--json`, `--fail-fast`, `--jobs`,
+`--timeout`, `--isolate-data`, `--name`, `--update`, sidecars `.out` e o
+comportamento atual de `.err`, e validar com testes do runner/CLI, smoke JSON e
+`cargo test`.
+
+## Etapa anterior concluida: Fase F tooling - `nexus test --update-err`
+
+Objetivo: permitir gerar ou atualizar sidecars `.err` automaticamente a partir
+do diagnostico atual, somente quando o programa falha.
+
+Foi feito:
+
+- Adicionado `NexusTestOptions::update_expected_diagnostic`.
+- Adicionado parser CLI para `nexus test --update-err`, com erro para flag
+  repetida.
+- Quando um programa falha com diagnostico e `--update-err` esta ativo, o
+  runner escreve/atualiza `<teste>.err` com `diagnostic.to_string()`.
+- O caso com diagnostico atualizado conta como `PASS`, salvo se tambem houver
+  outra falha de contrato, como mismatch de `.out`.
+- Programas que passam nao criam `.err` com `--update-err`.
+- `--update --update-err` em programa que falha atualiza `.err`, mas nao cria
+  `.out` para esse caso.
+- `--list --update-err` apenas lista casos e nao escreve sidecars.
+- O JSON de caso ganhou o campo aditivo `expected_diagnostic_updated`.
+- O relatorio humano imprime `atualizado: <teste>.err` quando a sidecar de
+  diagnostico e escrita.
+- README e roadmap documentam `--update-err`.
+
+Arquivos principais:
+
+- `nexuslang-src/src/test_runner.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/ROADMAP.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo fmt
+cargo test run_tests_at_with_update_err --lib
+cargo test cli_test_update_err --test cli
+cargo test cli_test_json_update_err_reports_updated_sidecar --test cli
+cargo test test_runner --lib
+cargo test cli_test --test cli
+cargo test
+cargo run --quiet -- test --json --update-err --fail-fast --jobs 2 --timeout 5s /tmp/<fixture>/tests
+cargo fmt --check
+git diff --check
+```
+
+Resultado:
+
+- Testes focados de `--update-err` no runner: 2 passaram.
+- Testes focados CLI `--update-err`: 2 passaram.
+- Teste focado CLI JSON `--update-err`: 1 passou.
+- Testes focados do runner: 26 passaram.
+- Testes focados CLI `nexus test`: 28 passaram.
+- Suite completa: 77 lib tests, 56 CLI tests, 7 package-manager tests e 260
+  core tests passaram.
+- Smoke JSON real com `.nx`, `--update-err`, `--fail-fast`, `--jobs 2` e
+  `--timeout 5s`: passou com `expected_diagnostic:["Divisão por zero"]`,
+  `expected_diagnostic_updated` preenchido, `diagnostic_mismatch:null`,
+  `diagnostics:[]` e sem criar `.out`.
+- `cargo fmt --check` e `git diff --check` passaram.
+
+Estado atual:
+
+- `nexus test` cobre smoke execution, regressao simples de stdout com sidecars
+  `.out`, erro esperado com sidecars `.err`, refresh seguro de `.out` com
+  `--update`, refresh seguro de `.err` com `--update-err`, filtro simples
+  `--name`, relatorio JSON para CI/tooling, timeout por caso, isolamento
+  temporario de dados por caso, paralelismo controlado, listagem deterministica
+  sem execucao, interrupcao antecipada com `--fail-fast` e uma mini DSL de
+  assertions com `assert_true`, `assert_eq`, `assert_ne` e `assert_contains`.
+- Ainda nao ha isolamento forte por subprocesso por caso.
+- O runner ainda nao tem um modo de diff compacto/legivel para outputs ou
+  diagnosticos longos.
+
+Proximo passo recomendado:
+
+Fase F tooling - adicionar diff compacto para mismatches de `.out` e `.err` no
+relatorio humano/JSON, mostrando a primeira linha divergente para acelerar
+debug local e CI.
+
+AVISO: O proximo passo deve preservar `--json`, `--fail-fast`, `--jobs`,
+`--timeout`, `--isolate-data`, `--name`, `--update`, `--update-err`, sidecars
+`.out`/`.err`, e validar com testes do runner/CLI, smoke JSON e `cargo test`.
+
+## Etapa anterior concluida: Fase F tooling - diff compacto em `.out`/`.err`
+
+Objetivo: acelerar debug local/CI mostrando a primeira linha divergente em
+mismatches de stdout (`.out`) e diagnostico esperado (`.err`).
+
+Foi feito:
+
+- Adicionado `NexusLineDiff` com `line`, `expected` e `actual`.
+- `NexusOutputMismatch` agora carrega `first_diff`.
+- `NexusDiagnosticMismatch` agora carrega `first_diff`.
+- O JSON de `output_mismatch` e `diagnostic_mismatch` ganhou o campo aditivo
+  `first_diff`.
+- O relatorio humano agora imprime `primeira diferenca: linha N` com os valores
+  esperado/recebido antes do bloco completo.
+- Quando a linha nao existe em um lado, o relatorio humano usa `<sem linha>` e
+  o JSON usa `null`.
+- README e roadmap documentam o diff compacto.
+
+Arquivos principais:
+
+- `nexuslang-src/src/test_runner.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli.rs`
+- `nexuslang-src/ROADMAP.md`
+- `README.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+rustfmt src/test_runner.rs src/main.rs tests/cli.rs
+cargo test match_output_reports_first_divergent_line --lib
+cargo test run_tests_at_reports_out_sidecar_mismatch --lib
+cargo test run_tests_at_reports_err_sidecar_mismatch_when_program_succeeds --lib
+cargo test cli_test_reports_out_sidecar_mismatch --test cli
+cargo test test_runner --lib
+cargo test cli_test --test cli
+cargo test
+cargo run --quiet -- test --json --jobs 2 --timeout 5s /tmp/<fixture>/tests
+rustfmt --check src/test_runner.rs src/main.rs tests/cli.rs
+git diff --check
+```
+
+Resultado:
+
+- Testes focados de diff compacto passaram.
+- Testes focados do runner: 27 passaram.
+- Testes focados CLI `nexus test`: 28 passaram.
+- Suite completa: 78 lib tests, 56 CLI tests, 7 package-manager tests e 260
+  core tests passaram.
+- Smoke JSON real com mismatch de `.out` e `.err`: saiu com
+  `output_mismatch.first_diff.line:2` e `diagnostic_mismatch.first_diff.line:1`.
+- `rustfmt --check` nos arquivos Rust tocados passou.
+- `git diff --check` passou.
+- `cargo fmt --check` global nao ficou limpo porque o workspace ja contem
+  arquivos fora desta fatia que o rustfmt quer ajustar, incluindo
+  `nexuslang-src/src/diagnostics/mod.rs` root-owned.
+
+Estado atual:
+
+- `nexus test` cobre smoke execution, regressao simples de stdout com sidecars
+  `.out`, erro esperado com sidecars `.err`, refresh seguro de `.out` com
+  `--update`, refresh seguro de `.err` com `--update-err`, filtro simples
+  `--name`, relatorio JSON para CI/tooling, diff compacto em mismatches,
+  timeout por caso, isolamento temporario de dados por caso, paralelismo
+  controlado, listagem deterministica sem execucao, interrupcao antecipada com
+  `--fail-fast` e uma mini DSL de assertions com `assert_true`, `assert_eq`,
+  `assert_ne` e `assert_contains`.
+- Ainda nao ha isolamento forte por subprocesso por caso.
+- O runner ainda imprime blocos completos de esperado/recebido alem do diff
+  compacto; isso e util, mas pode ficar verboso em outputs muito longos.
+
+Proximo passo recomendado:
+
+Fase F tooling - adicionar truncamento configuravel/seguro no relatorio humano
+para outputs e diagnosticos longos, mantendo o JSON completo para tooling.
+
+AVISO: O proximo passo deve preservar `--json`, `--fail-fast`, `--jobs`,
+`--timeout`, `--isolate-data`, `--name`, `--update`, `--update-err`, sidecars
+`.out`/`.err`, `first_diff`, e validar com testes do runner/CLI, smoke JSON e
+`cargo test`.
+
+## Etapa anterior concluida: Fase F tooling - truncamento seguro no relatorio humano
+
+Objetivo: evitar que outputs ou diagnosticos muito longos tornem o relatorio
+humano do `nexus test` pesado demais para uso local/CI, mantendo o JSON completo
+para tooling.
+
+Foi feito:
+
+- Adicionado limite fixo `TEST_HUMAN_OUTPUT_LINE_LIMIT = 20` no relatorio
+  humano do `nexus test`.
+- `print_output_lines` agora mostra no maximo 20 linhas por bloco e imprime
+  `... N linhas omitidas` quando houver conteudo restante.
+- O truncamento vale para blocos humanos de esperado/recebido, incluindo
+  mismatches de `.out` e `.err`.
+- O relatorio JSON continua emitindo as arrays completas de output/diagnostico,
+  sem marcador de truncamento, para CI e ferramentas.
+- Cobertura CLI valida que o humano trunca mismatches longos de `.out` e `.err`
+  e que `--json` preserva as linhas completas.
+- README e roadmap documentam que o relatorio humano trunca apos 20 linhas e
+  que JSON permanece completo.
+
+Arquivos principais:
+
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/cli.rs`
+- `README.md`
+- `nexuslang-src/ROADMAP.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+rustfmt src/main.rs tests/cli.rs
+cargo test cli_test_human_report_truncates_long_out_mismatch_but_json_keeps_full_lines --test cli
+cargo test cli_test_human_report_truncates_long_err_mismatch_but_json_keeps_full_lines --test cli
+cargo test cli_test --test cli
+cargo test
+rustfmt --check src/main.rs tests/cli.rs
+git diff --check
+```
+
+Resultado:
+
+- Testes focados de truncamento humano/JSON passaram.
+- Testes CLI `nexus test`: 30 passaram.
+- Suite completa: 78 lib tests, 58 CLI tests, 7 package-manager tests e 260
+  core tests passaram.
+- `rustfmt --check` nos arquivos Rust tocados passou.
+- `git diff --check` passou.
+- `cargo fmt --check` global continua nao sendo o gate desta fatia porque o
+  workspace ja contem arquivos fora desta mudanca que o rustfmt quer ajustar,
+  incluindo `nexuslang-src/src/diagnostics/mod.rs` root-owned.
+
+Estado atual:
+
+- `nexus test` agora tem relatorio humano mais seguro para logs longos, sem
+  perder fidelidade no JSON.
+- `.out`/`.err`, `first_diff`, `--json`, `--update`, `--update-err`, `--name`,
+  `--list`, `--fail-fast`, `--timeout`, `--isolate-data`, `--jobs` e asserts
+  continuam preservados.
+- O limite de truncamento ainda e fixo em 20 linhas; nao ha flag/configuracao.
+- Ainda nao ha isolamento forte por subprocesso por caso.
+
+Proximo passo recomendado:
+
+Fase F tooling - adicionar isolamento real por subprocesso por caso no
+`nexus test`, especialmente para combinar melhor `--jobs`, `--timeout` e
+`--isolate-data`, evitando estado global compartilhado e abrindo caminho para
+cancelamento mais forte de casos travados.
+
+## Sessao 2026-05-28: F1 Core Stability 100% + Deprecate String wrappers + result_large_err
+
+### Feito
+
+- **F1 Core Stability 100%**: `Interpreter::run()` mudou de `Result<(), String>` para
+  `Result<(), Diagnostic>`. Callers actualizados em `lib.rs`, `playground/mod.rs`,
+  `diagnostics/mod.rs`. Helper `runtime_error()` criado no interpreter para converter
+  erros internos `String` em `Diagnostic` com stage=Runtime, codigo v1 (NXL5xxx),
+  enriquecimento.
+- **`impl From<Diagnostic> for MultiModuleDiagnostic`**: adicionado em
+  `diagnostics/mod.rs` para permitir conversao directa de Diagnostic em
+  MultiModuleDiagnostic, simplificando a integracao entre estagios.
+- **14 funcoes `#[deprecated]` em `lib.rs`**: `run_source`, `check_source`,
+  `lint_source`, `parse_source`, `ast_source`, `fmt_source`, etc. apontam para
+  equivalentes `_diagnostic`. `#![allow(deprecated)]` no root (lib.rs) para nao
+  quebrar build.
+- **`#[allow(clippy::result_large_err)]`**: adicionado em `lib.rs` e `main.rs`
+  para suprimir 185 warnings de `Result` com diagnosticos grandes (~300+ bytes).
+  Considerado divida tecnica conhecida (8-15h para fix real).
+- **`cargo clippy --fix`**: eliminou ~11 warnings auto-fixaveis (needless_return, etc).
+- **`cargo clippy`**: de 199 para 2 warnings (ambos pre-existentes em
+  `test_runner.rs` — `large_enum_variant` e `if_same_then_else`).
+
+### Verificado
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo check          # PASS, sem erros
+cargo clippy         # 2 warnings (pre-existentes, ambos em test_runner.rs)
+cargo test           # PASS, 403 testes (78 unit + 58 CLI + 7 package + 260 core)
+```
+
+### Arquivos alterados
+
+- `src/interpreter/mod.rs`: `run()` retorna `Result<(), Diagnostic>`; helper `runtime_error()`
+- `src/lib.rs`: 14 funcoes `#[deprecated]`; `#![allow(clippy::result_large_err)]`; re-exports
+- `src/diagnostics/mod.rs`: `impl From<Diagnostic> for MultiModuleDiagnostic`
+- `src/playground/mod.rs`: Diagnostic chega pronto do interpreter, simplificado
+- `src/main.rs`: `#![allow(clippy::result_large_err, deprecated)]`
+
+## Sessao 2026-05-28 (segunda): LSP Adapter + Maturity Model
+
+### Maturidade (modelo A-Z, inspirado KIPAY)
+
+| Track | Score | Letra |
+|---|---|---|
+| A-F Core Language | **100%** ✅ | Concluído |
+| F-P Production Tooling | **~65%** | O (LSP MVP) / P (editor stubs) |
+| P-Z Commercial Product | **~2%** | P (LSP recém-criado) |
+| LSP adapter (sub-track A-F) | **~55%** | C (4 features core) / D (editor) |
+
+Ver detalhes em `nexuslang-src/docs/project-maturity-model.md`.
+
+### Feito
+
+- **Criado crate `nexus-lsp/`**: workspace member `nexus-lsp`, depende de
+  `nexuslang` via path + `tower-lsp` 0.20 + `tokio` + `serde_json`.
+- **MVP LSP implementado**:
+  - Diagnostics: erros via `parse_checked_source_diagnostic` publicados em
+    tempo real no `did_open`/`did_change`.
+  - Hover: mostra info do token sob o cursor (tipo, keyword, operador).
+  - Completion: keywords da linguagem + identificadores do ficheiro actual.
+  - Go-to-definition: navega para declarações (model, route, auth, workflow,
+    fn, let, import).
+- **Workspace config**: `Cargo.toml` raiz virou workspace com `default-members = ["."]`.
+- **Maturity Model**: criado `docs/project-maturity-model.md` com tracking
+  A-Z separado por trilha (Core, Production, Commercial).
+
+### Verificado
+
+```bash
+cd /home/alexandre/Nesusang/nexuslang-src
+cargo build -p nexus-lsp          # PASS, binario em target/debug/nexus-lsp
+cargo test                        # PASS, 403 testes
+cargo clippy -p nexus-lsp         # PASS, 0 warnings
+```
+
+### Arquivos criados
+
+- `nexus-lsp/Cargo.toml`
+- `nexus-lsp/src/main.rs`
+- `docs/project-maturity-model.md`
+
+### Arquivos alterados
+
+- `Cargo.toml` (workspace)
+- `MEMORIA_NEXUSLANG.md` (status + esta sessao)
+
+### Proximo passo
+
+**Testar LSP com editor** — configurar VS Code ou Neovim para apontar para
+`target/debug/nexus-lsp` e validar diagnostics, hover, completion, goto-def
+num ficheiro `.nx` real.

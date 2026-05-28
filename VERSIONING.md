@@ -31,7 +31,7 @@ v<version>
 Example:
 
 ```text
-v0.1.1
+v0.2.0-rc.1
 ```
 
 Tags should point to the commit that produced the release artifacts and passed
@@ -46,6 +46,8 @@ quality rather than fully stable.
   or narrow behavior fixes with no intentional breaking changes.
 - Minor releases, such as `0.2.0`, may refine language/runtime contracts when
   needed, but must document breaking changes in `RELEASE_NOTES.md`.
+- Release-candidate tags, such as `v0.2.0-rc.1`, may be used before a minor
+  line is declared stable enough for a final public release.
 - The package format should remain compatible within a minor line unless the
   release notes explicitly say otherwise.
 
@@ -79,9 +81,11 @@ For any release candidate:
 
 ## Current Release
 
-Current source version: `0.1.1`
+Current source version: `0.2.0-rc.1`
 
 Latest published GitHub Release: `v0.1.1`.
+
+Current local RC target: `v0.2.0-rc.1`.
 
 Previous published GitHub Release: `v0.1.0`.
 

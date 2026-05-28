@@ -2,7 +2,8 @@
 
 NexusLang is an ERP-first programming language for business workflows,
 models, invoices, routes, and small runtime services. The current release line
-is `0.1.1` for evaluation, demos, and QA.
+is preparing `0.2.0-rc.1` for local QA. The latest published GitHub Release is
+still `v0.1.1` for evaluation, demos, and QA.
 
 ## What is included
 
@@ -13,6 +14,8 @@ is `0.1.1` for evaluation, demos, and QA.
 - HTTP runtime for declared routes
 - JSON and SQLite storage backends
 - OpenAPI generation and validation for the supported HTTP subset
+- Central `ModelStaticOperation` descriptor contract for checker, runtime
+  storage, and OpenAPI behavior
 - Native auth MVP with Argon2id password hashing, opaque sessions, bearer
   tokens, and route guards
 - Local package manager MVP with `nexus.toml`, `nexus.lock`, `nexus install`,
@@ -71,17 +74,17 @@ end to end from a clean temporary directory:
 
 ## Build Or Validate A Local Package
 
-Build or download the local package artifacts:
+Build or download the local package artifacts for the current source version:
 
 ```text
-nexuslang-v0.1.1-local-release.tar.gz
-nexuslang-v0.1.1-local-release.tar.gz.sha256
+nexuslang-v0.2.0-rc.1-local-release.tar.gz
+nexuslang-v0.2.0-rc.1-local-release.tar.gz.sha256
 ```
 
 Verify the archive before extracting it:
 
 ```bash
-sha256sum -c nexuslang-v0.1.1-local-release.tar.gz.sha256
+sha256sum -c nexuslang-v0.2.0-rc.1-local-release.tar.gz.sha256
 ```
 
 For signed public artifacts, also verify the detached GPG signatures described
@@ -90,8 +93,8 @@ in `SIGNING.md`.
 Extract and enter the package:
 
 ```bash
-tar -xzf nexuslang-v0.1.1-local-release.tar.gz
-cd nexuslang-v0.1.1-local-release
+tar -xzf nexuslang-v0.2.0-rc.1-local-release.tar.gz
+cd nexuslang-v0.2.0-rc.1-local-release
 ```
 
 Run the packaged smoke test:
@@ -114,6 +117,109 @@ Validate and run the basic ERP example:
 ./bin/nexus check examples/erp_basico.nx
 ./bin/nexus run examples/erp_basico.nx
 ```
+
+For tooling, validation diagnostics can also be emitted as JSON:
+
+```bash
+./bin/nexus check --json examples/erp_basico.nx
+./bin/nexus run --json examples/erp_basico.nx
+```
+
+The JSON output uses the versioned diagnostics contract documented in
+[`nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md`](nexuslang-src/DIAGNOSTICS_JSON_CONTRACT.md).
+Diagnostics include optional `code`, `severity`, `labels`, `notes`, and
+`suggestions` fields for tooling. The v1 code catalog is granular by lexer,
+parser, module-loader, checker, and runtime error family, with high-impact
+checker, loader, and runtime diagnostics already carrying richer metadata. Rust
+tooling can also use the additive diagnostic report API to group diagnostics by
+path/module, query reports by path, module, stage, severity, or group, and get
+an in-memory summary plus flattened tooling items with group indexes. When a
+`SourceDatabase` is available, Rust tooling can opt into source-line snippets
+and highlight columns without changing JSON output. The public report,
+summary, flattened view, and source-context surfaces are covered by a
+pre-LSP contract matrix in the diagnostics contract doc. A compilable Rust
+consumer example lives at
+[`nexuslang-src/examples/diagnostic_report_tooling.rs`](nexuslang-src/examples/diagnostic_report_tooling.rs).
+The first editor adapter now lives in
+[`nexuslang-src/nexus-lsp`](nexuslang-src/nexus-lsp): it uses `tower-lsp` over
+stdio, publishes diagnostics from the core diagnostic APIs, and offers initial
+hover, completion, semantic tokens, document symbols, and same-document
+go-to-definition. For clean entry
+snapshots that match disk, `LspCore` now bridges to `SourceDatabase` and the
+module-loader/checker report APIs to publish diagnostics for imported modules
+as well as the opened file. Dirty unsaved snapshots fall back to
+single-document diagnostics and clear previously published imported-module
+diagnostics when the old graph is no longer current. Close events also publish
+empty batches for the document's previous diagnostic group, while shared
+modules stay visible if another open entry document still owns them. Its
+transport adapter is thin:
+`nexus-lsp/src/lib.rs` owns the testable `DocumentSnapshot`/`LspCore` logic and
+`src/main.rs` only bridges LSP events to that core. It remains deliberately
+separate from the compiler core and does not yet provide a persistent or
+incremental source database. Go-to-definition now also has an opt-in
+cross-file path for imports and aliases: clean disk-backed snapshots resolve
+through `SourceDatabase` import edges and `ModuleGraph` exports to the target
+module declaration, while dirty entry or imported snapshots keep the
+same-document fallback. The adapter also provides full-document semantic tokens
+with a small lexical legend for keywords, types, strings, numbers, identifiers,
+and ERP symbols such as `model`, `route`, `auth`, `workflow`, `step`, and
+`invoice`. Document symbols are document-local and AST-backed, covering
+declarations plus ERP children such as model fields, workflow steps, and
+route query params and invoice entries when the document parses.
+CLI users can opt into that report with `nexus check
+--json-report` or `nexus run --json-report`; those report modes can collect
+multiple checker diagnostics from independent function, route, workflow, and
+invoice declaration bodies, while regular `--json` keeps the first-error shape.
+
+Generate Markdown documentation from checked ERP declarations:
+
+```bash
+./bin/nexus docs examples/openapi_qa.nx --output docs.md
+```
+
+`nexus docs` validates the entrypoint and its imports before documenting
+models, functions, workflows, auth configs, routes, and invoices.
+
+Run local `.nx` smoke tests or examples:
+
+```bash
+./bin/nexus test examples
+```
+
+Without an explicit path, `nexus test` looks for `tests/` first and then
+`examples/`. Each discovered `.nx` file is validated and executed through the
+same multi-module loader used by `nexus run`. Add an optional `.out` sidecar
+next to a test file, for example `tests/smoke.nx` and `tests/smoke.out`, to
+compare captured stdout exactly. Add an optional `.err` sidecar to make an
+intentional diagnostic part of the passing contract; for example,
+`tests/bad_input.nx` with `tests/bad_input.err` passes only when the diagnostic
+text matches. Tests can also use native assertions:
+`assert_true(condition)`, `assert_eq(actual, expected)`, `assert_ne(actual,
+expected)`, and `assert_contains(container, item)` stop the case with a runtime
+diagnostic when they fail; all accept an optional final message string for CI
+context. Use `nexus test --update tests` to write or refresh `.out` files from
+successful test output; failing programs never update their `.out` sidecars.
+Use `nexus test --update-err tests` to write or refresh `.err` files from the
+current diagnostic when a program fails; passing programs do not create `.err`.
+Use `nexus test --name smoke tests` to run only discovered files whose path/name
+contains `smoke`; the filter also composes with `--update` and
+`--update-err`. Use
+`nexus test --json tests` for a machine-readable report with summary counts,
+per-case status, captured output, `.out` mismatches, expected diagnostics,
+diagnostic mismatches, diagnostics, and updated sidecar paths. Mismatch reports
+include a compact first divergent line in human output and JSON `first_diff`
+metadata. Human output blocks are truncated after 20 lines to keep local/CI logs
+readable; JSON keeps the full arrays for tooling. Use
+`nexus test --list tests` to print the deterministic
+discovered/filtered case list without executing programs or updating sidecars;
+it also composes with `--json`. Use `nexus test --timeout 5s tests` to fail a
+case that does not finish within the configured time. Use
+`nexus test --isolate-data tests` to give each case its own temporary
+`NEXUS_DATA_DIR`, keeping runtime storage away from the workspace
+`.nexus-data`. Use `nexus test --jobs 4 tests` to run multiple cases at once;
+reports keep the deterministic discovered order. Use
+`nexus test --fail-fast tests` to stop after the first failing case; with
+`--jobs`, execution stops after the first batch that contains a failure.
 
 Create a small file:
 
@@ -214,6 +320,12 @@ The CLI can serve route declarations:
 ./bin/nexus serve examples/openapi_qa.nx 127.0.0.1:5050
 ```
 
+JSON is the default runtime storage driver. SQLite can be selected explicitly:
+
+```bash
+./bin/nexus serve examples/openapi_qa.nx 127.0.0.1:5050 --storage sqlite
+```
+
 In another terminal:
 
 ```bash
@@ -223,7 +335,15 @@ curl http://127.0.0.1:5050/openapi.json
 
 Runtime storage may create `.nexus-data` next to the served example. That
 directory is local generated data and is intentionally excluded from release
-packages.
+packages. The JSON driver stores model files in that directory; the SQLite
+driver stores `.nexus-data/nexus.db`.
+
+## Model Operation Contract
+
+The supported `Model::...` route operations are defined by a central Rust
+descriptor table instead of repeated string lists in checker, router, and
+OpenAPI code. See `MODEL_OPERATIONS.md` for the current contract, descriptor
+fields, supported operation families, and extension checklist.
 
 ## Native Auth MVP
 
@@ -235,6 +355,9 @@ The post-`v0.1.1` source line includes the first secure backend auth slice:
   `Auth::user()`
 - Argon2id password hashing with per-password salt
 - opaque server-side session cookies and revocable bearer tokens
+- rate limiting for failed login/register attempts by auth identity
+- CSRF tokens for cookie-backed `POST`/`PUT`/`DELETE` protected routes
+- JSON and SQLite auth-store persistence through the storage backend
 - OpenAPI `securitySchemes`, `401`, and `403` for protected routes
 
 Example:
@@ -245,9 +368,23 @@ Example:
 ```
 
 The default runtime stores auth metadata in `.nexus-data/.nexus-auth.json`.
-Passwords and issued session/token secrets are never stored in clear text. For
-production use, run `nexus serve` behind an HTTPS terminator or reverse proxy;
-the built-in server is still the simple development/runtime server.
+SQLite-backed tests store the same auth metadata in the `nexus_auth` table.
+Passwords, issued session/token secrets, and CSRF tokens are never stored in
+clear text.
+
+For browser cookie sessions, unsafe protected routes require the
+`X-Nexus-CSRF-Token` header with the `csrf_token` returned by
+`Auth::register()` or `Auth::login()`. Bearer token requests do not require the
+CSRF header.
+
+Production deployment expectations:
+
+- run `nexus serve` behind an HTTPS terminator or reverse proxy;
+- forward only trusted proxy headers from the edge;
+- keep the `Secure` session cookie enabled;
+- persist and back up the selected storage backend;
+- treat the built-in server as the simple development/runtime server, not a TLS
+  terminator.
 
 ## Storage Backup And Restore
 
@@ -310,7 +447,7 @@ NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh
 - The package manager is still an MVP; registry dependencies can be declared,
   but remote downloads, semantic version resolution, package publishing, and
   transitive dependencies are not implemented yet.
-- The current source version is `0.1.1`; version/tag policy is documented in
+- The current source version is `0.2.0-rc.1`; version/tag policy is documented in
   `VERSIONING.md`.
 - Release artifacts have SHA-256 checksums and detached GPG signatures.
 - Strict public-release validation is scripted in `GITHUB_RELEASE.md`, and the
@@ -319,9 +456,9 @@ NEXUS_PUBLIC_RELEASE_TAG=v0.1.1 ./scripts/validate-public-release-install.sh
 - JSON storage is the simplest supported backend; SQLite exists but storage
   compatibility and migration limits for `0.1.x` are documented in
   `COMPATIBILITY.md`.
-- Native auth is a first JSON-backed runtime slice. Rate limiting, CSRF tokens
-  for cookie-backed unsafe methods, SQLite auth-store parity, and production TLS
-  deployment docs are still planned hardening work.
+- Native auth has rate limiting, CSRF tokens for cookie-backed unsafe methods,
+  and JSON/SQLite auth-store parity. Secret rotation, password reset, MFA, and a
+  dedicated production TLS server are still future hardening work.
 - `index` model metadata is declarative and does not create physical indexes.
 - The OpenAPI contract covers the supported NexusLang HTTP subset, not every
   possible OpenAPI feature.

@@ -5,6 +5,10 @@ It is intentionally small: the source of truth is still the automated gate.
 
 ## Current readiness
 
+- Local RC target: `0.2.0-rc.1`.
+- Current local RC status: in preparation; do not publish until the worktree is
+  committed by scope, quality gate passes, package validation passes, HEAD is
+  pushed, and CI is green.
 - Language/core: 78/100
 - Playground: 84/100
 - OpenAPI/runtime: 66/100
