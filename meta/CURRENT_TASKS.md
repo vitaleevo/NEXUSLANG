@@ -5,11 +5,12 @@ repositorio.
 
 ## Status atual
 
-Fase 11.52 concluida em 2026-05-28: a branch
-`codex/prepare-nexuslang-0.2.0-rc` foi pushada para `origin`, mas PR/CI ainda
-nao foram criados/observados porque `gh` nao esta autenticado nesta maquina.
-O RC local `0.2.0-rc.1` ja passou quality gate, package-release e
-validate-release-package.
+Fase 11.53 concluida em 2026-05-28: a branch
+`codex/prepare-nexuslang-0.2.0-rc` foi pushada para `origin` e o PR draft
+`https://github.com/vitaleevo/NEXUSLANG/pull/1` foi criado pelo conector
+GitHub. O `gh` local ainda nao esta autenticado, entao o fluxo local estrito
+continua dependente de `gh auth login`. O RC local `0.2.0-rc.1` ja passou
+quality gate, package-release e validate-release-package.
 
 ## Tarefas concluidas
 
@@ -20,10 +21,10 @@ validate-release-package.
 - [x] Validar pacote em diretorio limpo com `./scripts/validate-release-package.sh`.
 - [x] Pushar branch:
   `git push -u origin codex/prepare-nexuslang-0.2.0-rc`.
-- [x] Registrar link de PR retornado pelo GitHub:
-  `https://github.com/vitaleevo/NEXUSLANG/pull/new/codex/prepare-nexuslang-0.2.0-rc`.
-- [x] Confirmar bloqueio de PR/CI automatico: `gh auth status` falha por falta
-  de login.
+- [x] Criar PR draft para `main`:
+  `https://github.com/vitaleevo/NEXUSLANG/pull/1`.
+- [x] Confirmar bloqueio do fluxo local via CLI: `gh auth status` falha por
+  falta de login.
 
 ## Validacao executada
 
@@ -41,18 +42,20 @@ git diff --check
 rg de marcadores pendentes no workspace, ignorando diretorios de build
 git push -u origin codex/prepare-nexuslang-0.2.0-rc
 gh auth status
+GitHub connector: create draft pull request
 ```
 
 Resultado: PASS para LSP, quality gate, package-release, validate-release-package,
-diff check, varredura de marcadores e push da branch. `gh auth status` falhou
-porque nao ha sessao GitHub CLI autenticada; por isso PR/CI ficam para a
-proxima fase.
+diff check, varredura de marcadores, push da branch e criacao do PR draft.
+`gh auth status` falhou porque nao ha sessao GitHub CLI autenticada; por isso
+CI/strict public-release preflight ficam para a proxima fase.
 
 ## Proxima fase recomendada
 
-Fase 11.53: criar PR/observar CI do RC `0.2.0-rc.1`. Autenticar `gh` com
-`gh auth login` ou abrir o link de PR manualmente, acompanhar checks remotos
-ate CI verde e depois rodar strict public-release preflight com chave mantida.
+Fase 11.54: observar CI e rodar strict public-release preflight do RC
+`0.2.0-rc.1`. Acompanhar os checks do PR draft ate CI verde, autenticar `gh`
+se o fluxo local precisar consultar Actions, e depois rodar strict preflight
+com chave mantida.
 
 ## Arquivos para abrir primeiro na proxima fase
 
@@ -67,4 +70,4 @@ ate CI verde e depois rodar strict public-release preflight com chave mantida.
 - Nao publicar tag/release antes de PR/CI verde, strict preflight e assinatura.
 - Nao prometer registry remoto real enquanto `PACKAGE_MANAGER.md` ainda o
   define como contrato futuro.
-- `0.2.0-rc.1` continua RC local/remoto de branch ate PR/CI e publicacao.
+- `0.2.0-rc.1` continua RC em PR draft ate CI, strict preflight e publicacao.
