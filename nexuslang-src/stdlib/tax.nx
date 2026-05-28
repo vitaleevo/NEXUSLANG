@@ -1,0 +1,17 @@
+// NexusLang Standard Library - Tax Utilities
+
+export fn tax_amount(subtotal: money, rate: float) -> money {
+    return subtotal * rate
+}
+
+export fn tax_total(subtotal: money, tax: money) -> money {
+    return subtotal + tax
+}
+
+export fn tax_inclusive_base(total: money, rate: float) -> money {
+    return total / (1.0 + rate)
+}
+
+export fn tax_is_exempt(rate: float) -> bool {
+    return rate == 0.0
+}

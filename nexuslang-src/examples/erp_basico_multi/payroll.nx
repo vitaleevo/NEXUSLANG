@@ -1,0 +1,7 @@
+// payroll.nx — Workflow de processamento de payroll (exportado)
+
+export workflow Payroll {
+    step calcular_salarios
+    step aprovar_pagamentos
+    step processar_pagamentos
+}

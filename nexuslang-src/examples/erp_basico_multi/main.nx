@@ -1,0 +1,68 @@
+// main.nx — Ponto de entrada do ERP multi-módulo
+// Importa modelos, funções e workflows de módulos especializados
+
+import Employee from "./models.nx"
+import Department from "./models.nx"
+import calcular_bonus from "./business.nx"
+import saudar from "./business.nx"
+import Payroll from "./payroll.nx"
+
+// ─── API Routes ───────────────────────────────
+
+route GET /employees {
+    return Employee::all()
+}
+
+route GET /departments {
+    return Department::all()
+}
+
+route POST /employees {
+    return "Employee criado com sucesso"
+}
+
+// ─── Invoice / Faturação ──────────────────────
+
+invoice {
+    customer: "Empresa Petrolífera SARL"
+    service: "Consultoria ERP"
+    total: 750000 kz
+    currency: "AOA"
+}
+
+// ─── Script de demonstração ───────────────────
+
+print("=== ERP Multi-Módulo ===")
+
+let salario_base = 300000 kz
+let bonus = calcular_bonus(salario_base)
+let total = salario_base + bonus
+
+print(saudar("Admin"))
+print("Salário base:")
+print(salario_base)
+print("Bónus (10%):")
+print(bonus)
+print("Total:")
+print(total)
+
+// Condicional
+if total > 250000 kz {
+    print("Salário acima da média")
+} else {
+    print("Salário abaixo da média")
+}
+
+// Loop
+let contador = 1
+while contador <= 3 {
+    print("Processando mês:")
+    print(contador)
+    contador = contador + 1
+}
+
+// Array + for
+let departamentos = ["TI", "RH", "Financeiro", "Operações"]
+for dept in departamentos {
+    print(dept)
+}

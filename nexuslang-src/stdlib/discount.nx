@@ -1,0 +1,17 @@
+// NexusLang Standard Library - Discount Utilities
+
+export fn discount_percent_amount(subtotal: money, rate: float) -> money {
+    return subtotal * rate
+}
+
+export fn discount_apply_amount(subtotal: money, discount: money) -> money {
+    return subtotal - discount
+}
+
+export fn discount_final_percent(subtotal: money, rate: float) -> money {
+    return subtotal - discount_percent_amount(subtotal, rate)
+}
+
+export fn discount_is_valid_rate(rate: float) -> bool {
+    return rate >= 0.0 && rate <= 1.0
+}

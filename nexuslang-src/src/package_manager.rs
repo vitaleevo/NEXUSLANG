@@ -34,6 +34,32 @@ struct RegistryDependency {
     version: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct ProjectManifest {
+    pub root: PathBuf,
+    pub name: String,
+    pub version: String,
+    pub entry: String,
+    pub dependencies: BTreeMap<String, ProjectDependencySource>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProjectDependencySource {
+    Local,
+    Path(PathBuf),
+    Registry { package: String, version: String },
+}
+
+impl ProjectManifest {
+    pub fn entry_path(&self) -> PathBuf {
+        self.root.join(&self.entry)
+    }
+
+    pub fn dependency(&self, name: &str) -> Option<&ProjectDependencySource> {
+        self.dependencies.get(name)
+    }
+}
+
 #[derive(Debug)]
 pub struct PackageReport {
     pub root: PathBuf,
@@ -122,6 +148,47 @@ pub fn write_new_project_package_files(root: &Path, project_name: &str) -> Resul
     write_manifest(root, &manifest)?;
     write_lockfile(root, &manifest)?;
     Ok(())
+}
+
+pub fn find_manifest_root_from(start: &Path) -> Option<PathBuf> {
+    let search_start = if start.is_file() {
+        start.parent().unwrap_or(start)
+    } else {
+        start
+    };
+    find_manifest_root(search_start)
+}
+
+pub fn load_project_manifest(root: &Path) -> Result<ProjectManifest, String> {
+    let manifest_path = root.join(MANIFEST_FILE);
+    let source = fs::read_to_string(&manifest_path).map_err(|e| e.to_string())?;
+    let manifest = parse_manifest(&source)?;
+    validate_manifest(root, &manifest)?;
+    Ok(ProjectManifest::from_private(root, manifest))
+}
+
+pub fn load_nearest_project_manifest(start: &Path) -> Result<Option<ProjectManifest>, String> {
+    let Some(root) = find_manifest_root_from(start) else {
+        return Ok(None);
+    };
+    load_project_manifest(&root).map(Some)
+}
+
+pub fn project_entry_current_dir() -> Result<PathBuf, String> {
+    let current = env::current_dir().map_err(|e| e.to_string())?;
+    project_entry_from(&current)
+}
+
+pub fn project_entry_from(start: &Path) -> Result<PathBuf, String> {
+    let root = find_manifest_root_from(start).ok_or_else(|| {
+        format!(
+            "{} nao encontrado a partir de {}",
+            MANIFEST_FILE,
+            start.display()
+        )
+    })?;
+    let manifest = load_project_manifest(&root)?;
+    Ok(manifest.entry_path())
 }
 
 fn project_root_or_current() -> Result<PathBuf, String> {
@@ -490,6 +557,39 @@ struct LockMetadata {
     version: String,
     resolved_path: Option<String>,
     registry_package: Option<String>,
+}
+
+impl ProjectManifest {
+    fn from_private(root: &Path, manifest: NexusManifest) -> Self {
+        let dependencies = manifest
+            .dependencies
+            .into_iter()
+            .map(|(name, source)| {
+                let public_source = match source {
+                    DependencySource::Local => ProjectDependencySource::Local,
+                    DependencySource::Path(path) => {
+                        let dependency_root = root.join(path);
+                        let resolved_root =
+                            dependency_root.canonicalize().unwrap_or(dependency_root);
+                        ProjectDependencySource::Path(resolved_root)
+                    }
+                    DependencySource::Registry(registry) => ProjectDependencySource::Registry {
+                        package: registry.package,
+                        version: registry.version,
+                    },
+                };
+                (name, public_source)
+            })
+            .collect();
+
+        Self {
+            root: root.to_path_buf(),
+            name: manifest.name,
+            version: manifest.version,
+            entry: manifest.entry,
+            dependencies,
+        }
+    }
 }
 
 fn prune_stale_packages(

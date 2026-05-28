@@ -1,0 +1,20 @@
+// NexusLang Standard Library - Supplier Utilities
+
+import to_lower from "std/string"
+import trim from "std/string"
+
+export fn supplier_display_name(name: string, code: string) -> string {
+    return trim(name) + " [" + code + "]"
+}
+
+export fn supplier_normalize_status(status: string) -> string {
+    return to_lower(trim(status))
+}
+
+export fn supplier_is_active_status(status: string) -> bool {
+    return supplier_normalize_status(status) == "active"
+}
+
+export fn supplier_score_ok(score: int) -> bool {
+    return score >= 70
+}

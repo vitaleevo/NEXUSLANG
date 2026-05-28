@@ -1,0 +1,17 @@
+// NexusLang Standard Library - Crypto Utilities
+
+export fn crypto_sha256_hex(value: string) -> string {
+    return __std_crypto_sha256_hex(value)
+}
+
+export fn crypto_constant_time_eq(left: string, right: string) -> bool {
+    return __std_crypto_constant_time_eq(left, right)
+}
+
+export fn crypto_is_sha256_hex(value: string) -> bool {
+    return __std_crypto_is_sha256_hex(value)
+}
+
+export fn crypto_verify_sha256_hex(value: string, expected_hash: string) -> bool {
+    return crypto_constant_time_eq(crypto_sha256_hex(value), expected_hash)
+}

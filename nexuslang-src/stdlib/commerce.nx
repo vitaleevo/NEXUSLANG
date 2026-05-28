@@ -1,0 +1,17 @@
+// NexusLang Standard Library - Commerce Utilities
+
+export fn commerce_cart_total_2(line_a: money, line_b: money) -> money {
+    return line_a + line_b
+}
+
+export fn commerce_cart_total_3(line_a: money, line_b: money, line_c: money) -> money {
+    return line_a + line_b + line_c
+}
+
+export fn commerce_free_shipping(subtotal: money, threshold: money) -> bool {
+    return subtotal >= threshold
+}
+
+export fn commerce_order_label(customer: string, order_code: string) -> string {
+    return customer + "/" + order_code
+}

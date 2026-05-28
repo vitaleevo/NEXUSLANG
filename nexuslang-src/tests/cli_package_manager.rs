@@ -230,4 +230,6 @@ fn new_project_includes_package_manifest_and_lockfile() {
     assert!(manifest.contains("version = \"0.1.0\""));
     assert!(manifest.contains("entry = \"main.nx\""));
     assert!(lockfile.contains("version = 1"));
+    assert!(root.join("tests").join("smoke.nx").is_file());
+    assert!(root.join("tests").join("smoke.out").is_file());
 }

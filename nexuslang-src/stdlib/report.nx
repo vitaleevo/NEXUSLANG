@@ -1,0 +1,18 @@
+// NexusLang Standard Library - Report Utilities
+
+export fn report_title(name: string, period: string) -> string {
+    return name + " - " + period
+}
+
+export fn report_section(title: string, body: string) -> string {
+    return title + ": " + body
+}
+
+export fn report_bool_label(value: bool) -> string {
+    if value { return "yes" }
+    return "no"
+}
+
+export fn report_money_line(label: string, amount: money) -> string {
+    return label + ": " + str(amount)
+}

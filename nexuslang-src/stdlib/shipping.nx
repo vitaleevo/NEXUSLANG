@@ -1,0 +1,21 @@
+// NexusLang Standard Library - Shipping Utilities
+
+import max from "std/math"
+
+export fn shipping_can_ship(stock: int, requested: int) -> bool {
+    return stock >= requested
+}
+
+export fn shipping_remaining(stock: int, shipped: int) -> int {
+    return max(0, stock - shipped)
+}
+
+export fn shipping_fee_by_weight(weight: int, unit_fee: money) -> money {
+    return unit_fee * weight
+}
+
+export fn shipping_status(delivered: int, total: int) -> string {
+    if delivered >= total { return "delivered" }
+    if delivered <= 0 { return "pending" }
+    return "partial"
+}

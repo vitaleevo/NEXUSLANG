@@ -1,0 +1,23 @@
+// NexusLang Standard Library - Config Utilities
+
+import to_lower from "std/string"
+import trim from "std/string"
+
+export fn config_key(namespace: string, name: string) -> string {
+    return namespace + "." + name
+}
+
+export fn config_flag_enabled(value: string) -> bool {
+    let normalized = to_lower(trim(value))
+    return normalized == "1" || normalized == "true" || normalized == "yes" || normalized == "on"
+}
+
+export fn config_pick_string(value: string, fallback: string) -> string {
+    if trim(value) == "" { return fallback }
+    return value
+}
+
+export fn config_pick_int(value: int, fallback: int) -> int {
+    if value == 0 { return fallback }
+    return value
+}

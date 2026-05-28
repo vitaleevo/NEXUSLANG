@@ -1,0 +1,20 @@
+// NexusLang Standard Library - Date Utilities
+//
+// Current date helpers use ISO strings (YYYY-MM-DD) until NexusLang has date
+// literals and richer date arithmetic.
+
+export fn is_iso_date(value: string) -> bool {
+    return __std_date_is_iso_date(value)
+}
+
+export fn year(value: string) -> int {
+    return __std_date_year(value)
+}
+
+export fn month(value: string) -> int {
+    return __std_date_month(value)
+}
+
+export fn day(value: string) -> int {
+    return __std_date_day(value)
+}

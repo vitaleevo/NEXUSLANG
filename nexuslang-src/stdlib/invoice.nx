@@ -1,0 +1,27 @@
+// NexusLang Standard Library - Invoice Utilities
+
+import is_zero_money from "std/money"
+
+export fn invoice_line_total(qty: int, unit_price: money) -> money {
+    return unit_price * qty
+}
+
+export fn invoice_subtotal_2(line_a: money, line_b: money) -> money {
+    return line_a + line_b
+}
+
+export fn invoice_apply_discount(subtotal: money, discount: money) -> money {
+    return subtotal - discount
+}
+
+export fn invoice_tax_amount(subtotal: money, rate: float) -> money {
+    return subtotal * rate
+}
+
+export fn invoice_grand_total(subtotal: money, tax: money, discount: money) -> money {
+    return subtotal + tax - discount
+}
+
+export fn invoice_is_paid(balance: money) -> bool {
+    return is_zero_money(balance)
+}

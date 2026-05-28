@@ -1,0 +1,28 @@
+// NexusLang Standard Library - Math Utilities
+//
+// Provides basic arithmetic and numeric utility functions.
+// Import one symbol at a time, for example:
+// import abs from "std/math"
+
+/// Return the absolute value of `n`.
+export fn abs(n: int) -> int {
+    if n >= 0 { return n }
+    return -n
+}
+
+/// Return the larger of `a` and `b`.
+export fn max(a: int, b: int) -> int {
+    if a > b { return a }
+    return b
+}
+
+/// Return the smaller of `a` and `b`.
+export fn min(a: int, b: int) -> int {
+    if a < b { return a }
+    return b
+}
+
+/// Clamp `val` between `lo` and `hi` (inclusive).
+export fn clamp(val: int, lo: int, hi: int) -> int {
+    return max(lo, min(val, hi))
+}

@@ -1,0 +1,25 @@
+// NexusLang Standard Library - CSV Utilities
+
+export fn csv_needs_quotes(value: string) -> bool {
+    return __std_csv_needs_quotes(value)
+}
+
+export fn csv_escape_cell(value: string) -> string {
+    return __std_csv_escape_cell(value)
+}
+
+export fn csv_row_2(cell_a: string, cell_b: string) -> string {
+    return csv_escape_cell(cell_a) + "," + csv_escape_cell(cell_b)
+}
+
+export fn csv_row_3(cell_a: string, cell_b: string, cell_c: string) -> string {
+    return csv_escape_cell(cell_a) + "," + csv_escape_cell(cell_b) + "," + csv_escape_cell(cell_c)
+}
+
+export fn csv_header_2(cell_a: string, cell_b: string) -> string {
+    return csv_row_2(cell_a, cell_b)
+}
+
+export fn csv_header_3(cell_a: string, cell_b: string, cell_c: string) -> string {
+    return csv_row_3(cell_a, cell_b, cell_c)
+}

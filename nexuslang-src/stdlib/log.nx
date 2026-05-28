@@ -1,0 +1,25 @@
+// NexusLang Standard Library - Log Formatting Utilities
+
+export fn log_format(level: string, message: string) -> string {
+    return "[" + level + "] " + message
+}
+
+export fn log_debug(message: string) -> string {
+    return log_format("DEBUG", message)
+}
+
+export fn log_info(message: string) -> string {
+    return log_format("INFO", message)
+}
+
+export fn log_warn(message: string) -> string {
+    return log_format("WARN", message)
+}
+
+export fn log_error(message: string) -> string {
+    return log_format("ERROR", message)
+}
+
+export fn log_with_context(level: string, context: string, message: string) -> string {
+    return "[" + level + "] " + context + ": " + message
+}
