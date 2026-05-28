@@ -94,6 +94,9 @@ archive = "audit_core-0.1.0.tar"
 sha256 = "64 lowercase or uppercase hex characters"
 ```
 
+`sha256` is optional. When present, the package manager verifies it after
+download and before extraction.
+
 The archive must be an uncompressed `.tar` with package files at its root,
 including a valid `nexus.toml` whose `[package].name` and `[package].version`
 match the registry request. Extraction rejects absolute paths, `..` traversal,

@@ -8,12 +8,18 @@ use sha2::{Digest, Sha256};
 #[cfg(not(target_arch = "wasm32"))]
 use std::io::{Read, Write};
 #[cfg(not(target_arch = "wasm32"))]
-use std::net::TcpStream;
+use std::net::{TcpStream, ToSocketAddrs};
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Duration;
 
 pub const MANIFEST_FILE: &str = "nexus.toml";
 pub const LOCK_FILE: &str = "nexus.lock";
 pub const REGISTRY_ENV: &str = "NEXUS_REGISTRY_URL";
 const REGISTRY_METADATA_FILE: &str = "nexus-package.toml";
+#[cfg(not(target_arch = "wasm32"))]
+const REGISTRY_HTTP_CONNECT_TIMEOUT_SECS: u64 = 5;
+#[cfg(not(target_arch = "wasm32"))]
+const REGISTRY_HTTP_IO_TIMEOUT_SECS: u64 = 15;
 
 #[derive(Debug, Clone)]
 struct NexusManifest {
@@ -816,20 +822,62 @@ fn fetch_http_url(url: &str) -> Result<Vec<u8>, String> {
     } else {
         format!("{}:80", authority)
     };
-    let mut stream =
-        TcpStream::connect(&address).map_err(|e| format!("Falha ao conectar {}: {}", url, e))?;
+    let resolved_addresses = address
+        .to_socket_addrs()
+        .map_err(|e| format!("Falha ao resolver host de registry {}: {}", url, e))?
+        .collect::<Vec<_>>();
+    if resolved_addresses.is_empty() {
+        return Err(format!(
+            "Falha ao resolver host de registry {}: sem endereco",
+            url
+        ));
+    }
+    let connect_timeout = Duration::from_secs(REGISTRY_HTTP_CONNECT_TIMEOUT_SECS);
+    let io_timeout = Some(Duration::from_secs(REGISTRY_HTTP_IO_TIMEOUT_SECS));
+    let mut last_error = None;
+    let mut stream = None;
+    for socket_addr in resolved_addresses {
+        match TcpStream::connect_timeout(&socket_addr, connect_timeout) {
+            Ok(candidate) => {
+                stream = Some(candidate);
+                break;
+            }
+            Err(error) => last_error = Some(error),
+        }
+    }
+    let mut stream = stream.ok_or_else(|| {
+        let error = last_error
+            .map(|error| error.to_string())
+            .unwrap_or_else(|| "sem endereco disponivel".to_string());
+        format!(
+            "Falha ao conectar {} em ate {}s: {}",
+            url, REGISTRY_HTTP_CONNECT_TIMEOUT_SECS, error
+        )
+    })?;
+    stream
+        .set_read_timeout(io_timeout)
+        .map_err(|e| format!("Falha ao configurar timeout de leitura para {}: {}", url, e))?;
+    stream
+        .set_write_timeout(io_timeout)
+        .map_err(|e| format!("Falha ao configurar timeout de escrita para {}: {}", url, e))?;
     let request = format!(
         "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nUser-Agent: nexuslang-package-manager\r\n\r\n",
         path, authority
     );
-    stream
-        .write_all(request.as_bytes())
-        .map_err(|e| format!("Falha ao requisitar {}: {}", url, e))?;
+    stream.write_all(request.as_bytes()).map_err(|e| {
+        format!(
+            "Falha ao requisitar {} em ate {}s: {}",
+            url, REGISTRY_HTTP_IO_TIMEOUT_SECS, e
+        )
+    })?;
 
     let mut response = Vec::new();
-    stream
-        .read_to_end(&mut response)
-        .map_err(|e| format!("Falha ao ler resposta de {}: {}", url, e))?;
+    stream.read_to_end(&mut response).map_err(|e| {
+        format!(
+            "Falha ao ler resposta de {} em ate {}s: {}",
+            url, REGISTRY_HTTP_IO_TIMEOUT_SECS, e
+        )
+    })?;
     let header_end = find_subsequence(&response, b"\r\n\r\n")
         .ok_or_else(|| format!("Resposta HTTP invalida de {}", url))?;
     let headers = String::from_utf8_lossy(&response[..header_end]);
