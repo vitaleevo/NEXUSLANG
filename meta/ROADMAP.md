@@ -29,30 +29,34 @@ auth, invoices, money, storage, tooling e pequenos servicos de negocio.
 
 ## Foco imediato
 
-A linha atual esta na publicacao controlada da release stable `0.2.0`. O RC2
-ja foi mergeado em `main`, o hardening de CI Node 24 foi aplicado, o PR #4
-mergeou a versao fonte `0.2.0`, e a publicacao de `v0.2.0` depende de tag
-assinada, GitHub Release com assets e validacao publica de install. O
-pre-release publico `v0.2.0-rc.2` continua disponivel para comparacao.
+A release stable `v0.2.0` ja foi publicada com tag assinada, GitHub Release,
+assets assinados, checksum, strict public-release dry-run e validacao publica
+de install. A triagem pos-release confirmou que nao ha PRs nem issues abertas
+e que a `main` esta com CI verde. A proxima linha de produto escolhida e
+package registry remoto MVP read-only, porque o package manager ja tem contrato
+`registry:<pacote>@<versao>`, mas ainda nao baixa dependencias remotas.
 
 ## Trilhas proximas
 
-1. Release/producao: publicar `v0.2.0` com tag assinada, assets de release,
-   validacao publica de install e memoria de fechamento.
-2. Diagnostics/tooling API: preservar JSON v1 enquanto melhora APIs internas
-   para consumidores de editor.
+1. Package registry remoto MVP: implementar leitura/download de dependencias
+   `registry:<pacote>@<versao>` com contrato de metadata, cache seguro,
+   checksum e testes, sem publish/auth/solver completo nesta fase.
+2. SQLite/migracoes: desenhar introspeccao de schema, dry-run e migracoes sem
+   quebrar dados persistidos.
 3. LSP/editor tooling: adicionar workspace symbols, formatting, rename ou code
    actions apenas em fases separadas.
-4. HIR/checker: continuar migracoes pequenas para contratos HIR tipados,
+4. Diagnostics/tooling API: preservar JSON v1 enquanto melhora APIs internas
+   para consumidores de editor.
+5. HIR/checker: continuar migracoes pequenas para contratos HIR tipados,
    mantendo compatibilidade de mensagens.
-5. Playground/docs: demonstrar apenas recursos suportados e manter exemplos
+6. Playground/docs: demonstrar apenas recursos suportados e manter exemplos
    executaveis.
-6. Release hardening: smoke tests, contratos publicos, instalacao e artefatos
+7. Release hardening: smoke tests, contratos publicos, instalacao e artefatos
    assinados.
 
 ## Nao objetivos atuais
 
-- Registry remoto real.
+- Registry remoto com publish, auth, solver completo ou hospedagem central.
 - Mudanca ampla de sintaxe 1.0 sem fase propria.
 - Parser recovery completo.
 - Byte ranges completos em todos os diagnostics.

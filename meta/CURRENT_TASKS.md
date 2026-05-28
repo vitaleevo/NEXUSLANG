@@ -5,13 +5,13 @@ repositorio.
 
 ## Status atual
 
-Fase 11.64 concluida em 2026-05-28: o PR #4 foi revisado e mergeado em
-`main`, os docs finais foram ajustados, o commit final
-`a05bb74a663a4e2e7cc18dd4de7adb25e3f1faeb` passou quality local, CI remoto e
-strict public-release dry-run, a tag assinada `v0.2.0` foi criada e publicada,
-e a GitHub Release stable `v0.2.0` passou validacao publica de install. `v0.2.0`
-agora e a stable/latest publicada; `v0.2.0-rc.2` fica como pre-release
-historico.
+Fase 11.65 concluida em 2026-05-28: a triagem pos-release confirmou que
+`v0.2.0` esta publicada como stable/latest, nao draft e nao pre-release, com
+assets essenciais, checksum, assinaturas, chave publica, fingerprint e install
+publico ja validados. Nao ha PRs nem issues abertas. A proxima trilha escolhida
+e package registry remoto MVP read-only para fechar a maior lacuna pos-stable
+do package manager, sem incluir publish, auth, solver semantico completo ou
+registry central hospedado nesta fase.
 
 ## Tarefas concluidas
 
@@ -111,6 +111,15 @@ historico.
 - [x] Pushar tag `v0.2.0`.
 - [x] Publicar GitHub Release stable `v0.2.0` com assets assinados.
 - [x] Rodar install publico contra `v0.2.0`.
+- [x] Confirmar `v0.2.0` como stable/latest via `gh release view`.
+- [x] Confirmar PRs abertas: 0.
+- [x] Confirmar issues abertas: 0.
+- [x] Confirmar CI remoto recente da `main` verde.
+- [x] Criar `meta/POST_RELEASE_0_2_0_TRIAGE.md`.
+- [x] Atualizar `meta/ROADMAP.md` para package registry remoto MVP read-only.
+- [x] Atualizar memoria e tarefas atuais para Fase 11.66.
+- [x] Rodar `git diff --check`.
+- [x] Rodar `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`.
 
 ## Validacao executada
 
@@ -217,6 +226,13 @@ git tag -v v0.2.0
 git push origin refs/tags/v0.2.0
 gh release create v0.2.0 -R vitaleevo/NEXUSLANG --title 'NexusLang 0.2.0' --notes-file RELEASE_NOTES.md --latest --verify-tag ...
 NEXUS_PUBLIC_RELEASE_TAG=v0.2.0 ./scripts/validate-public-release-install.sh
+gh release view v0.2.0 -R vitaleevo/NEXUSLANG --json tagName,isDraft,isPrerelease,url,targetCommitish,publishedAt,assets
+gh release view -R vitaleevo/NEXUSLANG --json tagName,isDraft,isPrerelease,url,targetCommitish,publishedAt
+gh pr list -R vitaleevo/NEXUSLANG --state open --json number,title,state,isDraft,url,headRefName
+gh issue list -R vitaleevo/NEXUSLANG --state open --limit 20 --json number,title,state,url,labels
+gh run list -R vitaleevo/NEXUSLANG --branch main --limit 8 --json databaseId,status,conclusion,headSha,workflowName,createdAt,url
+git diff --check
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
 ```
 
 Resultado: PASS para LSP, quality gate, package-release, validate-release-package,
@@ -254,34 +270,38 @@ stable validou e o PR #4 foi aberto para review controlado. Na Fase 11.64, o
 PR #4 foi mergeado, a tag/release `v0.2.0` foi publicada como stable e a
 validacao publica de install passou. Archive publico stable:
 `7979dc7ad2e24b81c0bf8bb126bebb8147a6feb289b234ee5c5b038b4d238950`,
-1595212 bytes; WASM: 479716 bytes.
+1595212 bytes; WASM: 479716 bytes. Na Fase 11.65, a triagem pos-release
+confirmou `v0.2.0` como stable/latest, PRs abertas 0, issues abertas 0 e CI
+remoto recente da `main` verde. `git diff --check` e o quality gate local com
+clippy tambem passaram. A proxima trilha escolhida e package registry remoto
+MVP read-only.
 
 ## Proxima fase recomendada
 
-Fase 11.65: triagem pos-release `0.2.0`, confirmacao de links/downloads,
-diagnostico atualizado de progresso e escolha da proxima trilha de produto
-entre registry remoto, SQLite/migracoes, LSP editorial ou playground hospedado.
+Fase 11.66: package registry remoto MVP read-only. Implementar contrato de
+metadata, resolucao/download de dependencias `registry:<pacote>@<versao>`,
+cache local seguro em `.nexus/packages`, checksum quando informado pelo
+metadata, lockfile deterministico e testes de falha/sucesso. Nao implementar
+publish, auth, solver semantico completo, dependencias transitivas ou registry
+central hospedado nesta fase.
 
 ## Arquivos para abrir primeiro na proxima fase
 
 - `MEMORIA_NEXUSLANG.md`
 - `meta/CURRENT_TASKS.md`
-- `meta/STABLE_0_2_0_DECISION.md`
-- `RELEASE_NOTES.md`
-- `GITHUB_RELEASE.md`
-- `scripts/release-dry-run-strict.sh`
-- PR #4 `https://github.com/vitaleevo/NEXUSLANG/pull/4`
-- Release publico stable `https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0`
-- Release publico RC2 `https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0-rc.2`
+- `meta/POST_RELEASE_0_2_0_TRIAGE.md`
+- `PACKAGE_MANAGER.md`
+- `nexuslang-src/src/package_manager.rs`
+- `nexuslang-src/src/module_loader.rs`
+- `nexuslang-src/tests/cli_package_manager.rs`
 
 ## Riscos de compatibilidade
 
-- Nao promover para release estavel; este alvo continua RC/pre-release.
-- Nao prometer registry remoto real enquanto `PACKAGE_MANAGER.md` ainda o
-  define como contrato futuro.
-- O PR #2 ja foi mergeado e `main` esta alinhado ao RC2; nao promover stable
-  sem decisao explicita de risco/producao.
-- O hardening de Actions Node 24 ja foi mergeado; se forem usados runners
-  self-hosted no futuro, manter Actions Runner `v2.327.1+`.
 - `v0.2.0` ja foi publicado; futuras correcoes devem usar nova versao/tag, nao
   substituir assets sem novo gate explicito.
+- Registry remoto da proxima fase deve ser read-only e pequeno; nao misturar
+  publish, autenticacao ou solver completo.
+- Extracao de archives deve bloquear path traversal e validar checksums quando
+  o metadata fornecer hash.
+- `PACKAGE_MANAGER.md` ainda define o registry como contrato futuro; atualizar
+  a doc junto com a implementacao.

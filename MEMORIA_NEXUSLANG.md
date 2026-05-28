@@ -4,9 +4,95 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-28 (Fase 11.64 - stable v0.2.0 publicado)
+Ultima atualizacao: 2026-05-28 (Fase 11.65 - triagem pos-release 0.2.0)
 
-## Etapa concluida: Fase 11.64 - stable v0.2.0 publicado
+## Etapa concluida: Fase 11.65 - triagem pos-release 0.2.0
+
+Objetivo: confirmar o estado publico da release `v0.2.0`, revisar fila de
+PRs/issues, atualizar o diagnostico de progresso e escolher a proxima trilha
+de produto sem reabrir a release stable publicada.
+
+Foi feito:
+
+- Confirmada a GitHub Release stable `v0.2.0` como `isDraft=false` e
+  `isPrerelease=false`.
+- Confirmado que `gh release view` sem tag retorna `v0.2.0`, indicando que a
+  stable atual/latest e a `0.2.0`.
+- Confirmados os assets essenciais da release: archive, checksum, assinaturas,
+  chave publica e fingerprint.
+- Confirmado que nao ha PRs abertas nem issues abertas no repositorio.
+- Confirmados os ultimos runs remotos da `main` como PASS.
+- Criado `meta/POST_RELEASE_0_2_0_TRIAGE.md` com tabela de progresso,
+  riscos e decisao de proxima trilha.
+- Atualizado `meta/ROADMAP.md` para trocar o foco de publicacao stable por
+  package registry remoto MVP read-only.
+
+Arquivos principais:
+
+- `meta/POST_RELEASE_0_2_0_TRIAGE.md`
+- `meta/ROADMAP.md`
+- `MEMORIA_NEXUSLANG.md`
+- `meta/CURRENT_TASKS.md`
+- `PACKAGE_MANAGER.md`
+- `nexuslang-src/src/package_manager.rs`
+
+Verificacao executada:
+
+```bash
+cd <repo-root>
+gh release view v0.2.0 -R vitaleevo/NEXUSLANG --json ...
+gh release view -R vitaleevo/NEXUSLANG --json ...
+gh pr list -R vitaleevo/NEXUSLANG --state open --json ...
+gh issue list -R vitaleevo/NEXUSLANG --state open --limit 20 --json ...
+gh run list -R vitaleevo/NEXUSLANG --branch main --limit 8 --json ...
+git diff --check
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- Release publico stable:
+  `https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0`.
+- `v0.2.0`: stable, nao draft, nao pre-release.
+- Archive publico: `nexuslang-v0.2.0-local-release.tar.gz`.
+- SHA-256: `7979dc7ad2e24b81c0bf8bb126bebb8147a6feb289b234ee5c5b038b4d238950`.
+- Archive bytes: 1595212.
+- Fingerprint de assinatura:
+  `3237F7CC5CE2514FC9671BB93CB6808B55385273`.
+- PRs abertas: 0.
+- Issues abertas: 0.
+- CI remoto recente da `main`: PASS, incluindo runs `26600474468` e
+  `26600083912`.
+- Quality gate local: PASS.
+
+Estado atual:
+
+- A trilha `0.2.0` esta fechada no nivel de release publica.
+- A proxima trilha escolhida e package registry remoto MVP read-only.
+- O package manager ja aceita `registry:<pacote>@<versao>` em manifest/lock,
+  mas ainda nao baixa dependencias remotas nem valida checksum por pacote.
+
+Estado do projeto:
+
+- Fase/trilha atual: pos-release `0.2.0` concluido; preparar Fase 11.66.
+- Solido agora: release stable publica, CI, package/release, CLI e base de
+  linguagem estao em estado bom para MVP/stable inicial.
+- Falta imediato: implementar registry remoto read-only com cache seguro,
+  checksum, testes e docs, sem publish/auth/solver completo.
+- Distancia do fim: a base esta bem alem do MVP inicial, mas ainda nao e
+  100/100 producao por faltar registry remoto real, SQLite/migracoes maduras,
+  LSP editorial completo e playground hospedado.
+
+## Proximo passo recomendado
+
+Fase 11.66 - registry remoto MVP read-only para o package manager: implementar
+contrato de metadata, resolucao/download de dependencias declaradas,
+extracao/cache seguro, checksum e testes, mantendo fora de escopo publish,
+auth, solver semantico completo e registry central hospedado.
+
+AVISO: O proximo passo e criar/implementar Fase 11.66 - registry remoto MVP read-only para o package manager, com contrato de registry, resolucao/download de dependencias declaradas, cache local seguro e testes sem publicar pacotes nem adicionar solver semantico completo. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, `meta/CURRENT_TASKS.md`, `meta/POST_RELEASE_0_2_0_TRIAGE.md` e `PACKAGE_MANAGER.md` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+
+## Historico: Fase 11.64 - stable v0.2.0 publicado
 
 Objetivo: revisar/mergear PR #4, criar tag assinada `v0.2.0`, publicar a
 GitHub Release stable com assets assinados e validar a instalacao publica
@@ -95,7 +181,7 @@ Estado do projeto:
 - Distancia do fim: a trilha `0.2.0` esta concluida; o produto completo ainda
   nao esta 100/100 producao por causa dos limites conhecidos acima.
 
-## Proximo passo recomendado
+### Historico - proximo passo recomendado na Fase 11.64
 
 Fase 11.65 - triagem pos-release `0.2.0` e escolha da proxima trilha:
 confirmar links/downloads, revisar issues/feedback, atualizar diagnostico de
