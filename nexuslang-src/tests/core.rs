@@ -3919,6 +3919,156 @@ fn storage_driver_registry_parses_and_constructs_backends() {
 }
 
 #[test]
+fn sqlite_migration_plan_dry_run_and_apply_create_safe_schema() {
+    let source = r#"
+model Customer {
+    email: string unique
+    status: string index
+    name: string
+}
+"#;
+    let program = parse_checked_source(source).unwrap();
+    let data_dir = temp_data_dir("sqlite_migration_plan_safe_schema");
+    fs::create_dir_all(&data_dir).unwrap();
+    let db_path = data_dir.join("nexus.db");
+    let storage = nexuslang::server::Storage::new_sqlite(&db_path).unwrap();
+
+    let dry_run = storage.schema_migration_plan(&program).unwrap();
+    assert_eq!(dry_run.driver, nexuslang::server::StorageDriver::Sqlite);
+    assert!(dry_run.blockers.is_empty(), "plan: {dry_run:#?}");
+    assert!(dry_run.actions.iter().any(|action| matches!(
+        action,
+        nexuslang::server::StorageMigrationAction::CreateSqliteModelTable { table, .. }
+            if table == "customer"
+    )));
+    assert!(dry_run.actions.iter().any(|action| matches!(
+        action,
+        nexuslang::server::StorageMigrationAction::CreateSqliteUniqueIndex { index, .. }
+            if index == "idx_customer_email"
+    )));
+    assert!(dry_run.actions.iter().any(|action| matches!(
+        action,
+        nexuslang::server::StorageMigrationAction::CreateSqliteIndex { index, .. }
+            if index == "idx_customer_status"
+    )));
+    let dry_text = dry_run.render_text(false);
+    assert!(dry_text.contains("Mode: dry-run"), "text: {dry_text}");
+    assert!(
+        dry_text.contains("create SQLite model table 'customer'"),
+        "text: {dry_text}"
+    );
+
+    let applied = storage.apply_schema_migration_plan(&program).unwrap();
+    assert_eq!(applied.actions.len(), dry_run.actions.len());
+
+    let after_apply = storage.schema_migration_plan(&program).unwrap();
+    assert!(after_apply.is_empty(), "plan: {after_apply:#?}");
+
+    let conn = rusqlite::Connection::open(&db_path).unwrap();
+    let table_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'customer'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let email_index_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_customer_email'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let status_index_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_customer_status'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    assert_eq!(table_count, 1);
+    assert_eq!(email_index_count, 1);
+    assert_eq!(status_index_count, 1);
+}
+
+#[test]
+fn sqlite_migration_plan_blocks_legacy_table_shape() {
+    let source = r#"
+model Customer {
+    email: string unique
+}
+"#;
+    let program = parse_checked_source(source).unwrap();
+    let data_dir = temp_data_dir("sqlite_migration_plan_legacy_shape");
+    fs::create_dir_all(&data_dir).unwrap();
+    let db_path = data_dir.join("nexus.db");
+    {
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute(
+            "CREATE TABLE customer (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL)",
+            [],
+        )
+        .unwrap();
+    }
+    let storage = nexuslang::server::Storage::new_sqlite(&db_path).unwrap();
+
+    let plan = storage.schema_migration_plan(&program).unwrap();
+    assert!(plan.has_blockers(), "plan: {plan:#?}");
+    assert!(
+        plan.blocker_summary().contains("data TEXT NOT NULL"),
+        "plan: {plan:#?}"
+    );
+
+    let error = storage.apply_schema_migration_plan(&program).unwrap_err();
+    assert!(error.contains("Plano de migracao SQLite bloqueado"));
+    assert!(error.contains("data TEXT NOT NULL"));
+}
+
+#[test]
+fn sqlite_migration_plan_blocks_duplicate_unique_values() {
+    let source = r#"
+model Customer {
+    email: string unique
+}
+"#;
+    let program = parse_checked_source(source).unwrap();
+    let data_dir = temp_data_dir("sqlite_migration_plan_duplicate_unique");
+    fs::create_dir_all(&data_dir).unwrap();
+    let db_path = data_dir.join("nexus.db");
+    {
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute(
+            "CREATE TABLE customer (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT NOT NULL)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            r#"INSERT INTO customer (data) VALUES ('{"email":"ana@example.com"}')"#,
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            r#"INSERT INTO customer (data) VALUES ('{"email":"ana@example.com"}')"#,
+            [],
+        )
+        .unwrap();
+    }
+    let storage = nexuslang::server::Storage::new_sqlite(&db_path).unwrap();
+
+    let plan = storage.schema_migration_plan(&program).unwrap();
+    assert!(plan.has_blockers(), "plan: {plan:#?}");
+    assert!(
+        plan.blocker_summary().contains("duplicados"),
+        "plan: {plan:#?}"
+    );
+
+    let error = storage.apply_schema_migration_plan(&program).unwrap_err();
+    assert!(error.contains("idx_customer_email"), "error: {error}");
+    assert!(error.contains("duplicados"), "error: {error}");
+}
+
+#[test]
 fn storage_schema_evolution_allows_additive_optional_and_defaulted_fields() {
     let v1_source = r#"
 model Customer {

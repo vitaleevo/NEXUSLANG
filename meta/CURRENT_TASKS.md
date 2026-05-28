@@ -5,18 +5,13 @@ repositorio.
 
 ## Status atual
 
-Fase 11.67 concluida em 2026-05-28: o PR #5 do registry remoto MVP read-only
-foi revisado, recebeu correcao de timeouts HTTP no cliente de registry, teve CI
-verde e foi mergeado em `main` pelo merge commit
-`637065994c04cc211a00297b6ea64d7c75be6bf7`. O package manager agora tem
-registry read-only MVP integrado em `main` por `NEXUS_REGISTRY_URL`, com
-metadata `nexus-package.toml`, download/leitura de archive `.tar`, SHA-256
-opcional, extracao segura, cache em `.nexus/packages/<pacote>`, lockfile com
-checksum/resolved_path e imports de registry dependencies instaladas. Sem
-`NEXUS_REGISTRY_URL`, o comportamento contrato/marker anterior continua. Ainda
-nao foram adicionados publish, auth, solver semantico completo, dependencias
-transitivas, HTTPS ou registry central. Proxima trilha recomendada:
-SQLite/migracoes MVP.
+Fase 11.68 concluida localmente em 2026-05-28 na branch
+`codex/sqlite-migrations-mvp`: o SQLite agora tem MVP de migracoes com
+introspeccao de schema, plano/dry-run, aplicacao segura de tabelas/indices e
+blockers conservadores para schema legado ou indice unico com dados duplicados.
+Foi adicionado `nexus storage-plan [ficheiro.nx] [--storage sqlite] [--apply]`.
+O quality gate completo passou localmente. A proxima etapa e abrir PR, revisar
+feedback, observar CI remoto e mergear em `main`.
 
 ## Tarefas concluidas
 
@@ -156,6 +151,22 @@ SQLite/migracoes MVP.
 - [x] Rodar validacao pos-merge focada do package manager: 12/12 PASS.
 - [x] Rodar quality gate completo em `main`: PASS.
 - [x] Observar CI remoto da `main` verde no run `26603041120`.
+- [x] Criar branch `codex/sqlite-migrations-mvp`.
+- [x] Implementar `StorageMigrationPlan`, actions e blockers.
+- [x] Implementar introspeccao SQLite de tabelas, colunas e indices.
+- [x] Implementar dry-run/aplicacao segura para tabelas de models e
+  `nexus_auth`.
+- [x] Implementar indices fisicos para `unique` e `index` via plano de
+  migracao.
+- [x] Bloquear schemas SQLite legados sem `data TEXT NOT NULL`.
+- [x] Bloquear criacao de indice unico quando dados existentes tem duplicados.
+- [x] Adicionar CLI `nexus storage-plan [ficheiro.nx] [--storage sqlite] [--apply]`.
+- [x] Atualizar `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md`, roadmaps,
+  memoria e validator de politica.
+- [x] Cobrir dry-run/aplicacao, blockers, CLI, paridade SQLite/JSON e evolucao
+  aditiva com testes.
+- [x] Rodar clippy workspace estrito.
+- [x] Rodar quality gate completo local com sucesso.
 
 ## Validacao executada
 
@@ -287,6 +298,17 @@ CARGO_TARGET_DIR=/tmp/nexuslang-target-registry-main cargo test -p nexuslang --t
 cd <repo-root>
 NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
 gh run watch 26603041120 -R vitaleevo/NEXUSLANG --interval 10 --exit-status
+git switch -c codex/sqlite-migrations-mvp
+cargo fmt --manifest-path nexuslang-src/Cargo.toml
+cd <repo-root>/nexuslang-src
+CARGO_TARGET_DIR=/home/alexandre/.cache/nexuslang-target-sqlite-migrations cargo test -p nexuslang sqlite_migration -- --nocapture
+CARGO_TARGET_DIR=/home/alexandre/.cache/nexuslang-target-sqlite-migrations cargo test -p nexuslang cli_storage_plan_sqlite_dry_run_and_apply -- --nocapture
+CARGO_TARGET_DIR=/home/alexandre/.cache/nexuslang-target-sqlite-migrations cargo test -p nexuslang sqlite_storage_matches_json_storage_for_crud_and_critical_filters -- --nocapture
+CARGO_TARGET_DIR=/home/alexandre/.cache/nexuslang-target-sqlite-migrations cargo test -p nexuslang storage_schema_evolution_allows_additive_optional_and_defaulted_fields -- --nocapture
+CARGO_TARGET_DIR=/home/alexandre/.cache/nexuslang-target-sqlite-migrations cargo clippy --workspace --all-targets -- -D warnings
+cd <repo-root>
+./scripts/validate-storage-compatibility-policy.sh
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
 ```
 
 Resultado: PASS para LSP, quality gate, package-release, validate-release-package,
@@ -337,21 +359,28 @@ escrita no cliente HTTP do registry, o campo `sha256` foi documentado como
 opcional, o PR #5 passou nos checks remotos, foi mergeado em `main` por
 `637065994c04cc211a00297b6ea64d7c75be6bf7`, e a validacao pos-merge passou:
 package manager 12/12, quality gate local PASS e CI remoto `26603041120` PASS.
+Na Fase 11.68, o SQLite/migracoes MVP foi implementado localmente: dry-run e
+`--apply` via `nexus storage-plan`, actions/blockers de migration plan, indices
+fisicos para `unique`/`index`, bloqueio de schema legado e duplicados para
+indice unico, docs `0.2.x` atualizados, testes focados PASS, clippy workspace
+PASS e quality gate completo PASS.
 
 ## Proxima fase recomendada
 
-Fase 11.68: SQLite/migracoes MVP. Desenhar e implementar introspeccao de
-schema, plano/dry-run de migracoes e testes de compatibilidade JSON/SQLite sem
-alterar dados existentes nem prometer ORM completo.
+Fase 11.69: review/PR/CI/merge do SQLite/migracoes MVP. Abrir PR da branch
+`codex/sqlite-migrations-mvp`, revisar feedback automatizado, confirmar CI
+verde e validar `storage-plan` em `main` pos-merge.
 
 ## Arquivos para abrir primeiro na proxima fase
 
 - `MEMORIA_NEXUSLANG.md`
 - `meta/CURRENT_TASKS.md`
-- `meta/POST_RELEASE_0_2_0_TRIAGE.md`
+- `COMPATIBILITY.md`
+- `STORAGE_BACKUP_RESTORE.md`
 - `nexuslang-src/src/server/sqlite.rs`
 - `nexuslang-src/src/server/storage_backend.rs`
 - `nexuslang-src/tests/core.rs`
+- `nexuslang-src/tests/cli.rs`
 
 ## Riscos de compatibilidade
 
@@ -364,3 +393,5 @@ alterar dados existentes nem prometer ORM completo.
   completo.
 - SQLite/migracoes deve priorizar plano/dry-run e compatibilidade de dados
   antes de expor qualquer promessa de producao persistente ampla.
+- A branch `codex/sqlite-migrations-mvp` ainda precisa PR, CI remoto e merge
+  antes de virar estado oficial da `main`.

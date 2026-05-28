@@ -1,12 +1,23 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::ast::*;
 
 use super::storage::*;
-use super::storage_backend::Storage;
+use super::storage_backend::{
+    Storage, StorageDriver, StorageMigrationAction, StorageMigrationBlocker, StorageMigrationPlan,
+};
 
 pub struct SqliteStorage {
     conn: rusqlite::Connection,
+    path: PathBuf,
+}
+
+#[derive(Debug)]
+struct SqliteColumnInfo {
+    name: String,
+    column_type: String,
+    not_null: bool,
+    primary_key: bool,
 }
 
 impl SqliteStorage {
@@ -17,29 +28,198 @@ impl SqliteStorage {
             "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;",
         )
         .map_err(|e| e.to_string())?;
-        Ok(SqliteStorage { conn })
+        Ok(SqliteStorage {
+            conn,
+            path: path.to_path_buf(),
+        })
     }
 
     fn table_name(model: &str) -> String {
         model.to_lowercase()
     }
 
+    fn index_name(table: &str, field: &str) -> String {
+        format!("idx_{}_{}", table, field)
+    }
+
+    fn quote_identifier(identifier: &str) -> String {
+        format!("\"{}\"", identifier.replace('"', "\"\""))
+    }
+
+    fn json_path(field: &str) -> String {
+        format!("$.{}", field)
+    }
+
+    fn sql_string_literal(value: &str) -> String {
+        format!("'{}'", value.replace('\'', "''"))
+    }
+
     fn ensure_table(&self, model: &str) -> Result<(), String> {
         let table = Self::table_name(model);
-        self.conn.execute(
-            &format!("CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT NOT NULL)", table),
-            [],
-        ).map_err(|e| format!("Erro ao criar tabela '{}': {}", table, e))?;
+        self.create_model_table(&table)
+            .map_err(|e| format!("Erro ao criar tabela '{}': {}", table, e))
+    }
+
+    fn create_model_table(&self, table: &str) -> Result<(), String> {
+        self.conn
+            .execute(
+                &format!(
+                    "CREATE TABLE IF NOT EXISTS {} (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT NOT NULL)",
+                    Self::quote_identifier(table)
+                ),
+                [],
+            )
+            .map_err(|e| e.to_string())?;
         Ok(())
     }
 
     fn ensure_auth_table(&self) -> Result<(), String> {
+        self.create_auth_table()
+            .map_err(|e| format!("Erro ao criar tabela auth SQLite: {}", e))
+    }
+
+    fn create_auth_table(&self) -> Result<(), String> {
         self.conn
             .execute(
-                "CREATE TABLE IF NOT EXISTS nexus_auth (key TEXT PRIMARY KEY, data TEXT NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS \"nexus_auth\" (key TEXT PRIMARY KEY, data TEXT NOT NULL)",
                 [],
             )
-            .map_err(|e| format!("Erro ao criar tabela auth SQLite: {}", e))?;
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    fn sqlite_object_exists(&self, object_type: &str, name: &str) -> Result<bool, String> {
+        let count: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = ?1 AND name = ?2",
+                rusqlite::params![object_type, name],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Erro ao introspectar SQLite '{}': {}", name, e))?;
+        Ok(count > 0)
+    }
+
+    fn table_exists(&self, table: &str) -> Result<bool, String> {
+        self.sqlite_object_exists("table", table)
+    }
+
+    fn index_exists(&self, index: &str) -> Result<bool, String> {
+        self.sqlite_object_exists("index", index)
+    }
+
+    fn table_columns(&self, table: &str) -> Result<Vec<SqliteColumnInfo>, String> {
+        let mut stmt = self
+            .conn
+            .prepare(&format!(
+                "PRAGMA table_info({})",
+                Self::quote_identifier(table)
+            ))
+            .map_err(|e| format!("Erro ao introspectar tabela SQLite '{}': {}", table, e))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(SqliteColumnInfo {
+                    name: row.get(1)?,
+                    column_type: row.get(2)?,
+                    not_null: row.get::<_, i64>(3)? != 0,
+                    primary_key: row.get::<_, i64>(5)? != 0,
+                })
+            })
+            .map_err(|e| format!("Erro ao introspectar tabela SQLite '{}': {}", table, e))?;
+
+        let mut columns = Vec::new();
+        for row in rows {
+            columns.push(
+                row.map_err(|e| format!("Erro ao introspectar coluna SQLite '{}': {}", table, e))?,
+            );
+        }
+        Ok(columns)
+    }
+
+    fn expected_model_table_shape(&self, table: &str) -> Result<Option<String>, String> {
+        let columns = self.table_columns(table)?;
+        let id = columns.iter().find(|column| column.name == "id");
+        let data = columns.iter().find(|column| column.name == "data");
+        if !matches!(id, Some(column) if column.primary_key) {
+            return Ok(Some(
+                "esperava coluna 'id' como PRIMARY KEY interna".to_string(),
+            ));
+        }
+        if !matches!(data, Some(column) if column.not_null && column.column_type.eq_ignore_ascii_case("TEXT"))
+        {
+            return Ok(Some(
+                "esperava coluna 'data TEXT NOT NULL' para payload JSON".to_string(),
+            ));
+        }
+        Ok(None)
+    }
+
+    fn expected_auth_table_shape(&self) -> Result<Option<String>, String> {
+        let columns = self.table_columns("nexus_auth")?;
+        let key = columns.iter().find(|column| column.name == "key");
+        let data = columns.iter().find(|column| column.name == "data");
+        if !matches!(key, Some(column) if column.primary_key) {
+            return Ok(Some("esperava coluna 'key' como PRIMARY KEY".to_string()));
+        }
+        if !matches!(data, Some(column) if column.not_null && column.column_type.eq_ignore_ascii_case("TEXT"))
+        {
+            return Ok(Some(
+                "esperava coluna 'data TEXT NOT NULL' para auth JSON".to_string(),
+            ));
+        }
+        Ok(None)
+    }
+
+    fn unique_index_has_duplicate_values(&self, table: &str, field: &str) -> Result<bool, String> {
+        let sql = format!(
+            "SELECT COUNT(*) FROM (\
+             SELECT json_extract(data, ?1) AS value \
+             FROM {} \
+             WHERE json_extract(data, ?1) IS NOT NULL \
+             GROUP BY value \
+             HAVING COUNT(*) > 1\
+             )",
+            Self::quote_identifier(table)
+        );
+        let duplicate_groups: i64 = self
+            .conn
+            .query_row(&sql, rusqlite::params![Self::json_path(field)], |row| {
+                row.get(0)
+            })
+            .map_err(|e| {
+                format!(
+                    "Erro ao verificar duplicados para indice unico '{}.{}': {}",
+                    table, field, e
+                )
+            })?;
+        Ok(duplicate_groups > 0)
+    }
+
+    fn create_json_index(
+        &self,
+        table: &str,
+        field: &str,
+        index: &str,
+        unique: bool,
+    ) -> Result<(), String> {
+        let create_index = if unique {
+            "CREATE UNIQUE INDEX"
+        } else {
+            "CREATE INDEX"
+        };
+        let sql = format!(
+            "{} IF NOT EXISTS {} ON {}(json_extract(data, {}))",
+            create_index,
+            Self::quote_identifier(index),
+            Self::quote_identifier(table),
+            Self::sql_string_literal(&Self::json_path(field))
+        );
+        self.conn.execute(&sql, []).map_err(|e| {
+            format!(
+                "Erro ao criar indice SQLite '{}' em '{}.{}': {}",
+                index, table, field, e
+            )
+        })?;
         Ok(())
     }
 
@@ -80,7 +260,10 @@ impl SqliteStorage {
         let table = Self::table_name(model);
         let mut stmt = self
             .conn
-            .prepare(&format!("SELECT id, data FROM {} ORDER BY id", table))
+            .prepare(&format!(
+                "SELECT id, data FROM {} ORDER BY id",
+                Self::quote_identifier(&table)
+            ))
             .map_err(|e| format!("Erro ao ler '{}': {}", model, e))?;
         let rows = stmt
             .query_map([], |row| {
@@ -124,7 +307,10 @@ impl SqliteStorage {
         let table = Self::table_name(model);
         self.conn
             .execute(
-                &format!("INSERT INTO {} (data) VALUES (?1)", table),
+                &format!(
+                    "INSERT INTO {} (data) VALUES (?1)",
+                    Self::quote_identifier(&table)
+                ),
                 rusqlite::params![data_json],
             )
             .map_err(|e| format!("Erro ao inserir em '{}': {}", model, e))?;
@@ -135,7 +321,10 @@ impl SqliteStorage {
         let table = Self::table_name(model);
         self.conn
             .execute(
-                &format!("UPDATE {} SET data = ?1 WHERE id = ?2", table),
+                &format!(
+                    "UPDATE {} SET data = ?1 WHERE id = ?2",
+                    Self::quote_identifier(&table)
+                ),
                 rusqlite::params![data_json, id],
             )
             .map_err(|e| format!("Erro ao atualizar '{}': {}", model, e))?;
@@ -146,7 +335,10 @@ impl SqliteStorage {
         let table = Self::table_name(model);
         self.conn
             .execute(
-                &format!("DELETE FROM {} WHERE id = ?1", table),
+                &format!(
+                    "DELETE FROM {} WHERE id = ?1",
+                    Self::quote_identifier(&table)
+                ),
                 rusqlite::params![id],
             )
             .map_err(|e| format!("Erro ao deletar de '{}': {}", model, e))?;
@@ -182,12 +374,126 @@ impl SqliteStorage {
     }
 
     pub fn ensure_storage(&self, program: &Program) -> Result<(), String> {
-        for decl in &program.decls {
-            if let Decl::Model { name, .. } = decl {
-                self.ensure_table(name)?;
+        self.apply_schema_migration_plan(program).map(|_| ())
+    }
+
+    pub fn schema_migration_plan(&self, program: &Program) -> Result<StorageMigrationPlan, String> {
+        let mut plan = StorageMigrationPlan::new(StorageDriver::Sqlite, self.path.clone());
+
+        if has_auth(program) {
+            if self.table_exists("nexus_auth")? {
+                if let Some(reason) = self.expected_auth_table_shape()? {
+                    plan.blockers
+                        .push(StorageMigrationBlocker::new("nexus_auth", reason));
+                }
+            } else {
+                plan.actions
+                    .push(StorageMigrationAction::CreateSqliteAuthTable {
+                        table: "nexus_auth".to_string(),
+                    });
             }
         }
-        Ok(())
+
+        for decl in &program.decls {
+            if let Decl::Model { name, fields, .. } = decl {
+                let table = Self::table_name(name);
+                let table_exists = self.table_exists(&table)?;
+                if table_exists {
+                    if let Some(reason) = self.expected_model_table_shape(&table)? {
+                        plan.blockers
+                            .push(StorageMigrationBlocker::new(table.clone(), reason));
+                        continue;
+                    }
+                } else {
+                    plan.actions
+                        .push(StorageMigrationAction::CreateSqliteModelTable {
+                            model: name.clone(),
+                            table: table.clone(),
+                        });
+                }
+
+                for field in fields {
+                    if field.unique {
+                        let index = Self::index_name(&table, &field.name);
+                        if !self.index_exists(&index)? {
+                            if table_exists
+                                && self.unique_index_has_duplicate_values(&table, &field.name)?
+                            {
+                                plan.blockers.push(StorageMigrationBlocker::new(
+                                    format!("{}.{}", name, field.name),
+                                    format!(
+                                        "nao e seguro criar indice unico '{}' porque existem valores duplicados",
+                                        index
+                                    ),
+                                ));
+                            } else {
+                                plan.actions.push(
+                                    StorageMigrationAction::CreateSqliteUniqueIndex {
+                                        model: name.clone(),
+                                        table: table.clone(),
+                                        field: field.name.clone(),
+                                        index,
+                                    },
+                                );
+                            }
+                        }
+                    } else if field.index {
+                        let index = Self::index_name(&table, &field.name);
+                        if !self.index_exists(&index)? {
+                            plan.actions
+                                .push(StorageMigrationAction::CreateSqliteIndex {
+                                    model: name.clone(),
+                                    table: table.clone(),
+                                    field: field.name.clone(),
+                                    index,
+                                });
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(plan)
+    }
+
+    pub fn apply_schema_migration_plan(
+        &self,
+        program: &Program,
+    ) -> Result<StorageMigrationPlan, String> {
+        let plan = self.schema_migration_plan(program)?;
+        if plan.has_blockers() {
+            return Err(format!(
+                "Plano de migracao SQLite bloqueado: {}",
+                plan.blocker_summary()
+            ));
+        }
+
+        for action in &plan.actions {
+            self.apply_migration_action(action)?;
+        }
+
+        Ok(plan)
+    }
+
+    fn apply_migration_action(&self, action: &StorageMigrationAction) -> Result<(), String> {
+        match action {
+            StorageMigrationAction::CreateSqliteModelTable { table, .. } => {
+                self.create_model_table(table)
+            }
+            StorageMigrationAction::CreateSqliteAuthTable { .. } => self.create_auth_table(),
+            StorageMigrationAction::CreateSqliteUniqueIndex {
+                table,
+                field,
+                index,
+                ..
+            } => self.create_json_index(table, field, index, true),
+            StorageMigrationAction::CreateSqliteIndex {
+                table,
+                field,
+                index,
+                ..
+            } => self.create_json_index(table, field, index, false),
+        }
     }
 
     pub fn create_model_record(
@@ -247,14 +553,12 @@ impl SqliteStorage {
     ) -> Result<(), String> {
         for field in fields.iter().filter(|f| f.unique) {
             if server_object_field(record, &field.name).is_some() {
-                let idx_name = format!("idx_{}_{}", Self::table_name(model), field.name);
-                let sql = format!(
-                    "CREATE UNIQUE INDEX IF NOT EXISTS {} ON {}(json_extract(data, '$.{}'))",
-                    idx_name,
-                    Self::table_name(model),
-                    field.name
-                );
-                if self.conn.execute(&sql, []).is_err() {
+                let table = Self::table_name(model);
+                let idx_name = Self::index_name(&table, &field.name);
+                if self
+                    .create_json_index(&table, &field.name, &idx_name, true)
+                    .is_err()
+                {
                     let records = self.read_all_records_json(model)?;
                     let json_records: Vec<JsonValue> = records
                         .iter()

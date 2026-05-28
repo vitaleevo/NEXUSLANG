@@ -66,6 +66,142 @@ impl fmt::Display for StorageDriver {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StorageMigrationPlan {
+    pub driver: StorageDriver,
+    pub target_path: PathBuf,
+    pub actions: Vec<StorageMigrationAction>,
+    pub blockers: Vec<StorageMigrationBlocker>,
+}
+
+impl StorageMigrationPlan {
+    pub fn new(driver: StorageDriver, target_path: PathBuf) -> Self {
+        Self {
+            driver,
+            target_path,
+            actions: Vec::new(),
+            blockers: Vec::new(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.actions.is_empty() && self.blockers.is_empty()
+    }
+
+    pub fn has_blockers(&self) -> bool {
+        !self.blockers.is_empty()
+    }
+
+    pub fn blocker_summary(&self) -> String {
+        if self.blockers.is_empty() {
+            return "sem bloqueios".to_string();
+        }
+        self.blockers
+            .iter()
+            .map(|blocker| format!("{}: {}", blocker.resource, blocker.reason))
+            .collect::<Vec<_>>()
+            .join("; ")
+    }
+
+    pub fn render_text(&self, applied: bool) -> String {
+        let mut out = String::new();
+        out.push_str(&format!("Storage migration plan ({})\n", self.driver));
+        out.push_str(&format!("Target: {}\n", self.target_path.display()));
+        out.push_str(&format!(
+            "Mode: {}\n",
+            if applied { "applied" } else { "dry-run" }
+        ));
+        out.push_str(&format!(
+            "Status: {} action(s), {} blocker(s)\n",
+            self.actions.len(),
+            self.blockers.len()
+        ));
+        if self.actions.is_empty() {
+            out.push_str("Actions: none\n");
+        } else {
+            out.push_str("Actions:\n");
+            for action in &self.actions {
+                out.push_str(&format!("  - {}\n", action.summary()));
+            }
+        }
+        if self.blockers.is_empty() {
+            out.push_str("Blockers: none\n");
+        } else {
+            out.push_str("Blockers:\n");
+            for blocker in &self.blockers {
+                out.push_str(&format!("  - {}: {}\n", blocker.resource, blocker.reason));
+            }
+        }
+        out
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StorageMigrationAction {
+    CreateSqliteModelTable {
+        model: String,
+        table: String,
+    },
+    CreateSqliteAuthTable {
+        table: String,
+    },
+    CreateSqliteUniqueIndex {
+        model: String,
+        table: String,
+        field: String,
+        index: String,
+    },
+    CreateSqliteIndex {
+        model: String,
+        table: String,
+        field: String,
+        index: String,
+    },
+}
+
+impl StorageMigrationAction {
+    pub fn summary(&self) -> String {
+        match self {
+            StorageMigrationAction::CreateSqliteModelTable { model, table } => {
+                format!("create SQLite model table '{}' for {}", table, model)
+            }
+            StorageMigrationAction::CreateSqliteAuthTable { table } => {
+                format!("create SQLite auth table '{}'", table)
+            }
+            StorageMigrationAction::CreateSqliteUniqueIndex {
+                model,
+                field,
+                index,
+                ..
+            } => format!(
+                "create SQLite unique index '{}' for {}.{}",
+                index, model, field
+            ),
+            StorageMigrationAction::CreateSqliteIndex {
+                model,
+                field,
+                index,
+                ..
+            } => format!("create SQLite index '{}' for {}.{}", index, model, field),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StorageMigrationBlocker {
+    pub resource: String,
+    pub reason: String,
+}
+
+impl StorageMigrationBlocker {
+    pub fn new(resource: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self {
+            resource: resource.into(),
+            reason: reason.into(),
+        }
+    }
+}
+
 impl Storage {
     pub fn new_json(data_dir: &Path) -> Self {
         Storage::Json(JsonStorage::new(data_dir))
@@ -96,6 +232,29 @@ impl Storage {
         match self {
             Storage::Json(s) => s.ensure_storage(program),
             Storage::Sqlite(s) => s.ensure_storage(program),
+        }
+    }
+
+    pub fn schema_migration_plan(&self, program: &Program) -> Result<StorageMigrationPlan, String> {
+        match self {
+            Storage::Json(_) => Ok(StorageMigrationPlan::new(
+                StorageDriver::Json,
+                PathBuf::from("<json-storage>"),
+            )),
+            Storage::Sqlite(s) => s.schema_migration_plan(program),
+        }
+    }
+
+    pub fn apply_schema_migration_plan(
+        &self,
+        program: &Program,
+    ) -> Result<StorageMigrationPlan, String> {
+        match self {
+            Storage::Json(_) => Ok(StorageMigrationPlan::new(
+                StorageDriver::Json,
+                PathBuf::from("<json-storage>"),
+            )),
+            Storage::Sqlite(s) => s.apply_schema_migration_plan(program),
         }
     }
 

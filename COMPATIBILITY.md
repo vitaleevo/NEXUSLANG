@@ -1,7 +1,7 @@
 # NexusLang Compatibility Contract
 
 This document records what NexusLang treats as stable, release-candidate, or
-experimental for the current public `0.1.x` line.
+experimental for the current public `0.2.x` line.
 
 ## Compatibility Levels
 
@@ -33,14 +33,20 @@ listed in `RELEASE_NOTES.md`.
 
 Level: release candidate.
 
-The public CLI commands for `0.1.0` are:
+The public CLI commands for `0.2.x` include:
 
 ```text
-nexus run <file.nx>
-nexus check <file.nx>
+nexus run [file.nx]
+nexus check [file.nx]
 nexus fmt <file.nx> [--write]
 nexus lint <file.nx>
-nexus serve <file.nx> [addr]
+nexus docs [file.nx] [--output docs.md]
+nexus test [file-or-directory]
+nexus serve [file.nx] [addr] [--storage json|sqlite]
+nexus storage-plan [file.nx] [--storage sqlite] [--apply]
+nexus install
+nexus add <package> [--path <dir>|--registry <pkg@version>]
+nexus update
 nexus repl
 nexus new <project>
 nexus tokens <file.nx>
@@ -78,7 +84,7 @@ external tools.
 
 ### JSON Storage
 
-Level: release candidate for the `0.1.x` record contract; experimental for
+Level: release candidate for the `0.2.x` record contract; experimental for
 long-term operations.
 
 JSON storage is appropriate for local development, examples, demos, and smoke
@@ -89,7 +95,7 @@ model under `.nexus-data` next to the served source file:
 .nexus-data/<model-name-lowercase>.json
 ```
 
-For `0.1.x`, NexusLang keeps this minimal record contract:
+For `0.2.x`, NexusLang keeps this minimal record contract:
 
 - each model file is a JSON array;
 - each array item is a JSON object representing one model record;
@@ -101,7 +107,7 @@ For `0.1.x`, NexusLang keeps this minimal record contract:
   from release packages.
 
 NexusLang does not promise automatic rewrites of existing JSON files in
-`0.1.x`. Compatibility for additive fields is applied when records are read.
+`0.2.x`. Compatibility for additive fields is applied when records are read.
 
 ### SQLite Storage
 
@@ -111,10 +117,11 @@ physical database schema.
 SQLite has parity coverage for critical CRUD and filter flows. The current
 SQLite backend stores each model in a lower-case table with an internal
 autoincrement `id` and a `data TEXT NOT NULL` JSON payload. This physical
-layout is an implementation detail for `0.1.x`; users should not depend on
-table names, index names, or raw SQL structure yet.
+layout is still not a public ORM contract, but NexusLang now exposes a
+conservative migration plan so users can inspect and apply the supported DDL
+before serving production-like data.
 
-The public `0.1.x` SQLite promise is behavioral:
+The public `0.2.x` SQLite promise is behavioral:
 
 - CRUD, filters, ordering, pagination, unique checks, defaults, optionals, and
   min/max validation should match JSON storage for the supported route subset;
@@ -123,13 +130,41 @@ The public `0.1.x` SQLite promise is behavioral:
 - SQLite database files remain user data and should be backed up before
   upgrading NexusLang.
 
-SQLite may create internal indexes for constraints such as `unique`, but
-declared `index` fields are still metadata today and do not guarantee physical
-indexes.
+SQLite creates internal indexes for `unique` fields and physical indexes for
+declared `index` fields through the migration plan. Index names remain
+implementation details and should not be used by application code.
 
-### Migration Policy For 0.1.x
+### SQLite Migration Plan MVP
 
-NexusLang `0.1.x` supports only conservative, user-auditable storage evolution.
+Level: release candidate for conservative dry-run/apply behavior;
+experimental for the long-term physical schema.
+
+Use the migration plan before running SQLite against important data:
+
+```bash
+nexus storage-plan path/to/app.nx --storage sqlite
+nexus storage-plan path/to/app.nx --storage sqlite --apply
+```
+
+The dry-run opens the SQLite target and reports:
+
+- missing model tables;
+- missing auth table when the program declares `auth`;
+- missing unique indexes for `unique` fields;
+- missing non-unique indexes for fields declared with `index`;
+- blockers for legacy tables that do not match the current `id`/`data`
+  payload layout;
+- blockers for unique indexes that would fail because existing data contains
+  duplicate values.
+
+`--apply` refuses to run if blockers exist. Safe actions create missing tables
+and indexes only; they do not rewrite existing JSON payloads, rename fields,
+drop columns, transform money/date representation, or perform a semantic
+versioned migration.
+
+### Migration Policy For 0.2.x
+
+NexusLang `0.2.x` supports only conservative, user-auditable storage evolution.
 
 Supported additive model changes:
 
@@ -145,7 +180,7 @@ Breaking storage changes:
 - add a required field without a default;
 - change a field type in existing data;
 - change money/date representation;
-- depend on physical `index` behavior before physical indexes are documented.
+- depend on physical SQL layout beyond the documented migration plan.
 
 For breaking changes, users must export or back up data first, transform the
 data explicitly, then run smoke tests against the new model declarations before
@@ -153,7 +188,7 @@ serving production-like data.
 
 ### Backup And Restore Expectations
 
-Before upgrading between `0.1.x` releases:
+Before upgrading between `0.2.x` releases:
 
 - stop the NexusLang server process;
 - copy the full `.nexus-data` directory for JSON storage;
@@ -171,7 +206,7 @@ included in release packages as `docs/STORAGE_BACKUP_RESTORE.md`.
 
 ### Storage Release Gate
 
-Every `0.1.x` release candidate should run:
+Every `0.2.x` release candidate should run:
 
 ```bash
 ./scripts/validate-storage-compatibility-policy.sh

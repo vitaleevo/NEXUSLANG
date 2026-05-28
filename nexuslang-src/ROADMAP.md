@@ -474,7 +474,8 @@ Real risks to retire in `0.1.1`:
   plus orders, and make it excellent end to end.
 - Implement the first SQLite/migrations MVP with schema introspection,
   migration plan/dry-run, and JSON/SQLite compatibility tests before larger
-  runtime features.
+  runtime features. DONE locally in Fase 11.68 with `nexus storage-plan`,
+  conservative blockers, safe table/index creation, and focused tests.
 - Decide whether docs generation belongs in the CLI as a first-class command
   before expanding documentation UI in the playground.
 - Improve runtime diagnostics with structured locations where feasible, so

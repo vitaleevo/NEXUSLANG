@@ -2210,6 +2210,56 @@ route GET /customers {
 }
 
 #[test]
+fn cli_storage_plan_sqlite_dry_run_and_apply() {
+    let project = TempProject::new("storage-plan-sqlite");
+    fs::write(
+        project.path.join("main.nx"),
+        r#"
+model Customer {
+    email: string unique
+    status: string index
+}
+"#,
+    )
+    .expect("write main");
+
+    let dry_run = assert_success(run_nexus(
+        &project.path,
+        &["storage-plan", "main.nx", "--storage", "sqlite"],
+    ));
+    assert!(dry_run.contains("Mode: dry-run"), "stdout: {dry_run}");
+    assert!(
+        dry_run.contains("create SQLite model table 'customer'"),
+        "stdout: {dry_run}"
+    );
+    assert!(dry_run.contains("idx_customer_email"), "stdout: {dry_run}");
+    assert!(dry_run.contains("idx_customer_status"), "stdout: {dry_run}");
+
+    let applied = assert_success(run_nexus(
+        &project.path,
+        &["storage-plan", "main.nx", "--storage", "sqlite", "--apply"],
+    ));
+    assert!(applied.contains("Mode: applied"), "stdout: {applied}");
+    assert!(
+        project.path.join(".nexus-data").join("nexus.db").exists(),
+        "storage-plan --apply should create the SQLite database"
+    );
+
+    let after_apply = assert_success(run_nexus(
+        &project.path,
+        &["storage-plan", "main.nx", "--storage", "sqlite"],
+    ));
+    assert!(
+        after_apply.contains("Actions: none"),
+        "stdout: {after_apply}"
+    );
+    assert!(
+        after_apply.contains("Blockers: none"),
+        "stdout: {after_apply}"
+    );
+}
+
+#[test]
 fn cli_serve_rejects_unknown_storage_driver() {
     let project = TempProject::new("serve-unknown-driver");
     fs::write(project.path.join("main.nx"), r#"print("ok")"#).expect("write main");
