@@ -36,7 +36,7 @@ dedicated stable release branch if the remaining gates pass.
 | --- | --- | --- |
 | Core language, CLI, diagnostics, runtime | Low for RC2 scope | Keep as stable candidate surface. |
 | Release packaging and signatures | Low | Already strong enough for stable preflight. |
-| GitHub Actions Node.js 20 warnings | Medium | Harden before stable by moving first-party actions to Node 24 compatible majors. |
+| GitHub Actions Node.js 20 warnings | Medium | Harden before stable by moving first-party actions to Node 24 compatible refs pinned by commit SHA. |
 | Package registry | Medium/high | Keep documented as MVP; do not imply remote registry support in `0.2.0`. |
 | SQLite physical schema | Medium/high | Keep documented as behavioral parity only; do not promise stable raw schema. |
 | LSP/editor tooling | Medium | Keep positioned as MVP; rename/format/code actions are future work. |
@@ -47,7 +47,7 @@ dedicated stable release branch if the remaining gates pass.
 | Gate | Required before `v0.2.0` |
 | --- | --- |
 | Worktree | Clean stable branch created from updated `main`. |
-| CI | GitHub Actions green on the stable branch/head after Node 24 action hardening. |
+| CI | GitHub Actions green on the stable branch/head after Node 24 action hardening with pinned action SHAs. |
 | Local quality | `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh` passes. |
 | Package | `./scripts/package-release.sh` and `./scripts/validate-release-package.sh` pass for `0.2.0`. |
 | Strict release dry-run | `NEXUS_RELEASE_SIGNING_KEY=<key> ./scripts/release-dry-run-strict.sh` passes on pushed stable branch. |
@@ -57,14 +57,14 @@ dedicated stable release branch if the remaining gates pass.
 
 ## Hardening Scope Selected
 
-1. Move first-party GitHub Actions from Node 20-era majors to Node 24 compatible majors.
+1. Move first-party GitHub Actions from Node 20-era majors to Node 24 compatible refs pinned by commit SHA.
 2. Keep source version and public release state on `0.2.0-rc.2`.
 3. Preserve the known limits for registry, SQLite physical schema, LSP, and hosted playground.
 4. Prepare the next phase as a controlled stable release branch only after this hardening PR is reviewed and merged.
 
 ## References Checked
 
-- `actions/checkout@v6`: https://github.com/actions/checkout
-- `actions/setup-node@v6`: https://github.com/actions/setup-node
-- `actions/setup-python@v6`: https://github.com/actions/setup-python
-- `actions/upload-artifact@v6`: https://github.com/actions/upload-artifact/releases/tag/v6.0.0
+- `actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd`: `v6`
+- `actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e`: `v6`
+- `actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405`: `v6`
+- `actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f`: `v6`

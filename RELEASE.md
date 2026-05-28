@@ -183,7 +183,7 @@ NEXUS_PUBLIC_RELEASE_TAG=v0.2.0-rc.2 ./scripts/validate-public-release-install.s
 - [x] Stable `0.2.0` decision is documented as hardening pre-stable, not
   immediate promotion.
 - [x] GitHub Actions workflow is moved to Node 24 compatible first-party action
-  majors for pre-stable hardening.
+  refs pinned by commit SHA for pre-stable hardening.
 - [ ] Stable `0.2.0` source version is prepared on a dedicated release branch.
 - [ ] Stable `v0.2.0` tag and GitHub Release are published.
 - [ ] Public GitHub stable install validation passes for `v0.2.0`.
