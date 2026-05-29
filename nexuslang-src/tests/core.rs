@@ -3938,6 +3938,11 @@ model Customer {
     assert!(dry_run.blockers.is_empty(), "plan: {dry_run:#?}");
     assert!(dry_run.actions.iter().any(|action| matches!(
         action,
+        nexuslang::server::StorageMigrationAction::CreateSqliteMigrationLedger { table }
+            if table == "nexus_schema_migrations"
+    )));
+    assert!(dry_run.actions.iter().any(|action| matches!(
+        action,
         nexuslang::server::StorageMigrationAction::CreateSqliteModelTable { table, .. }
             if table == "customer"
     )));
@@ -3957,6 +3962,10 @@ model Customer {
         dry_text.contains("create SQLite model table 'customer'"),
         "text: {dry_text}"
     );
+    assert!(
+        dry_text.contains("create SQLite migration ledger table 'nexus_schema_migrations'"),
+        "text: {dry_text}"
+    );
 
     let applied = storage.apply_schema_migration_plan(&program).unwrap();
     assert_eq!(applied.actions.len(), dry_run.actions.len());
@@ -3970,12 +3979,125 @@ model Customer {
 
     assert_eq!(sqlite_master_count(&conn, "table", "customer"), 1);
     assert_eq!(
+        sqlite_master_count(&conn, "table", "nexus_schema_migrations"),
+        1
+    );
+    assert_eq!(
+        sqlite_migration_history_count(&conn),
+        applied.actions.len() as i64
+    );
+    assert_eq!(
         email_index_sql,
         r#"CREATE UNIQUE INDEX "idx_customer_email" ON "customer"(json_extract(data, '$.email'))"#
     );
     assert_eq!(
         status_index_sql,
         r#"CREATE INDEX "idx_customer_status" ON "customer"(json_extract(data, '$.status'))"#
+    );
+}
+
+#[test]
+fn sqlite_migration_plan_records_history_and_is_idempotent() {
+    let source = r#"
+model Customer {
+    email: string unique
+    status: string index
+}
+"#;
+    let program = parse_checked_source(source).unwrap();
+    let data_dir = temp_data_dir("sqlite_migration_plan_history_idempotent");
+    fs::create_dir_all(&data_dir).unwrap();
+    let db_path = data_dir.join("nexus.db");
+    let storage = nexuslang::server::Storage::new_sqlite(&db_path).unwrap();
+
+    let applied = storage.apply_schema_migration_plan(&program).unwrap();
+    assert_eq!(applied.blockers.len(), 0);
+    assert_eq!(applied.actions.len(), 4, "plan: {applied:#?}");
+
+    let conn = rusqlite::Connection::open(&db_path).unwrap();
+    assert_eq!(sqlite_migration_history_count(&conn), 4);
+    assert_eq!(
+        sqlite_migration_history_count_for(
+            &conn,
+            "sqlite:migration-ledger:nexus_schema_migrations"
+        ),
+        1
+    );
+    assert_eq!(
+        sqlite_migration_history_count_for(&conn, "sqlite:model-table:customer"),
+        1
+    );
+    assert_eq!(
+        sqlite_migration_history_count_for(&conn, "sqlite:unique-index:idx_customer_email"),
+        1
+    );
+    assert_eq!(
+        sqlite_migration_history_count_for(&conn, "sqlite:index:idx_customer_status"),
+        1
+    );
+
+    let second_apply = storage.apply_schema_migration_plan(&program).unwrap();
+    assert!(
+        second_apply.is_empty(),
+        "second apply must be empty: {second_apply:#?}"
+    );
+    assert_eq!(sqlite_migration_history_count(&conn), 4);
+}
+
+#[test]
+fn sqlite_migration_plan_bootstraps_ledger_for_existing_safe_schema() {
+    let source = r#"
+model Customer {
+    email: string unique
+    status: string index
+}
+"#;
+    let program = parse_checked_source(source).unwrap();
+    let data_dir = temp_data_dir("sqlite_migration_plan_bootstrap_ledger");
+    fs::create_dir_all(&data_dir).unwrap();
+    let db_path = data_dir.join("nexus.db");
+    {
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute(
+            "CREATE TABLE customer (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT NOT NULL)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            r#"CREATE UNIQUE INDEX idx_customer_email ON customer(json_extract(data, '$.email'))"#,
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            r#"CREATE INDEX idx_customer_status ON customer(json_extract(data, '$.status'))"#,
+            [],
+        )
+        .unwrap();
+    }
+    let storage = nexuslang::server::Storage::new_sqlite(&db_path).unwrap();
+
+    let plan = storage.schema_migration_plan(&program).unwrap();
+    assert_eq!(plan.actions.len(), 1, "plan: {plan:#?}");
+    assert!(matches!(
+        &plan.actions[0],
+        nexuslang::server::StorageMigrationAction::CreateSqliteMigrationLedger { table }
+            if table == "nexus_schema_migrations"
+    ));
+    assert!(!plan.has_blockers(), "plan: {plan:#?}");
+
+    let applied = storage.apply_schema_migration_plan(&program).unwrap();
+    assert_eq!(applied.actions.len(), 1);
+    let after_apply = storage.schema_migration_plan(&program).unwrap();
+    assert!(after_apply.is_empty(), "plan: {after_apply:#?}");
+
+    let conn = rusqlite::Connection::open(&db_path).unwrap();
+    assert_eq!(sqlite_migration_history_count(&conn), 1);
+    assert_eq!(
+        sqlite_migration_history_count_for(
+            &conn,
+            "sqlite:migration-ledger:nexus_schema_migrations"
+        ),
+        1
     );
 }
 
@@ -4012,6 +4134,10 @@ model Customer {
     assert!(error.contains("data TEXT NOT NULL"));
     let conn = rusqlite::Connection::open(&db_path).unwrap();
     assert_eq!(sqlite_master_count(&conn, "index", "idx_customer_email"), 0);
+    assert_eq!(
+        sqlite_master_count(&conn, "table", "nexus_schema_migrations"),
+        0
+    );
 }
 
 #[test]
@@ -4057,6 +4183,10 @@ model Customer {
     assert!(error.contains("duplicados"), "error: {error}");
     let conn = rusqlite::Connection::open(&db_path).unwrap();
     assert_eq!(sqlite_master_count(&conn, "index", "idx_customer_email"), 0);
+    assert_eq!(
+        sqlite_master_count(&conn, "table", "nexus_schema_migrations"),
+        0
+    );
 }
 
 #[test]
@@ -4100,6 +4230,10 @@ model Customer {
     assert!(
         !email_index_sql.contains("UNIQUE"),
         "blocked apply must not recreate the index as unique: {email_index_sql}"
+    );
+    assert_eq!(
+        sqlite_master_count(&conn, "table", "nexus_schema_migrations"),
+        0
     );
 }
 
@@ -6162,6 +6296,22 @@ fn sqlite_master_sql(conn: &rusqlite::Connection, object_type: &str, name: &str)
     conn.query_row(
         "SELECT sql FROM sqlite_master WHERE type = ?1 AND name = ?2",
         rusqlite::params![object_type, name],
+        |row| row.get(0),
+    )
+    .unwrap()
+}
+
+fn sqlite_migration_history_count(conn: &rusqlite::Connection) -> i64 {
+    conn.query_row("SELECT COUNT(*) FROM nexus_schema_migrations", [], |row| {
+        row.get(0)
+    })
+    .unwrap()
+}
+
+fn sqlite_migration_history_count_for(conn: &rusqlite::Connection, id: &str) -> i64 {
+    conn.query_row(
+        "SELECT COUNT(*) FROM nexus_schema_migrations WHERE id = ?1",
+        rusqlite::params![id],
         |row| row.get(0),
     )
     .unwrap()

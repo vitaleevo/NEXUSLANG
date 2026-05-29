@@ -94,6 +94,7 @@ copy_runtime_assets() {
     cp "$ROOT_DIR/scripts/validate-public-release-install.sh" "$PACKAGE_DIR/scripts/validate-public-release-install.sh"
     cp "$ROOT_DIR/scripts/validate-storage-compatibility-policy.sh" "$PACKAGE_DIR/scripts/validate-storage-compatibility-policy.sh"
     cp "$ROOT_DIR/scripts/smoke-storage-backup-restore.sh" "$PACKAGE_DIR/scripts/smoke-storage-backup-restore.sh"
+    cp "$ROOT_DIR/scripts/smoke-sqlite-backup-restore.sh" "$PACKAGE_DIR/scripts/smoke-sqlite-backup-restore.sh"
     cp "$ROOT_DIR/scripts/smoke-auth.sh" "$PACKAGE_DIR/scripts/smoke-auth.sh"
 }
 

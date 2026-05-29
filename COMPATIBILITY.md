@@ -134,6 +134,10 @@ SQLite creates internal indexes for `unique` fields and physical indexes for
 declared `index` fields through the migration plan. Index names remain
 implementation details and should not be used by application code.
 
+SQLite also creates an internal `nexus_schema_migrations` ledger when the
+migration plan is applied. The ledger records NexusLang-managed DDL actions for
+auditability and idempotence; it is not an application model or public SQL API.
+
 ### SQLite Migration Plan MVP
 
 Level: release candidate for conservative dry-run/apply behavior;
@@ -148,19 +152,40 @@ nexus storage-plan path/to/app.nx --storage sqlite --apply
 
 The dry-run opens the SQLite target and reports:
 
+- missing internal migration ledger table;
 - missing model tables;
 - missing auth table when the program declares `auth`;
 - missing unique indexes for `unique` fields;
 - missing non-unique indexes for fields declared with `index`;
+- blockers for an incompatible internal migration ledger table;
 - blockers for legacy tables that do not match the current `id`/`data`
   payload layout;
 - blockers for unique indexes that would fail because existing data contains
   duplicate values.
 
 `--apply` refuses to run if blockers exist. Safe actions create missing tables
-and indexes only; they do not rewrite existing JSON payloads, rename fields,
-drop columns, transform money/date representation, or perform a semantic
-versioned migration.
+and indexes only, then insert deterministic records into
+`nexus_schema_migrations`. They do not rewrite existing JSON payloads, rename
+fields, drop columns, transform money/date representation, or perform a
+semantic versioned migration.
+
+### SQLite Migration History MVP
+
+Level: release candidate for action idempotence; internal for the ledger schema.
+
+For `0.2.x`, NexusLang records only the storage actions it knows how to apply:
+
+- creation of the internal migration ledger;
+- creation of model tables;
+- creation of the auth table;
+- creation of unique indexes;
+- creation of non-unique indexes for `index` fields.
+
+The ledger is append-only for applied NexusLang DDL actions and uses stable
+action IDs to make reapplying the same plan idempotent. It is not a full
+semantic migration system: NexusLang does not yet track rename/drop/data
+transform history, rollback scripts, model-version graphs, or dependency-aware
+schema solvers.
 
 ### Migration Policy For 0.2.x
 
@@ -211,7 +236,9 @@ Every `0.2.x` release candidate should run:
 ```bash
 ./scripts/validate-storage-compatibility-policy.sh
 ./scripts/smoke-storage-backup-restore.sh
+./scripts/smoke-sqlite-backup-restore.sh
 cd nexuslang-src
+cargo test sqlite_migration_plan_records_history_and_is_idempotent
 cargo test storage_schema_evolution_allows_additive_optional_and_defaulted_fields
 cargo test sqlite_storage_matches_json_storage_for_crud_and_critical_filters
 ```
@@ -257,6 +284,7 @@ The release package should contain:
 - `PACKAGE_MANIFEST.txt`
 - `scripts/smoke-package.sh`
 - `scripts/smoke-storage-backup-restore.sh`
+- `scripts/smoke-sqlite-backup-restore.sh`
 
 ## Breaking Change Rules
 

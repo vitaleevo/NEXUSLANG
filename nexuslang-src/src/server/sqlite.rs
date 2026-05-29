@@ -12,12 +12,66 @@ pub struct SqliteStorage {
     path: PathBuf,
 }
 
+const SQLITE_MIGRATION_LEDGER_TABLE: &str = "nexus_schema_migrations";
+
 #[derive(Debug)]
 struct SqliteColumnInfo {
     name: String,
     column_type: String,
     not_null: bool,
     primary_key: bool,
+}
+
+impl StorageMigrationAction {
+    fn history_id(&self) -> String {
+        match self {
+            StorageMigrationAction::CreateSqliteMigrationLedger { table } => {
+                format!("sqlite:migration-ledger:{}", table)
+            }
+            StorageMigrationAction::CreateSqliteModelTable { table, .. } => {
+                format!("sqlite:model-table:{}", table)
+            }
+            StorageMigrationAction::CreateSqliteAuthTable { table } => {
+                format!("sqlite:auth-table:{}", table)
+            }
+            StorageMigrationAction::CreateSqliteUniqueIndex { index, .. } => {
+                format!("sqlite:unique-index:{}", index)
+            }
+            StorageMigrationAction::CreateSqliteIndex { index, .. } => {
+                format!("sqlite:index:{}", index)
+            }
+        }
+    }
+
+    fn history_kind(&self) -> &'static str {
+        match self {
+            StorageMigrationAction::CreateSqliteMigrationLedger { .. } => "migration-ledger",
+            StorageMigrationAction::CreateSqliteModelTable { .. } => "model-table",
+            StorageMigrationAction::CreateSqliteAuthTable { .. } => "auth-table",
+            StorageMigrationAction::CreateSqliteUniqueIndex { .. } => "unique-index",
+            StorageMigrationAction::CreateSqliteIndex { .. } => "index",
+        }
+    }
+
+    fn history_resource(&self) -> String {
+        match self {
+            StorageMigrationAction::CreateSqliteMigrationLedger { table } => table.clone(),
+            StorageMigrationAction::CreateSqliteModelTable { table, .. } => table.clone(),
+            StorageMigrationAction::CreateSqliteAuthTable { table } => table.clone(),
+            StorageMigrationAction::CreateSqliteUniqueIndex {
+                model,
+                field,
+                index,
+                ..
+            }
+            | StorageMigrationAction::CreateSqliteIndex {
+                model,
+                field,
+                index,
+                ..
+            } => format!("{}.{}:{}", model, field, index),
+        }
+    }
 }
 
 impl SqliteStorage {
@@ -43,6 +97,9 @@ impl SqliteStorage {
         }
 
         let mut plan = StorageMigrationPlan::new(StorageDriver::Sqlite, path.to_path_buf());
+        if Self::program_declares_storage(program) {
+            Self::push_missing_migration_ledger_action(&mut plan);
+        }
         if has_auth(program) {
             plan.actions
                 .push(StorageMigrationAction::CreateSqliteAuthTable {
@@ -79,6 +136,14 @@ impl SqliteStorage {
 
     fn table_name(model: &str) -> String {
         model.to_lowercase()
+    }
+
+    fn program_declares_storage(program: &Program) -> bool {
+        has_auth(program)
+            || program
+                .decls
+                .iter()
+                .any(|decl| matches!(decl, Decl::Model { .. }))
     }
 
     fn index_name(table: &str, field: &str) -> String {
@@ -128,6 +193,22 @@ impl SqliteStorage {
                 [],
             )
             .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    fn create_migration_ledger_table(&self) -> Result<(), String> {
+        self.conn
+            .execute(
+                r#"CREATE TABLE IF NOT EXISTS "nexus_schema_migrations" (
+                    id TEXT PRIMARY KEY,
+                    kind TEXT NOT NULL,
+                    resource TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )"#,
+                [],
+            )
+            .map_err(|e| format!("Erro ao criar ledger de migracoes SQLite: {}", e))?;
         Ok(())
     }
 
@@ -233,6 +314,46 @@ impl SqliteStorage {
         Ok(None)
     }
 
+    fn expected_migration_ledger_shape(&self) -> Result<Option<String>, String> {
+        let columns = self.table_columns(SQLITE_MIGRATION_LEDGER_TABLE)?;
+        let id = columns.iter().find(|column| column.name == "id");
+        let kind = columns.iter().find(|column| column.name == "kind");
+        let resource = columns.iter().find(|column| column.name == "resource");
+        let summary = columns.iter().find(|column| column.name == "summary");
+        let applied_at = columns.iter().find(|column| column.name == "applied_at");
+        if !matches!(id, Some(column) if column.primary_key && column.column_type.eq_ignore_ascii_case("TEXT"))
+        {
+            return Ok(Some(
+                "esperava coluna 'id TEXT PRIMARY KEY' no ledger de migracoes".to_string(),
+            ));
+        }
+        if !matches!(kind, Some(column) if column.not_null && column.column_type.eq_ignore_ascii_case("TEXT"))
+        {
+            return Ok(Some(
+                "esperava coluna 'kind TEXT NOT NULL' no ledger de migracoes".to_string(),
+            ));
+        }
+        if !matches!(resource, Some(column) if column.not_null && column.column_type.eq_ignore_ascii_case("TEXT"))
+        {
+            return Ok(Some(
+                "esperava coluna 'resource TEXT NOT NULL' no ledger de migracoes".to_string(),
+            ));
+        }
+        if !matches!(summary, Some(column) if column.not_null && column.column_type.eq_ignore_ascii_case("TEXT"))
+        {
+            return Ok(Some(
+                "esperava coluna 'summary TEXT NOT NULL' no ledger de migracoes".to_string(),
+            ));
+        }
+        if !matches!(applied_at, Some(column) if column.not_null && column.column_type.eq_ignore_ascii_case("TEXT"))
+        {
+            return Ok(Some(
+                "esperava coluna 'applied_at TEXT NOT NULL' no ledger de migracoes".to_string(),
+            ));
+        }
+        Ok(None)
+    }
+
     fn unique_index_has_duplicate_values(&self, table: &str, field: &str) -> Result<bool, String> {
         let sql = format!(
             "SELECT COUNT(*) FROM (\
@@ -312,6 +433,13 @@ impl SqliteStorage {
                     });
             }
         }
+    }
+
+    fn push_missing_migration_ledger_action(plan: &mut StorageMigrationPlan) {
+        plan.actions
+            .push(StorageMigrationAction::CreateSqliteMigrationLedger {
+                table: SQLITE_MIGRATION_LEDGER_TABLE.to_string(),
+            });
     }
 
     pub(crate) fn read_auth_store_json(&self) -> Result<Option<String>, String> {
@@ -471,6 +599,19 @@ impl SqliteStorage {
     pub fn schema_migration_plan(&self, program: &Program) -> Result<StorageMigrationPlan, String> {
         let mut plan = StorageMigrationPlan::new(StorageDriver::Sqlite, self.path.clone());
 
+        if Self::program_declares_storage(program) {
+            if self.table_exists(SQLITE_MIGRATION_LEDGER_TABLE)? {
+                if let Some(reason) = self.expected_migration_ledger_shape()? {
+                    plan.blockers.push(StorageMigrationBlocker::new(
+                        SQLITE_MIGRATION_LEDGER_TABLE,
+                        reason,
+                    ));
+                }
+            } else {
+                Self::push_missing_migration_ledger_action(&mut plan);
+            }
+        }
+
         if has_auth(program) {
             if self.table_exists("nexus_auth")? {
                 if let Some(reason) = self.expected_auth_table_shape()? {
@@ -577,6 +718,7 @@ impl SqliteStorage {
 
         for action in &plan.actions {
             self.apply_migration_action(action)?;
+            self.record_migration_action(action)?;
         }
 
         Ok(plan)
@@ -584,6 +726,9 @@ impl SqliteStorage {
 
     fn apply_migration_action(&self, action: &StorageMigrationAction) -> Result<(), String> {
         match action {
+            StorageMigrationAction::CreateSqliteMigrationLedger { .. } => {
+                self.create_migration_ledger_table()
+            }
             StorageMigrationAction::CreateSqliteModelTable { table, .. } => {
                 self.create_model_table(table)
             }
@@ -601,6 +746,26 @@ impl SqliteStorage {
                 ..
             } => self.create_json_index(table, field, index, false),
         }
+    }
+
+    fn record_migration_action(&self, action: &StorageMigrationAction) -> Result<(), String> {
+        let sql = format!(
+            "INSERT OR IGNORE INTO {} (id, kind, resource, summary, applied_at) \
+             VALUES (?1, ?2, ?3, ?4, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+            Self::quote_identifier(SQLITE_MIGRATION_LEDGER_TABLE)
+        );
+        self.conn
+            .execute(
+                &sql,
+                rusqlite::params![
+                    action.history_id(),
+                    action.history_kind(),
+                    action.history_resource(),
+                    action.summary()
+                ],
+            )
+            .map_err(|e| format!("Erro ao registrar migracao SQLite aplicada: {}", e))?;
+        Ok(())
     }
 
     pub fn create_model_record(

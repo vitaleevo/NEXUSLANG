@@ -5,14 +5,12 @@ repositorio.
 
 ## Status atual
 
-Fase 11.69 concluida em 2026-05-29: o PR #6 do SQLite/migracoes MVP foi
-revisado, corrigido, revalidado e mergeado em `main` com merge commit
-`0e4c7e9dfb72414b8782558037cdf9c6384240e0`. O `storage-plan` SQLite agora esta
-em `main`, o dry-run nao cria banco novo, o plano bloqueia indice nao-unico
-preexistente quando o campo vira `unique`, e a validacao pos-merge passou:
-testes focados, quality gate local e CI remoto da `main` run `26625012693`.
-A proxima etapa e Fase 11.70: historico/versionamento de migracoes SQLite e
-smoke operacional SQLite de backup/restore.
+Fase 11.70 implementada em branch em 2026-05-29: historico/versionamento de
+migracoes SQLite via `nexus_schema_migrations`, registros deterministas de
+actions aplicadas, validacao de idempotencia, smoke operacional SQLite de
+backup/restore e documentacao de rollback/restore. A proxima etapa e Fase
+11.71: review/PR/CI/merge desse hardening e validacao pos-merge antes de
+iniciar export/import, observabilidade ou outra trilha.
 
 ## Tarefas concluidas
 
@@ -187,6 +185,16 @@ smoke operacional SQLite de backup/restore.
 - [x] Rodar validacao pos-merge CLI `storage-plan`: 1/1 PASS.
 - [x] Rodar quality gate completo em `main`: PASS.
 - [x] Observar CI remoto da `main` verde no run `26625012693`.
+- [x] Criar branch `codex/sqlite-migration-history`.
+- [x] Implementar ledger interno `nexus_schema_migrations`.
+- [x] Registrar actions SQLite aplicadas com IDs deterministas.
+- [x] Validar idempotencia de `storage-plan --apply`.
+- [x] Bootstrapar ledger para schemas SQLite seguros ja existentes.
+- [x] Garantir que applies bloqueados nao criem ledger nem indices.
+- [x] Adicionar `scripts/smoke-sqlite-backup-restore.sh`.
+- [x] Incluir smoke SQLite no quality gate e no pacote local.
+- [x] Atualizar `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md`, roadmaps,
+  memoria e validator de politica.
 
 ## Validacao executada
 

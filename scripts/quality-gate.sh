@@ -44,6 +44,7 @@ run node --check "$ROOT_DIR/nexuslang-playground.js"
 run "$ROOT_DIR/scripts/smoke-test.sh"
 run "$ROOT_DIR/scripts/smoke-auth.sh"
 run "$ROOT_DIR/scripts/smoke-storage-backup-restore.sh"
+run "$ROOT_DIR/scripts/smoke-sqlite-backup-restore.sh"
 run "$ROOT_DIR/scripts/validate-openapi.sh"
 
 echo ""
