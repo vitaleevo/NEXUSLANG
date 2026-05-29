@@ -4,7 +4,122 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-29 (Fase 11.70 - historico/versionamento SQLite e smoke SQLite backup/restore)
+Ultima atualizacao: 2026-05-29 (Fase 11.71 - review/PR/CI/merge do historico SQLite)
+
+## Etapa concluida: Fase 11.71 - review/PR/CI/merge do historico SQLite
+
+Objetivo: levar o historico/versionamento de migracoes SQLite e o smoke SQLite
+backup/restore da branch controlada para `main`, com review corrigido, CI remoto
+verde e validacao pos-merge antes de iniciar export/import ou observabilidade.
+
+Foi feito:
+
+- Aberto e revisado o PR #7:
+  `https://github.com/vitaleevo/NEXUSLANG/pull/7`.
+- Corrigido o primeiro bloqueio de CI remoto tornando
+  `scripts/smoke-sqlite-backup-restore.sh` executavel.
+- Corrigido feedback acionavel de review:
+  - models que colidem com tabelas SQLite internas agora viram blocker antes de
+    qualquer DDL;
+  - apply de migrations SQLite agora roda em transacao unica com rollback em
+    falha de DDL ou ledger;
+  - criacao do ledger respeita o nome de tabela carregado pela action;
+  - registro de historico usa `ON CONFLICT(id) DO NOTHING`, sem mascarar outras
+    constraints;
+  - smoke SQLite ganhou start/stop mais defensivo;
+  - comandos documentados usam `CARGO_TARGET_DIR` portavel.
+- Checks finais do PR #7 ficaram verdes: duas jobs `quality` PASS e CodeRabbit
+  PASS/no actionable comments.
+- PR #7 foi mergeado em `main` por `caf0afca4bd90c4f2e0f38b8bb8fd700a8c5039d`.
+- `main` local foi atualizado para `caf0afc`.
+- Validacao pos-merge local e remota passou.
+
+Arquivos principais:
+
+- `nexuslang-src/src/server/sqlite.rs`
+- `nexuslang-src/src/server/storage_backend.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/tests/cli.rs`
+- `scripts/smoke-sqlite-backup-restore.sh`
+- `scripts/quality-gate.sh`
+- `scripts/package-release.sh`
+- `scripts/validate-release-package.sh`
+- `COMPATIBILITY.md`
+- `STORAGE_BACKUP_RESTORE.md`
+- `meta/CURRENT_TASKS.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+gh pr checks 7 --watch --interval 15
+
+cd <repo-root>/nexuslang-src
+CARGO_TARGET_DIR="${TMPDIR:-/tmp}/nexuslang-target-sqlite-history-review" cargo test -p nexuslang sqlite_migration -- --nocapture
+CARGO_TARGET_DIR="${TMPDIR:-/tmp}/nexuslang-target-sqlite-history-review" cargo test -p nexuslang cli_storage_plan_sqlite_dry_run_and_apply -- --nocapture
+
+cd <repo-root>
+bash -n scripts/smoke-sqlite-backup-restore.sh scripts/quality-gate.sh scripts/package-release.sh scripts/validate-release-package.sh scripts/validate-storage-compatibility-policy.sh
+git diff --check
+./scripts/validate-storage-compatibility-policy.sh
+./scripts/smoke-sqlite-backup-restore.sh
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+./scripts/package-release.sh && ./scripts/validate-release-package.sh
+gh pr merge 7 --merge --match-head-commit f6192630739427781f8e18410138aef4c204a699
+git fetch origin main && git switch main && git pull --ff-only
+
+cd <repo-root>/nexuslang-src
+CARGO_TARGET_DIR="${TMPDIR:-/tmp}/nexuslang-target-sqlite-post-merge" cargo test -p nexuslang sqlite_migration -- --nocapture
+CARGO_TARGET_DIR="${TMPDIR:-/tmp}/nexuslang-target-sqlite-post-merge" cargo test -p nexuslang cli_storage_plan_sqlite_dry_run_and_apply -- --nocapture
+
+cd <repo-root>
+./scripts/smoke-sqlite-backup-restore.sh
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+gh run watch 26628153720 --exit-status
+```
+
+Resultado:
+
+- PR #7: merged.
+- Merge commit em `main`: `caf0afc`.
+- Testes focados SQLite pos-merge: PASS, 8/8.
+- Teste CLI `storage-plan` pos-merge: PASS, 1/1.
+- Smoke SQLite backup/restore pos-merge: PASS.
+- Quality gate completo local em `main`: PASS.
+- CI remoto da `main` run `26628153720`: PASS.
+- Package local validado antes do merge: PASS.
+- Nenhuma tag, release publica, publish de package ou trilha paralela foi
+  iniciada.
+
+Estado atual:
+
+- Fase 11.71 concluida em `main`.
+- SQLite/migracoes agora tem plano, apply, blockers, ledger interno,
+  idempotencia, rollback transacional de apply e smoke backup/restore no quality
+  gate.
+- O storage persistente esta muito mais perto de uso serio, mas ainda falta uma
+  historia operacional de export/import e observabilidade antes de prometer
+  producao pesada.
+
+Estado do projeto:
+
+- Fase/trilha atual: hardening pos-0.2.0 de storage e operacao.
+- Solido agora: parser/checker/runtime/CLI continuam verdes; package registry
+  read-only esta em `main`; SQLite tem migracoes MVP + ledger/smoke verificados.
+- Falta imediato: export/import operacional, observabilidade basica, e depois
+  endurecimento de registry remoto.
+- Distancia do fim: esta trilha de SQLite esta quase fechada para MVP
+  operacional; o produto completo ainda esta em hardening, nao em producao
+  pesada irrestrita.
+
+## Proximo passo recomendado
+
+Fase 11.72 - export/import operacional de dados para storage JSON/SQLite: criar
+contrato CLI minimo, roundtrip testado, compatibilidade com ledger/migracoes e
+documentacao de rollback/restore, sem iniciar observabilidade ou publish remoto
+na mesma etapa.
+
+AVISO: O proximo passo e criar/implementar Fase 11.72 - export/import operacional de dados para storage JSON/SQLite, com contrato CLI minimo, roundtrip testado, compatibilidade com ledger/migracoes e documentacao de rollback/restore, sem iniciar observabilidade ou publish remoto na mesma etapa. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, `meta/CURRENT_TASKS.md`, `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md`, `nexuslang-src/src/main.rs`, `nexuslang-src/src/server/storage_backend.rs`, `nexuslang-src/src/server/sqlite.rs`, `nexuslang-src/tests/core.rs` e `nexuslang-src/tests/cli.rs` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
 
 ## Etapa concluida: Fase 11.70 - historico/versionamento SQLite e smoke SQLite backup/restore
 

@@ -5,12 +5,12 @@ repositorio.
 
 ## Status atual
 
-Fase 11.70 implementada em branch em 2026-05-29: historico/versionamento de
-migracoes SQLite via `nexus_schema_migrations`, registros deterministas de
-actions aplicadas, validacao de idempotencia, smoke operacional SQLite de
-backup/restore e documentacao de rollback/restore. A proxima etapa e Fase
-11.71: review/PR/CI/merge desse hardening e validacao pos-merge antes de
-iniciar export/import, observabilidade ou outra trilha.
+Fase 11.71 concluida em `main` em 2026-05-29: PR #7 do
+historico/versionamento SQLite e smoke SQLite backup/restore foi revisado,
+corrigido, mergeado por `caf0afc`, validado localmente e confirmado no CI
+remoto da `main` run `26628153720`. A proxima etapa e Fase 11.72:
+export/import operacional de dados para storage JSON/SQLite, sem iniciar
+observabilidade ou publish remoto na mesma etapa.
 
 ## Tarefas concluidas
 
@@ -195,6 +195,22 @@ iniciar export/import, observabilidade ou outra trilha.
 - [x] Incluir smoke SQLite no quality gate e no pacote local.
 - [x] Atualizar `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md`, roadmaps,
   memoria e validator de política.
+- [x] Criar PR #7 para historico/versionamento SQLite e smoke SQLite:
+  `https://github.com/vitaleevo/NEXUSLANG/pull/7`.
+- [x] Corrigir CI inicial do PR #7 tornando o smoke SQLite executavel.
+- [x] Corrigir feedback acionavel do PR #7: blockers para nomes internos,
+  transacao no apply, ledger table parametrico, registro com
+  `ON CONFLICT(id) DO NOTHING`, smoke start/stop mais defensivo e docs
+  portaveis.
+- [x] Confirmar checks finais do PR #7: duas jobs `quality` PASS e CodeRabbit
+  sem novos comentarios acionaveis.
+- [x] Mergear PR #7 em `main` com match-head commit `f619263`.
+- [x] Atualizar `main` local para merge commit `caf0afc`.
+- [x] Rodar validacao pos-merge focada de migracoes SQLite: 8/8 PASS.
+- [x] Rodar validacao pos-merge CLI `storage-plan`: 1/1 PASS.
+- [x] Rodar smoke SQLite backup/restore pos-merge: PASS.
+- [x] Rodar quality gate completo local em `main`: PASS.
+- [x] Observar CI remoto da `main` verde no run `26628153720`.
 
 ## Validacao executada
 
@@ -395,14 +411,19 @@ PASS e quality gate completo PASS. Na Fase 11.69, o PR #6 foi aberto, feedback
 acionavel foi corrigido em `059f027`, os checks remotos ficaram verdes, o PR
 foi mergeado em `main` por `0e4c7e9dfb72414b8782558037cdf9c6384240e0`, e a
 validacao pos-merge passou com testes focados, quality gate local e CI remoto
-`26625012693` PASS.
+`26625012693` PASS. Na Fase 11.70, o ledger SQLite
+`nexus_schema_migrations`, historico deterministico, idempotencia e smoke
+SQLite backup/restore foram implementados em branch. Na Fase 11.71, o PR #7
+foi revisado, corrigido, mergeado em `main` por
+`caf0afca4bd90c4f2e0f38b8bb8fd700a8c5039d`, e a validacao pos-merge passou com
+testes focados, smoke SQLite, quality gate local e CI remoto `26628153720` PASS.
 
 ## Proxima fase recomendada
 
-Fase 11.71: review/PR/CI/merge do historico/versionamento de migracoes SQLite
-e smoke operacional SQLite de backup/restore, com CI remoto verde e validacao
-pos-merge do `storage-plan`, ledger e smoke SQLite antes de iniciar
-export/import, observabilidade ou outra trilha.
+Fase 11.72: export/import operacional de dados para storage JSON/SQLite, com
+contrato CLI minimo, roundtrip testado, compatibilidade com ledger/migracoes e
+documentacao de rollback/restore, sem iniciar observabilidade ou publish remoto
+na mesma etapa.
 
 ## Arquivos para abrir primeiro na proxima fase
 
@@ -410,6 +431,7 @@ export/import, observabilidade ou outra trilha.
 - `meta/CURRENT_TASKS.md`
 - `COMPATIBILITY.md`
 - `STORAGE_BACKUP_RESTORE.md`
+- `nexuslang-src/src/main.rs`
 - `nexuslang-src/src/server/sqlite.rs`
 - `nexuslang-src/src/server/storage_backend.rs`
 - `nexuslang-src/tests/core.rs`
@@ -425,7 +447,9 @@ export/import, observabilidade ou outra trilha.
 - Registry read-only atual esta em `main`, mas ainda nao tem HTTPS, assinatura
   de pacote, publish, auth, dependencias transitivas nem solver semantico
   completo.
-- SQLite/migracoes tem plano/dry-run/apply em `main` e ledger/smoke em branch
-  controlada; falta concluir review, CI remoto, merge e validacao pos-merge.
-- Backup/restore SQLite ja tem smoke operacional em branch, mas so vira baseline
-  de `main` após PR/CI/merge.
+- SQLite/migracoes tem plano/dry-run/apply, ledger e smoke em `main`, com CI
+  remoto pos-merge verde.
+- Export/import operacional ainda nao existe; sem isso, recuperacao e migracao
+  entre ambientes continuam dependentes de backup fisico/manual.
+- Observabilidade ainda nao existe; producao pesada ainda precisa logs/metricas
+  e health operacional mais profundo.
