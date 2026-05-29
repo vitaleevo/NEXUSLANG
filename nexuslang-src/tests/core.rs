@@ -3965,31 +3965,18 @@ model Customer {
     assert!(after_apply.is_empty(), "plan: {after_apply:#?}");
 
     let conn = rusqlite::Connection::open(&db_path).unwrap();
-    let table_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'customer'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
-    let email_index_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_customer_email'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
-    let status_index_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_customer_status'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
+    let email_index_sql = sqlite_master_sql(&conn, "index", "idx_customer_email");
+    let status_index_sql = sqlite_master_sql(&conn, "index", "idx_customer_status");
 
-    assert_eq!(table_count, 1);
-    assert_eq!(email_index_count, 1);
-    assert_eq!(status_index_count, 1);
+    assert_eq!(sqlite_master_count(&conn, "table", "customer"), 1);
+    assert_eq!(
+        email_index_sql,
+        r#"CREATE UNIQUE INDEX "idx_customer_email" ON "customer"(json_extract(data, '$.email'))"#
+    );
+    assert_eq!(
+        status_index_sql,
+        r#"CREATE INDEX "idx_customer_status" ON "customer"(json_extract(data, '$.status'))"#
+    );
 }
 
 #[test]
@@ -4023,6 +4010,8 @@ model Customer {
     let error = storage.apply_schema_migration_plan(&program).unwrap_err();
     assert!(error.contains("Plano de migracao SQLite bloqueado"));
     assert!(error.contains("data TEXT NOT NULL"));
+    let conn = rusqlite::Connection::open(&db_path).unwrap();
+    assert_eq!(sqlite_master_count(&conn, "index", "idx_customer_email"), 0);
 }
 
 #[test]
@@ -4066,6 +4055,52 @@ model Customer {
     let error = storage.apply_schema_migration_plan(&program).unwrap_err();
     assert!(error.contains("idx_customer_email"), "error: {error}");
     assert!(error.contains("duplicados"), "error: {error}");
+    let conn = rusqlite::Connection::open(&db_path).unwrap();
+    assert_eq!(sqlite_master_count(&conn, "index", "idx_customer_email"), 0);
+}
+
+#[test]
+fn sqlite_migration_plan_blocks_non_unique_index_for_unique_field() {
+    let source = r#"
+model Customer {
+    email: string unique
+}
+"#;
+    let program = parse_checked_source(source).unwrap();
+    let data_dir = temp_data_dir("sqlite_migration_plan_non_unique_existing_index");
+    fs::create_dir_all(&data_dir).unwrap();
+    let db_path = data_dir.join("nexus.db");
+    {
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute(
+            "CREATE TABLE customer (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT NOT NULL)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            r#"CREATE INDEX idx_customer_email ON customer(json_extract(data, '$.email'))"#,
+            [],
+        )
+        .unwrap();
+    }
+    let storage = nexuslang::server::Storage::new_sqlite(&db_path).unwrap();
+
+    let plan = storage.schema_migration_plan(&program).unwrap();
+    assert!(plan.has_blockers(), "plan: {plan:#?}");
+    assert!(
+        plan.blocker_summary().contains("nao e unico"),
+        "plan: {plan:#?}"
+    );
+
+    let error = storage.apply_schema_migration_plan(&program).unwrap_err();
+    assert!(error.contains("idx_customer_email"), "error: {error}");
+    assert!(error.contains("nao e unico"), "error: {error}");
+    let conn = rusqlite::Connection::open(&db_path).unwrap();
+    let email_index_sql = sqlite_master_sql(&conn, "index", "idx_customer_email");
+    assert!(
+        !email_index_sql.contains("UNIQUE"),
+        "blocked apply must not recreate the index as unique: {email_index_sql}"
+    );
 }
 
 #[test]
@@ -6112,6 +6147,24 @@ fn temp_data_dir(name: &str) -> std::path::PathBuf {
     dir.push(format!("nexuslang_test_{}_{}", name, std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     dir
+}
+
+fn sqlite_master_count(conn: &rusqlite::Connection, object_type: &str, name: &str) -> i64 {
+    conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = ?1 AND name = ?2",
+        rusqlite::params![object_type, name],
+        |row| row.get(0),
+    )
+    .unwrap()
+}
+
+fn sqlite_master_sql(conn: &rusqlite::Connection, object_type: &str, name: &str) -> String {
+    conn.query_row(
+        "SELECT sql FROM sqlite_master WHERE type = ?1 AND name = ?2",
+        rusqlite::params![object_type, name],
+        |row| row.get(0),
+    )
+    .unwrap()
 }
 
 #[derive(Clone, Copy)]

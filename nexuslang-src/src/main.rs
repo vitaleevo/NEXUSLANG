@@ -315,7 +315,7 @@ fn print_usage(out: &mut dyn Write) {
     .ok();
     writeln!(
         out,
-        "  nexus storage-plan [ficheiro.nx] [--storage sqlite] [--apply] — Planejar/aplicar migração de storage"
+        "  nexus storage-plan [ficheiro.nx] [--storage json|sqlite] [--apply] — Planejar/aplicar migração de storage"
     )
     .ok();
     writeln!(
@@ -896,14 +896,14 @@ fn run_storage_plan_command(args: &[String]) {
         process::exit(1);
     });
     let data_dir = nexuslang::server::default_data_dir(file_path.to_string_lossy().as_ref());
-    let storage = Storage::new_driver(storage_driver, &data_dir).unwrap_or_else(|e| {
-        eprintln!("Erro ao abrir storage {}: {}", storage_driver, e);
-        process::exit(1);
-    });
     let plan = if apply {
+        let storage = Storage::new_driver(storage_driver, &data_dir).unwrap_or_else(|e| {
+            eprintln!("Erro ao abrir storage {}: {}", storage_driver, e);
+            process::exit(1);
+        });
         storage.apply_schema_migration_plan(&program)
     } else {
-        storage.schema_migration_plan(&program)
+        Storage::schema_migration_plan_for_driver(storage_driver, &data_dir, &program)
     }
     .unwrap_or_else(|e| {
         eprintln!("Erro no plano de storage: {}", e);

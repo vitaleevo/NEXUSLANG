@@ -162,7 +162,7 @@ feedback, observar CI remoto e mergear em `main`.
 - [x] Bloquear criacao de indice unico quando dados existentes tem duplicados.
 - [x] Adicionar CLI `nexus storage-plan [ficheiro.nx] [--storage sqlite] [--apply]`.
 - [x] Atualizar `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md`, roadmaps,
-  memoria e validator de politica.
+  memoria e validator de política.
 - [x] Cobrir dry-run/aplicacao, blockers, CLI, paridade SQLite/JSON e evolucao
   aditiva com testes.
 - [x] Rodar clippy workspace estrito.

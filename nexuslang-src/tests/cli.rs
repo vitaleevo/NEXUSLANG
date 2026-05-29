@@ -2234,6 +2234,18 @@ model Customer {
     );
     assert!(dry_run.contains("idx_customer_email"), "stdout: {dry_run}");
     assert!(dry_run.contains("idx_customer_status"), "stdout: {dry_run}");
+    assert!(
+        !project.path.join(".nexus-data").join("nexus.db").exists(),
+        "storage-plan dry-run must not create the SQLite database"
+    );
+    assert!(
+        !project
+            .path
+            .join(".nexus-data")
+            .join("nexus.db-wal")
+            .exists(),
+        "storage-plan dry-run must not create SQLite WAL files"
+    );
 
     let applied = assert_success(run_nexus(
         &project.path,

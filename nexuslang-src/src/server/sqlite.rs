@@ -34,6 +34,49 @@ impl SqliteStorage {
         })
     }
 
+    pub(crate) fn schema_migration_plan_for_path(
+        path: &Path,
+        program: &Program,
+    ) -> Result<StorageMigrationPlan, String> {
+        if path.exists() {
+            return Self::new_readonly(path)?.schema_migration_plan(program);
+        }
+
+        let mut plan = StorageMigrationPlan::new(StorageDriver::Sqlite, path.to_path_buf());
+        if has_auth(program) {
+            plan.actions
+                .push(StorageMigrationAction::CreateSqliteAuthTable {
+                    table: "nexus_auth".to_string(),
+                });
+        }
+        for decl in &program.decls {
+            if let Decl::Model { name, fields, .. } = decl {
+                Self::push_missing_model_actions(&mut plan, name, fields);
+            }
+        }
+        Ok(plan)
+    }
+
+    fn new_readonly(path: &Path) -> Result<Self, String> {
+        let conn = rusqlite::Connection::open_with_flags(
+            path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .map_err(|e| {
+            format!(
+                "Erro ao abrir SQLite '{}' em modo leitura: {}",
+                path.display(),
+                e
+            )
+        })?;
+        conn.execute_batch("PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;")
+            .map_err(|e| e.to_string())?;
+        Ok(SqliteStorage {
+            conn,
+            path: path.to_path_buf(),
+        })
+    }
+
     fn table_name(model: &str) -> String {
         model.to_lowercase()
     }
@@ -104,8 +147,28 @@ impl SqliteStorage {
         self.sqlite_object_exists("table", table)
     }
 
-    fn index_exists(&self, index: &str) -> Result<bool, String> {
-        self.sqlite_object_exists("index", index)
+    fn index_is_unique(&self, table: &str, index: &str) -> Result<Option<bool>, String> {
+        let mut stmt = self
+            .conn
+            .prepare(&format!(
+                "PRAGMA index_list({})",
+                Self::quote_identifier(table)
+            ))
+            .map_err(|e| format!("Erro ao introspectar indices SQLite '{}': {}", table, e))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(1)?, row.get::<_, i64>(2)? != 0))
+            })
+            .map_err(|e| format!("Erro ao introspectar indices SQLite '{}': {}", table, e))?;
+
+        for row in rows {
+            let (name, unique) =
+                row.map_err(|e| format!("Erro ao introspectar indice SQLite '{}': {}", table, e))?;
+            if name == index {
+                return Ok(Some(unique));
+            }
+        }
+        Ok(None)
     }
 
     fn table_columns(&self, table: &str) -> Result<Vec<SqliteColumnInfo>, String> {
@@ -221,6 +284,34 @@ impl SqliteStorage {
             )
         })?;
         Ok(())
+    }
+
+    fn push_missing_model_actions(plan: &mut StorageMigrationPlan, model: &str, fields: &[Field]) {
+        let table = Self::table_name(model);
+        plan.actions
+            .push(StorageMigrationAction::CreateSqliteModelTable {
+                model: model.to_string(),
+                table: table.clone(),
+            });
+        for field in fields {
+            if field.unique {
+                plan.actions
+                    .push(StorageMigrationAction::CreateSqliteUniqueIndex {
+                        model: model.to_string(),
+                        table: table.clone(),
+                        field: field.name.clone(),
+                        index: Self::index_name(&table, &field.name),
+                    });
+            } else if field.index {
+                plan.actions
+                    .push(StorageMigrationAction::CreateSqliteIndex {
+                        model: model.to_string(),
+                        table: table.clone(),
+                        field: field.name.clone(),
+                        index: Self::index_name(&table, &field.name),
+                    });
+            }
+        }
     }
 
     pub(crate) fn read_auth_store_json(&self) -> Result<Option<String>, String> {
@@ -405,48 +496,64 @@ impl SqliteStorage {
                         continue;
                     }
                 } else {
-                    plan.actions
-                        .push(StorageMigrationAction::CreateSqliteModelTable {
-                            model: name.clone(),
-                            table: table.clone(),
-                        });
+                    Self::push_missing_model_actions(&mut plan, name, fields);
+                    continue;
                 }
 
                 for field in fields {
                     if field.unique {
                         let index = Self::index_name(&table, &field.name);
-                        if !self.index_exists(&index)? {
-                            if table_exists
-                                && self.unique_index_has_duplicate_values(&table, &field.name)?
-                            {
+                        match self.index_is_unique(&table, &index)? {
+                            Some(true) => {}
+                            Some(false) => {
                                 plan.blockers.push(StorageMigrationBlocker::new(
                                     format!("{}.{}", name, field.name),
-                                    format!(
-                                        "nao e seguro criar indice unico '{}' porque existem valores duplicados",
-                                        index
-                                    ),
+                                    format!("indice SQLite '{}' existe, mas nao e unico", index),
                                 ));
-                            } else {
-                                plan.actions.push(
-                                    StorageMigrationAction::CreateSqliteUniqueIndex {
-                                        model: name.clone(),
-                                        table: table.clone(),
-                                        field: field.name.clone(),
-                                        index,
-                                    },
-                                );
+                            }
+                            None => {
+                                if self.unique_index_has_duplicate_values(&table, &field.name)? {
+                                    plan.blockers.push(StorageMigrationBlocker::new(
+                                        format!("{}.{}", name, field.name),
+                                        format!(
+                                            "nao e seguro criar indice unico '{}' porque existem valores duplicados",
+                                            index
+                                        ),
+                                    ));
+                                } else {
+                                    plan.actions.push(
+                                        StorageMigrationAction::CreateSqliteUniqueIndex {
+                                            model: name.clone(),
+                                            table: table.clone(),
+                                            field: field.name.clone(),
+                                            index,
+                                        },
+                                    );
+                                }
                             }
                         }
                     } else if field.index {
                         let index = Self::index_name(&table, &field.name);
-                        if !self.index_exists(&index)? {
-                            plan.actions
-                                .push(StorageMigrationAction::CreateSqliteIndex {
-                                    model: name.clone(),
-                                    table: table.clone(),
-                                    field: field.name.clone(),
-                                    index,
-                                });
+                        match self.index_is_unique(&table, &index)? {
+                            Some(true) => {
+                                plan.blockers.push(StorageMigrationBlocker::new(
+                                    format!("{}.{}", name, field.name),
+                                    format!(
+                                        "indice SQLite '{}' existe como unico, mas o campo nao declara unique",
+                                        index
+                                    ),
+                                ));
+                            }
+                            Some(false) => {}
+                            None => {
+                                plan.actions
+                                    .push(StorageMigrationAction::CreateSqliteIndex {
+                                        model: name.clone(),
+                                        table: table.clone(),
+                                        field: field.name.clone(),
+                                        index,
+                                    });
+                            }
                         }
                     }
                 }

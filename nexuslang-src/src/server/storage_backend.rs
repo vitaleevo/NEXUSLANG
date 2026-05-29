@@ -258,6 +258,23 @@ impl Storage {
         }
     }
 
+    pub fn schema_migration_plan_for_driver(
+        driver: StorageDriver,
+        data_dir: &Path,
+        program: &Program,
+    ) -> Result<StorageMigrationPlan, String> {
+        match driver {
+            StorageDriver::Json => Ok(StorageMigrationPlan::new(
+                StorageDriver::Json,
+                driver.target_path(data_dir),
+            )),
+            StorageDriver::Sqlite => {
+                let target_path = driver.target_path(data_dir);
+                SqliteStorage::schema_migration_plan_for_path(&target_path, program)
+            }
+        }
+    }
+
     pub fn create_model_record(
         &self,
         program: &Program,

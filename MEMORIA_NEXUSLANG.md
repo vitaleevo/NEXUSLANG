@@ -101,9 +101,10 @@ Estado do projeto:
 
 ## Proximo passo recomendado
 
-Fase 11.69 - review/PR/CI/merge do SQLite/migracoes MVP: abrir PR da branch
-`codex/sqlite-migrations-mvp`, revisar feedback automatizado, confirmar CI
-verde e validar `storage-plan` em `main` pos-merge.
+Fase 11.69 - review/PR/CI/merge do SQLite/migracoes MVP: revisar feedback/CI
+e merge do PR #6, aberto em 2026-05-29 a partir da branch
+`codex/sqlite-migrations-mvp`, confirmar quality gate remoto verde e validar
+`storage-plan` em `main` pos-merge.
 
 AVISO: O proximo passo e criar/implementar Fase 11.69 - review/PR/CI/merge do SQLite/migracoes MVP, com validacao remota do `storage-plan` e quality gate verde antes de iniciar historico/versionamento de migracoes ou outra trilha. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, `meta/CURRENT_TASKS.md`, `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md` e os arquivos alterados da branch `codex/sqlite-migrations-mvp` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
 
