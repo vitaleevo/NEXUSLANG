@@ -5,14 +5,13 @@ repositorio.
 
 ## Status atual
 
-Fase 11.72 implementada em branch controlada em 2026-05-29:
-`codex/storage-export-import-mvp` adiciona `storage-export` e
-`storage-import` para dados JSON/SQLite com formato logico
-`nexus.storage.export.v1`, import replace-only, compatibilidade com ledger
-SQLite e docs de rollback/restore. Quality gate completo, package validation,
-testes focados e validator da política de storage passaram. A próxima etapa é
-Fase 11.73: review/PR/CI/merge dessa branch, sem iniciar observabilidade,
-publish remoto ou outra trilha na mesma etapa.
+Fase 11.73 concluida em 2026-05-29: PR #8 do export/import operacional de
+dados JSON/SQLite foi revisado, corrigido, passou em CI remoto, mergeado em
+`main` por `9c9bad916972a28d0242fabce2b499d7bcdf4191` e validado pos-merge.
+`storage-plan`, ledger SQLite, backup/restore e `storage-export`/`storage-import`
+agora estao em `main`. A proxima etapa e Fase 11.74: observabilidade
+operacional basica para runtime/storage, sem iniciar publish remoto, nova
+release, solver de pacotes ou outra trilha na mesma etapa.
 
 ## Tarefas concluidas
 
@@ -229,6 +228,25 @@ publish remoto ou outra trilha na mesma etapa.
 - [x] Rodar testes focados de export/import e `storage-plan`.
 - [x] Rodar `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`.
 - [x] Gerar e validar pacote local com os novos comandos.
+- [x] Criar PR #8 para export/import operacional:
+  `https://github.com/vitaleevo/NEXUSLANG/pull/8`.
+- [x] Confirmar PR #8 pronto para merge: `isDraft=false`, `MERGEABLE`, duas
+  jobs `quality` PASS e CodeRabbit PASS.
+- [x] Corrigir feedback acionavel do PR #8 em `e2d02d6`: auth obrigatorio em
+  archives de programas autenticados, staging/backup/rollback para import JSON
+  e teste CLI de seguranca.
+- [x] Corrigir follow-up critico em `3223a37`: rollback JSON passa a rastrear
+  apenas arquivos promovidos/backups reais.
+- [x] Rodar validacao final no HEAD do PR #8: testes focados, quality gate,
+  package-release, validate-release-package e `git diff --check`.
+- [x] Mergear PR #8 em `main` com match-head commit `3223a37`.
+- [x] Atualizar `main` local para merge commit `9c9bad9`.
+- [x] Rodar validacao pos-merge focada `cli_storage`: 3/3 PASS.
+- [x] Observar CI remoto da `main` verde no run `26640164109`.
+- [x] Rodar quality gate completo local em `main`: PASS.
+- [x] Gerar e validar pacote local pos-merge:
+  `nexuslang-v0.2.0-local-release.tar.gz`, checksum
+  `119468f9080d3e9b6d032c4bccf0223d571706e42a2cefc0966ed6f7491fdb98`.
 
 ## Validacao executada
 
@@ -438,14 +456,19 @@ testes focados, smoke SQLite, quality gate local e CI remoto `26628153720` PASS.
 Na Fase 11.72, a branch `codex/storage-export-import-mvp` implementou
 export/import operacional de dados JSON/SQLite com `nexus.storage.export.v1`,
 `--replace` obrigatorio, transacao SQLite, preservacao do ledger interno,
-docs de rollback/restore, teste de roundtrip e package validation PASS.
+docs de rollback/restore, teste de roundtrip e package validation PASS. Na
+Fase 11.73, o PR #8 foi aberto, revisado, corrigido em `e2d02d6` e `3223a37`,
+passou em CI remoto, foi mergeado em `main` por
+`9c9bad916972a28d0242fabce2b499d7bcdf4191`, e a validacao pos-merge passou:
+`cli_storage` 3/3, CI remoto `26640164109` PASS, quality gate local PASS,
+package local validado PASS e `git diff --check` PASS.
 
 ## Proxima fase recomendada
 
-Fase 11.73: review/PR/CI/merge do export/import operacional de dados
-JSON/SQLite, com CI remoto verde e validacao pos-merge dos comandos
-`storage-export`, `storage-import`, `storage-plan` e package smoke antes de
-iniciar observabilidade, publish remoto ou outra trilha.
+Fase 11.74: observabilidade operacional basica para runtime/storage, com logs
+estruturados minimos, sinais de health operacional, smoke de observacao e
+documentacao de operacao, sem iniciar publish remoto, nova release, solver de
+pacotes ou outra trilha.
 
 ## Arquivos para abrir primeiro na proxima fase
 
@@ -454,11 +477,11 @@ iniciar observabilidade, publish remoto ou outra trilha.
 - `COMPATIBILITY.md`
 - `STORAGE_BACKUP_RESTORE.md`
 - `nexuslang-src/src/main.rs`
-- `nexuslang-src/src/server/json.rs`
-- `nexuslang-src/src/server/sqlite.rs`
+- `nexuslang-src/src/server/mod.rs`
 - `nexuslang-src/src/server/storage_backend.rs`
-- `nexuslang-src/tests/cli.rs`
-- `scripts/validate-storage-compatibility-policy.sh`
+- `scripts/smoke-test.sh`
+- `scripts/smoke-storage-backup-restore.sh`
+- `scripts/smoke-sqlite-backup-restore.sh`
 
 ## Riscos de compatibilidade
 
@@ -471,7 +494,7 @@ iniciar observabilidade, publish remoto ou outra trilha.
   completo.
 - SQLite/migracoes tem plano/dry-run/apply, ledger e smoke em `main`, com CI
   remoto pos-merge verde.
-- Export/import operacional existe em branch controlada, mas ainda precisa de
-  PR/CI/merge antes de ser considerado recurso de `main`.
+- Export/import operacional agora esta em `main`, mas import/export de dados
+  deve continuar replace-only e sem prometer transformacoes semanticas.
 - Observabilidade ainda nao existe; producao pesada ainda precisa logs/metricas
   e health operacional mais profundo.

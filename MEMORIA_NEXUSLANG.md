@@ -4,7 +4,115 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-29 (Fase 11.72 - export/import operacional de storage)
+Ultima atualizacao: 2026-05-29 (Fase 11.73 - review/PR/CI/merge do export/import operacional de storage)
+
+## Etapa concluida: Fase 11.73 - review/PR/CI/merge do export/import operacional de storage
+
+Objetivo: levar o export/import operacional de dados JSON/SQLite da branch
+controlada para `main`, com PR revisado, CI remoto verde, feedback automatizado
+corrigido e validacao pos-merge antes de iniciar observabilidade ou outra
+trilha.
+
+Foi feito:
+
+- Aberto o PR #8:
+  `https://github.com/vitaleevo/NEXUSLANG/pull/8`.
+- Revisados os checks e comentarios automatizados do PR.
+- Corrigido feedback acionavel em `e2d02d6`:
+  - import para programas com `auth` agora rejeita archives sem campo `auth`;
+  - import JSON replace-only passou a usar staging, backup e rollback local;
+  - adicionado teste CLI para archive sem `auth` em programa autenticado;
+  - docs/triagem foram alinhadas ao estado de PR aberto.
+- Corrigido follow-up critico em `3223a37`:
+  - rollback do import JSON agora rastreia apenas arquivos promovidos e backups
+    realmente criados, evitando apagar dados preexistentes sem backup;
+  - pequenos ajustes de texto na memoria/tarefas.
+- Checks finais do PR #8 ficaram verdes: duas jobs `quality` PASS e CodeRabbit
+  PASS/no actionable comments.
+- PR #8 foi mergeado em `main` por
+  `9c9bad916972a28d0242fabce2b499d7bcdf4191`.
+- `main` local foi atualizado para o merge commit.
+- Validacao pos-merge local e remota passou.
+
+Arquivos principais:
+
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/src/server/storage_backend.rs`
+- `nexuslang-src/src/server/json.rs`
+- `nexuslang-src/src/server/sqlite.rs`
+- `nexuslang-src/src/server/mod.rs`
+- `nexuslang-src/tests/cli.rs`
+- `COMPATIBILITY.md`
+- `STORAGE_BACKUP_RESTORE.md`
+- `scripts/validate-storage-compatibility-policy.sh`
+- `meta/CURRENT_TASKS.md`
+- `meta/POST_RELEASE_0_2_0_TRIAGE.md`
+- `meta/ROADMAP.md`
+- `nexuslang-src/ROADMAP.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+gh pr view 8 --repo vitaleevo/NEXUSLANG --json number,state,isDraft,mergeable,headRefName,headRefOid,baseRefName,reviewDecision,statusCheckRollup,url,title
+gh pr checks 8 --repo vitaleevo/NEXUSLANG
+gh pr merge 8 --repo vitaleevo/NEXUSLANG --merge --match-head-commit 3223a374b20fc380b5012fd3c20bf560bcfa869d
+git fetch origin main && git switch main && git pull --ff-only origin main
+
+cd <repo-root>/nexuslang-src
+CARGO_TARGET_DIR="${TMPDIR:-/tmp}/nexuslang-target-storage-export-import-postmerge" cargo test -p nexuslang cli_storage -- --nocapture
+
+cd <repo-root>
+gh run watch 26640164109 --repo vitaleevo/NEXUSLANG --exit-status
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+./scripts/package-release.sh && ./scripts/validate-release-package.sh
+git diff --check
+```
+
+Resultado:
+
+- PR #8: merged.
+- Merge commit em `main`: `9c9bad9`.
+- Testes focados pos-merge `cli_storage`: PASS, 3/3.
+- CI remoto da `main` run `26640164109`: PASS.
+- Quality gate completo local em `main`: PASS.
+- Package local gerado e validado em ambiente limpo: PASS.
+- WASM do playground empacotado: 479934 bytes.
+- Archive local validado:
+  `dist/nexuslang-v0.2.0-local-release.tar.gz`, checksum
+  `119468f9080d3e9b6d032c4bccf0223d571706e42a2cefc0966ed6f7491fdb98`.
+- `git diff --check`: PASS.
+- Nenhuma tag, release publica, publish de package, observabilidade ou trilha
+  paralela foi iniciada.
+
+Estado historico ao fim da Fase 11.72:
+
+- Fase 11.73 concluida em `main`.
+- NexusLang agora tem `storage-plan`, ledger SQLite, smoke SQLite
+  backup/restore e export/import operacional JSON/SQLite em `main`.
+- O storage persistente esta pronto para MVPs reais e pilotos controlados; para
+  producao pesada ainda falta observabilidade operacional e endurecimento de
+  cargas/operacao.
+
+Estado do projeto:
+
+- Fase/trilha atual: hardening pos-0.2.0 de storage e operacao.
+- Solido agora: core/CLI/runtime continuam verdes; registry read-only,
+  SQLite/migracoes, ledger, backup/restore e export/import estao em `main`.
+- Falta imediato: observabilidade basica de runtime/storage, smokes de carga
+  mais representativos e hardening operacional antes de cargas criticas.
+- Distancia do fim: a trilha de storage MVP esta praticamente fechada; o
+  produto completo esta em hardening avancado, mas ainda nao deve ser vendido
+  como plataforma de producao pesada irrestrita.
+
+## Proximo passo recomendado
+
+Fase 11.74 - observabilidade operacional basica para runtime/storage: adicionar
+logs estruturados minimos, sinais de health operacional e smoke de observacao
+sem iniciar publish remoto, nova release, solver de pacotes ou outra trilha na
+mesma etapa.
+
+AVISO: O proximo passo e criar/implementar Fase 11.74 - observabilidade operacional basica para runtime/storage, com logs estruturados minimos, sinais de health operacional, smoke de observacao e documentacao de operacao, sem iniciar publish remoto, nova release, solver de pacotes ou outra trilha. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, `meta/CURRENT_TASKS.md`, `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md`, `nexuslang-src/src/server/mod.rs`, `nexuslang-src/src/server/storage_backend.rs`, `nexuslang-src/src/main.rs`, `scripts/smoke-test.sh`, `scripts/smoke-storage-backup-restore.sh` e `scripts/smoke-sqlite-backup-restore.sh` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
 
 ## Etapa concluida: Fase 11.72 - export/import operacional de storage
 
@@ -87,10 +195,10 @@ Estado atual:
 - Fase 11.72 implementada em branch controlada.
 - O projeto agora tem caminho operacional minimo para mover dados declarados
   entre JSON e SQLite, seedar ambientes e verificar exports logicos.
-- A branch ainda precisa de review/PR/CI/merge antes de considerar o recurso
-  parte de `main`.
+- A branch ainda precisava de review/PR/CI/merge antes de considerar o recurso
+  parte de `main`; isso foi executado na Fase 11.73.
 
-## Proximo passo recomendado
+## Proximo passo historico (executado na Fase 11.73)
 
 Fase 11.73 - review/PR/CI/merge do export/import operacional de storage:
 abrir PR da branch `codex/storage-export-import-mvp`, revisar feedback, manter
@@ -98,7 +206,8 @@ CI remoto verde e validar pos-merge os comandos `storage-export`,
 `storage-import`, `storage-plan` e o package smoke antes de iniciar
 observabilidade ou outra trilha.
 
-AVISO: O proximo passo e criar/implementar Fase 11.73 - review/PR/CI/merge do export/import operacional de dados JSON/SQLite, com CI remoto verde e validacao pos-merge dos comandos `storage-export`, `storage-import`, `storage-plan` e package smoke antes de iniciar observabilidade, publish remoto ou outra trilha. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, `meta/CURRENT_TASKS.md`, `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md`, `nexuslang-src/src/main.rs`, `nexuslang-src/src/server/storage_backend.rs`, `nexuslang-src/src/server/json.rs`, `nexuslang-src/src/server/sqlite.rs` e `nexuslang-src/tests/cli.rs` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+Nota: este aviso foi consumido pela Fase 11.73. O aviso vigente esta no topo
+deste arquivo.
 
 ## Etapa concluida: Fase 11.71 - review/PR/CI/merge do historico SQLite
 

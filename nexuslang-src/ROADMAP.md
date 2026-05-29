@@ -468,8 +468,10 @@ Real risks to retire in `0.1.1`:
 - Backup/restore is now documented and smoked for JSON and SQLite storage.
   SQLite has a public `--storage sqlite` selection, `storage-plan`, a migration
   ledger in `main`, and an operational backup/restore smoke in `main`.
-  Logical export/import exists in branch and still needs review/merge before
-  heavy production claims.
+  Logical export/import is now in `main` with `nexus storage-export`,
+  `nexus storage-import`, a portable `nexus.storage.export.v1` archive,
+  replace-only import, JSON rollback, SQLite transaction handling, and focused
+  CLI coverage.
 - `v0.1.1` has completed commit/push, GitHub Actions observation, strict
   dry-run, tag/release publication, and post-release public install validation.
 
@@ -488,11 +490,14 @@ Real risks to retire in `0.1.1`:
   by PR #7 with `nexus_schema_migrations`, deterministic action IDs, focused
   idempotence tests, docs, and `scripts/smoke-sqlite-backup-restore.sh`.
 - Add operational storage export/import for JSON/SQLite data movement before
-  claiming heavy persistent production readiness. IMPLEMENTED in branch with
+  claiming heavy persistent production readiness. DONE in `main` by PR #8 with
   `nexus storage-export`, `nexus storage-import`, archive
   `nexus.storage.export.v1`, replace-only import, SQLite transaction handling,
-  ledger preservation, docs, and a JSON-to-SQLite roundtrip CLI test; pending
-  PR/CI/merge.
+  JSON staging/rollback, auth archive validation, ledger preservation, docs,
+  and JSON-to-SQLite/auth CLI tests.
+- Add basic operational observability for runtime/storage before making heavy
+  production claims: structured logs, health signals and an observation smoke
+  are the next storage/operation track.
 - Decide whether docs generation belongs in the CLI as a first-class command
   before expanding documentation UI in the playground.
 - Improve runtime diagnostics with structured locations where feasible, so
