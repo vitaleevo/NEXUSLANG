@@ -4,7 +4,136 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-28 (Fase 11.68 - SQLite/migracoes MVP)
+Ultima atualizacao: 2026-05-29 (Fase 11.69 - review/PR/CI/merge SQLite/migracoes MVP)
+
+## Etapa concluida: Fase 11.69 - review/PR/CI/merge SQLite/migracoes MVP
+
+Objetivo: levar o SQLite/migracoes MVP da branch controlada para `main`, com
+review automatizado, CI remoto verde, validacao pos-merge de `storage-plan` e
+quality gate local/remoto antes de iniciar qualquer trilha nova.
+
+Foi feito:
+
+- Criado o PR #6:
+  `https://github.com/vitaleevo/NEXUSLANG/pull/6`.
+- Confirmado quality gate local no HEAD inicial da branch
+  `codex/sqlite-migrations-mvp`.
+- Observados checks remotos iniciais do PR #6: duas jobs `quality` PASS e
+  CodeRabbit PASS.
+- Corrigido feedback acionavel antes do merge:
+  - `storage-plan` dry-run SQLite agora planeja sem criar `.nexus-data/nexus.db`
+    quando o banco ainda nao existe;
+  - dry-run de SQLite existente usa abertura read-only;
+  - migration plan agora bloqueia indice existente nao-unico quando o campo
+    passa a declarar `unique`;
+  - teste CLI garante que dry-run nao cria banco nem WAL;
+  - testes de core validam SQL dos indices, ausencia de efeitos colaterais em
+    applies bloqueados e o caso de indice nao-unico preexistente;
+  - help da CLI foi alinhado para `--storage json|sqlite`;
+  - handoff documental foi ajustado para o PR #6.
+- Commit de feedback no PR:
+  `059f027 fix(storage): harden sqlite migration planning`.
+- Revalidado localmente o PR apos feedback com
+  `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`: PASS.
+- Reobservado o PR #6 no head `059f027`: duas jobs `quality` PASS e
+  CodeRabbit sem novos comentarios acionaveis.
+- Confirmado via GraphQL que comentarios CodeRabbit ficaram resolvidos; os
+  comentarios Codex restantes estavam `isOutdated=true`.
+- Mergeado o PR #6 em `main` com merge commit
+  `0e4c7e9dfb72414b8782558037cdf9c6384240e0`.
+- Atualizada a `main` local por fast-forward para `0e4c7e9`.
+- Rodada validacao pos-merge focada de SQLite/migracoes e CLI `storage-plan`.
+- Rodado quality gate completo em `main`.
+- Observado CI remoto da `main` verde no run `26625012693`.
+
+Arquivos principais:
+
+- `nexuslang-src/src/server/storage_backend.rs`
+- `nexuslang-src/src/server/sqlite.rs`
+- `nexuslang-src/src/server/mod.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/tests/cli.rs`
+- `COMPATIBILITY.md`
+- `STORAGE_BACKUP_RESTORE.md`
+- `scripts/validate-storage-compatibility-policy.sh`
+- `meta/ROADMAP.md`
+- `nexuslang-src/ROADMAP.md`
+- `meta/POST_RELEASE_0_2_0_TRIAGE.md`
+
+Verificacao executada:
+
+```bash
+cd <repo-root>
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+git push -u origin codex/sqlite-migrations-mvp
+gh pr create -R vitaleevo/NEXUSLANG --base main --head codex/sqlite-migrations-mvp ...
+gh pr checks 6 -R vitaleevo/NEXUSLANG --watch --interval 10 --fail-fast
+
+cd <repo-root>/nexuslang-src
+CARGO_TARGET_DIR=/home/alexandre/.cache/nexuslang-target-sqlite-migrations cargo test -p nexuslang sqlite_migration -- --nocapture
+CARGO_TARGET_DIR=/home/alexandre/.cache/nexuslang-target-sqlite-migrations cargo test -p nexuslang cli_storage_plan_sqlite_dry_run_and_apply -- --nocapture
+
+cd <repo-root>
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+git push origin codex/sqlite-migrations-mvp
+gh pr checks 6 -R vitaleevo/NEXUSLANG --watch --interval 10 --fail-fast
+gh pr merge 6 -R vitaleevo/NEXUSLANG --merge --match-head-commit 059f027281e076dcd86b4f2c2d55c60cffa7aa55
+git fetch origin main
+git switch main
+git pull --ff-only origin main
+
+cd <repo-root>/nexuslang-src
+CARGO_TARGET_DIR=/home/alexandre/.cache/nexuslang-target-sqlite-main cargo test -p nexuslang sqlite_migration -- --nocapture
+CARGO_TARGET_DIR=/home/alexandre/.cache/nexuslang-target-sqlite-main cargo test -p nexuslang cli_storage_plan_sqlite_dry_run_and_apply -- --nocapture
+
+cd <repo-root>
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+gh run watch 26625012693 -R vitaleevo/NEXUSLANG --interval 10 --exit-status
+```
+
+Resultado:
+
+- PR #6: MERGED.
+- Merge commit: `0e4c7e9dfb72414b8782558037cdf9c6384240e0`.
+- Testes focados pos-merge de migracao SQLite: PASS, 4/4.
+- Teste CLI `storage-plan` pos-merge: PASS, 1/1.
+- Quality gate local em `main`: PASS.
+- CI remoto da `main`: PASS, run `26625012693`.
+- O SQLite/migracoes MVP agora esta integrado em `main`.
+
+Estado atual:
+
+- A Fase 11.69 esta concluida: `storage-plan` e o plano SQLite conservador
+  estao em `main`, com review, CI e validacao pos-merge verdes.
+- O dry-run CLI nao cria banco SQLite novo; `--apply` continua sendo o caminho
+  explicito de criacao/aplicacao.
+- O plano bloqueia schemas legados, duplicados para indices unicos e indice
+  fisico nao-unico quando o campo passa para `unique`.
+- Ainda nao existe tabela/ledger persistente de migracoes aplicadas, versoes de
+  migracao, rollback, nem smoke operacional SQLite de backup/restore tao amplo
+  quanto a proxima etapa deve exigir.
+
+Estado do projeto:
+
+- Fase/trilha atual: SQLite/migracoes MVP esta mergeado; a trilha entrou em
+  hardening operacional.
+- Solido agora: release `v0.2.0`, registry read-only em `main`, SQLite
+  `storage-plan` com dry-run/apply conservador, CI remoto e quality gate verdes.
+- Falta imediato: historico/versionamento de migracoes SQLite, validacao de
+  idempotencia, smoke SQLite de backup/restore e notas de rollback/restore.
+- Distancia do fim: esta trilha esta avancada para MVP, mas producao pesada
+  ainda exige hardening operacional antes de depender de dados persistentes
+  criticos.
+
+## Proximo passo recomendado
+
+Fase 11.70 - historico/versionamento de migracoes SQLite e smoke operacional
+SQLite de backup/restore: registrar migracoes aplicadas, validar idempotencia,
+documentar rollback/restore e provar o fluxo com fixture operacional sem mudar
+o formato de dados nem iniciar outra trilha.
+
+AVISO: O proximo passo e criar/implementar Fase 11.70 - historico/versionamento de migracoes SQLite e smoke operacional SQLite de backup/restore, com tabela/registro de migracoes aplicadas, validacao de idempotencia e documentacao de rollback/restore, sem mudar o formato de dados nem iniciar outra trilha. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, `meta/CURRENT_TASKS.md`, `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md`, `nexuslang-src/src/server/sqlite.rs`, `nexuslang-src/src/server/storage_backend.rs`, `nexuslang-src/tests/core.rs` e `nexuslang-src/tests/cli.rs` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
 
 ## Etapa concluida: Fase 11.68 - SQLite/migracoes MVP
 

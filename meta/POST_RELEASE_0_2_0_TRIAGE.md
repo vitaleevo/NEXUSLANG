@@ -26,10 +26,10 @@ Release: https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0
 | --- | ---: | --- |
 | Core da linguagem | 86% | Parser, checker, interpreter, diagnostics, runtime e grafo multi-file estao solidos para MVP/stable inicial. Ainda falta maturar HIR tipado e recovery amplo. |
 | CLI | 90% | `run`, `check`, `tokens`, `ast`, `docs`, `test`, package commands e flows de release funcionais. Falta polir UX de pacotes remotos e comandos editoriais. |
-| Runtime HTTP/ERP | 86% | Rotas, models, auth, storage, OpenAPI e smokes estao verdes. SQLite agora tem plano/dry-run de migracao conservador, mas ainda falta historico/versionamento de migracoes e smoke operacional SQLite amplo. |
+| Runtime HTTP/ERP | 88% | Rotas, models, auth, storage, OpenAPI e smokes estao verdes. SQLite/migracoes MVP foi mergeado em `main` pelo PR #6 com `storage-plan`, blockers conservadores e CI verde; ainda falta historico/versionamento de migracoes e smoke operacional SQLite amplo. |
 | LSP/editor | 68% | Diagnostics multi-file, go-to-definition cross-file, semantic tokens e document symbols MVP existem. Ainda faltam rename, formatting, workspace symbols e code actions. |
 | Package/release | 91% | Stable `v0.2.0`, tag assinada, assets assinados, checksum, strict dry-run e install publico passaram. O package manager agora baixa pacotes de registry read-only configurado. |
-| Producao real | 80% | Distribuicao publica, package install remoto MVP e primeiro plano de migracoes SQLite estao fortes; faltam historico de migracoes, backup/restore SQLite amplo, observabilidade e hardening operacional. |
+| Producao real | 83% | Distribuicao publica, package install remoto MVP e primeiro plano de migracoes SQLite em `main` estao fortes; faltam historico de migracoes, backup/restore SQLite amplo, observabilidade e hardening operacional. |
 | Playground/public demo | 70% | WASM empacotado e validado, mas o playground ainda nao esta hospedado como experiencia publica continua. |
 | Ecossistema/registry | 60% | Registry read-only MVP esta em `main` com metadata, download/cache, checksum opcional, extracao segura e imports instalados. Ainda nao ha HTTPS, publish/auth, assinaturas, transitivas ou solver completo. |
 
@@ -38,38 +38,33 @@ Release: https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0
 | Trilha | Valor | Risco | Decisao |
 | --- | --- | --- | --- |
 | Registry remoto MVP read-only | Alto | Medio | Concluida nas Fases 11.66/11.67 e mergeada em `main` pelo PR #5. |
-| SQLite/migracoes | Alto | Medio/Alto | Fase 11.68 implementada localmente com introspeccao, dry-run, aplicacao segura e blockers; falta review/merge/CI e hardening posterior. |
+| SQLite/migracoes | Alto | Medio/Alto | Fases 11.68/11.69 concluidas e mergeadas pelo PR #6; proximo passo e hardening de historico/versionamento e backup/restore SQLite. |
 | LSP editorial | Medio/Alto | Medio | Bom ganho de DX, mas menos critico que permitir consumo de pacotes remotos depois da stable. |
 | Playground hospedado | Medio | Baixo/Medio | Importante para demonstracao publica, mas depende mais de infraestrutura do que do core do produto. |
 
-## Escopo recomendado para Fase 11.66
+## Escopo recomendado para Fase 11.70
 
-Trilha: package registry remoto MVP read-only.
+Trilha: storage hardening SQLite.
 
-Objetivo: permitir que o package manager baixe dependencias declaradas como
-`registry:<pacote>@<versao>` a partir de um registry configuravel e fixture
-local/remoto controlado, gravando lock/cache de forma deterministica e segura.
+Objetivo: adicionar historico/versionamento minimo de migracoes SQLite e um
+smoke operacional SQLite de backup/restore, provando idempotencia e handoff de
+rollback sem mudar o formato de dados do MVP.
 
 Incluir:
 
-- contrato minimo de registry index/metadata;
-- URL/base registry configuravel por ambiente ou manifest, com default seguro
-  para testes;
-- download de archive de dependencia declarada;
-- verificacao de checksum quando o metadata fornecer hash;
-- extracao segura para `.nexus/packages/<pacote>`;
-- lockfile deterministico com origem, versao, checksum e caminho resolvido;
-- testes de sucesso, checksum invalido, path traversal, metadata invalido e
-  pacote inexistente;
-- documentacao em `PACKAGE_MANAGER.md`.
+- tabela/registro interno de migracoes aplicadas;
+- identificadores deterministas para o schema/action set do MVP;
+- validacao de idempotencia de `storage-plan --apply`;
+- smoke operacional que usa SQLite, backup, mutacao, restore e leitura;
+- docs de rollback/restore para SQLite `0.2.x`;
+- testes focados sem alterar representacao de payload JSON.
 
 Nao incluir nesta fase:
 
-- comando de publish;
-- autenticacao;
-- solver semantico completo;
-- dependencias transitivas;
-- hospedagem de registry central;
+- solver de migracoes semanticas completo;
+- rename/drop/type-change automatico;
+- transformacao de payloads existentes;
+- publish/auth/registry ou outra trilha;
 - substituicao retroativa de assets da release `v0.2.0`.
 
 ## Gates antes de mergear a proxima fase
@@ -77,15 +72,16 @@ Nao incluir nesta fase:
 | Gate | Comando/evidencia |
 | --- | --- |
 | Qualidade local | `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh` |
-| Testes focados | `cargo test -p nexuslang --test cli_package_manager` |
-| Docs | `PACKAGE_MANAGER.md` atualizado com limites e exemplos |
-| Segurança de arquivo | testes cobrindo checksum e path traversal |
+| Testes focados | `cargo test -p nexuslang sqlite_migration` e teste CLI de `storage-plan` |
+| Docs | `COMPATIBILITY.md` e `STORAGE_BACKUP_RESTORE.md` atualizados |
+| Segurança de dados | teste/smoke demonstrando idempotencia e restore SQLite em copia |
 | Release safety | nenhuma tag/release alterada durante a fase |
 
 ## Proximo aviso
 
-Fase 11.68 implementou localmente o SQLite/migracoes MVP em branch controlada,
-com `storage-plan`, introspeccao e blockers conservadores. O proximo passo
-operacional passou a ser review/PR/CI/merge dessa fase.
+Fase 11.69 mergeou o SQLite/migracoes MVP em `main` pelo PR #6, com CI remoto,
+quality gate local e validacao pos-merge verdes. O proximo passo operacional
+passou a ser historico/versionamento de migracoes SQLite e smoke operacional
+SQLite de backup/restore.
 
-AVISO: O proximo passo e criar/implementar Fase 11.69 - review/PR/CI/merge do SQLite/migracoes MVP, com validacao remota do `storage-plan` e quality gate verde antes de iniciar historico/versionamento de migracoes ou outra trilha. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, `meta/CURRENT_TASKS.md`, `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md` e os arquivos alterados da branch `codex/sqlite-migrations-mvp` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+AVISO: O proximo passo e criar/implementar Fase 11.70 - historico/versionamento de migracoes SQLite e smoke operacional SQLite de backup/restore, com tabela/registro de migracoes aplicadas, validacao de idempotencia e documentacao de rollback/restore, sem mudar o formato de dados nem iniciar outra trilha. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, `meta/CURRENT_TASKS.md`, `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md`, `nexuslang-src/src/server/sqlite.rs`, `nexuslang-src/src/server/storage_backend.rs`, `nexuslang-src/tests/core.rs` e `nexuslang-src/tests/cli.rs` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.

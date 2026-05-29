@@ -33,17 +33,19 @@ auth, invoices, money, storage, tooling e pequenos servicos de negocio.
 A release stable `v0.2.0` ja foi publicada com tag assinada, GitHub Release,
 assets assinados, checksum, strict public-release dry-run e validacao publica
 de install. As Fases 11.66/11.67 implementaram, revisaram e mergearam o
-package registry remoto MVP read-only em `main` pelo PR #5. O foco imediato
-agora e validar a Fase 11.68 de SQLite/migracoes MVP: introspeccao de schema,
-plano/dry-run, aplicacao segura de DDL e testes de compatibilidade antes de
-prometer persistencia forte de longo prazo.
+package registry remoto MVP read-only em `main` pelo PR #5. As Fases
+11.68/11.69 implementaram, revisaram e mergearam o SQLite/migracoes MVP em
+`main` pelo PR #6, com `storage-plan`, introspeccao de schema, dry-run sem criar
+banco novo, aplicacao segura de DDL, blockers conservadores e CI verde. O foco
+imediato agora e hardening operacional de storage: historico/versionamento de
+migracoes SQLite e smoke SQLite de backup/restore.
 
 ## Trilhas proximas
 
-1. Fechar PR/CI da Fase 11.68: revisar, mergear e validar `storage-plan` em
-   `main`.
-2. Storage hardening posterior: historico/versionamento de migracoes,
-   export/import de dados e smokes SQLite de backup/restore.
+1. Storage hardening: historico/versionamento de migracoes SQLite, validacao de
+   idempotencia, rollback/restore documentado e smoke SQLite de backup/restore.
+2. Storage data tooling posterior: export/import de dados e smokes ampliados
+   para datasets maiores.
 3. Registry hardening posterior: avaliar HTTPS, assinaturas, dependencias
    transitivas, publish/auth e solver em fases separadas.
 4. LSP/editor tooling: adicionar workspace symbols, formatting, rename ou code

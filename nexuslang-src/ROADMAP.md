@@ -399,7 +399,8 @@ in place. The next work should reduce real user friction and narrow
 compatibility risk before adding broad new language surface.
 
 Current source line: post-`v0.2.0` stable development, with the read-only
-registry MVP merged on `main` after PR #5.
+registry MVP merged on `main` after PR #5 and the SQLite/migrations MVP merged
+on `main` after PR #6.
 
 ### 0.1.1 maintenance focus
 
@@ -453,18 +454,19 @@ Real risks to retire in `0.1.1`:
   still no HTTPS requirement, semantic version solver, package publishing,
   auth, transitive dependency resolution, or package signature verification.
 - JSON/SQLite persistence works for the supported QA flows, but migrations and
-  long-term schema compatibility are limited to the documented `0.1.x` policy:
+  long-term schema compatibility are limited to the documented `0.2.x` policy:
   additive optional/defaulted fields are supported, while renames, removals,
   required fields without defaults, type changes, and physical SQLite schema
   assumptions remain breaking/experimental.
-- `index` remains declarative metadata and does not create physical indexes.
+- `index` now creates physical SQLite indexes through `storage-plan`, but query
+  planning, index naming and physical layout remain implementation details.
 - The playground is distributed as static package assets, not hosted as a
   public web product.
 - Public release validation now exists, but it should stay part of every
   release handoff so regressions are caught after upload, not only before tag.
-- Backup/restore is now documented and smoked for JSON storage, but SQLite
-  remains a behavioral parity backend without a stable public `nexus serve`
-  selection flag.
+- Backup/restore is now documented and smoked for JSON storage, and SQLite has
+  a public `--storage sqlite` selection plus `storage-plan`; SQLite still needs
+  an operational backup/restore smoke before heavy production claims.
 - `v0.1.1` has completed commit/push, GitHub Actions observation, strict
   dry-run, tag/release publication, and post-release public install validation.
 
@@ -474,8 +476,12 @@ Real risks to retire in `0.1.1`:
   plus orders, and make it excellent end to end.
 - Implement the first SQLite/migrations MVP with schema introspection,
   migration plan/dry-run, and JSON/SQLite compatibility tests before larger
-  runtime features. DONE locally in Fase 11.68 with `nexus storage-plan`,
-  conservative blockers, safe table/index creation, and focused tests.
+  runtime features. DONE in `main` by PR #6 with `nexus storage-plan`,
+  conservative blockers, dry-run without creating a new DB, safe table/index
+  creation, non-unique-index blockers and focused tests.
+- Harden SQLite migrations with a migration history/ledger, idempotence checks,
+  rollback/restore documentation and an operational SQLite backup/restore
+  smoke before claiming heavy persistent production readiness.
 - Decide whether docs generation belongs in the CLI as a first-class command
   before expanding documentation UI in the playground.
 - Improve runtime diagnostics with structured locations where feasible, so

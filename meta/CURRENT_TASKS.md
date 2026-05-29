@@ -5,13 +5,14 @@ repositorio.
 
 ## Status atual
 
-Fase 11.68 concluida localmente em 2026-05-28 na branch
-`codex/sqlite-migrations-mvp`: o SQLite agora tem MVP de migracoes com
-introspeccao de schema, plano/dry-run, aplicacao segura de tabelas/indices e
-blockers conservadores para schema legado ou indice unico com dados duplicados.
-Foi adicionado `nexus storage-plan [ficheiro.nx] [--storage sqlite] [--apply]`.
-O quality gate completo passou localmente. A proxima etapa e abrir PR, revisar
-feedback, observar CI remoto e mergear em `main`.
+Fase 11.69 concluida em 2026-05-29: o PR #6 do SQLite/migracoes MVP foi
+revisado, corrigido, revalidado e mergeado em `main` com merge commit
+`0e4c7e9dfb72414b8782558037cdf9c6384240e0`. O `storage-plan` SQLite agora esta
+em `main`, o dry-run nao cria banco novo, o plano bloqueia indice nao-unico
+preexistente quando o campo vira `unique`, e a validacao pos-merge passou:
+testes focados, quality gate local e CI remoto da `main` run `26625012693`.
+A proxima etapa e Fase 11.70: historico/versionamento de migracoes SQLite e
+smoke operacional SQLite de backup/restore.
 
 ## Tarefas concluidas
 
@@ -167,6 +168,25 @@ feedback, observar CI remoto e mergear em `main`.
   aditiva com testes.
 - [x] Rodar clippy workspace estrito.
 - [x] Rodar quality gate completo local com sucesso.
+- [x] Criar PR #6 para review:
+  `https://github.com/vitaleevo/NEXUSLANG/pull/6`.
+- [x] Observar checks iniciais do PR #6: duas jobs `quality` PASS e CodeRabbit
+  PASS.
+- [x] Corrigir feedback acionavel do PR #6: dry-run sem criar banco SQLite,
+  abertura read-only para plano, blocker para indice nao-unico preexistente,
+  help `json|sqlite` e testes mais fortes.
+- [x] Pushar commit `059f027 fix(storage): harden sqlite migration planning`.
+- [x] Rodar `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh` no HEAD final do PR.
+- [x] Observar checks finais do PR #6: duas jobs `quality` PASS e CodeRabbit
+  sem novos comentarios acionaveis.
+- [x] Confirmar via GraphQL que comentarios CodeRabbit ficaram resolvidos e
+  comentarios Codex restantes estavam `isOutdated=true`.
+- [x] Mergear PR #6 em `main` com match-head commit.
+- [x] Atualizar `main` local para merge commit `0e4c7e9`.
+- [x] Rodar validacao pos-merge focada de migracoes SQLite: 4/4 PASS.
+- [x] Rodar validacao pos-merge CLI `storage-plan`: 1/1 PASS.
+- [x] Rodar quality gate completo em `main`: PASS.
+- [x] Observar CI remoto da `main` verde no run `26625012693`.
 
 ## Validacao executada
 
@@ -363,13 +383,18 @@ Na Fase 11.68, o SQLite/migracoes MVP foi implementado localmente: dry-run e
 `--apply` via `nexus storage-plan`, actions/blockers de migration plan, indices
 fisicos para `unique`/`index`, bloqueio de schema legado e duplicados para
 indice unico, docs `0.2.x` atualizados, testes focados PASS, clippy workspace
-PASS e quality gate completo PASS.
+PASS e quality gate completo PASS. Na Fase 11.69, o PR #6 foi aberto, feedback
+acionavel foi corrigido em `059f027`, os checks remotos ficaram verdes, o PR
+foi mergeado em `main` por `0e4c7e9dfb72414b8782558037cdf9c6384240e0`, e a
+validacao pos-merge passou com testes focados, quality gate local e CI remoto
+`26625012693` PASS.
 
 ## Proxima fase recomendada
 
-Fase 11.69: review/PR/CI/merge do SQLite/migracoes MVP. Abrir PR da branch
-`codex/sqlite-migrations-mvp`, revisar feedback automatizado, confirmar CI
-verde e validar `storage-plan` em `main` pos-merge.
+Fase 11.70: historico/versionamento de migracoes SQLite e smoke operacional
+SQLite de backup/restore, com tabela/registro de migracoes aplicadas,
+validacao de idempotencia e documentacao de rollback/restore, sem mudar o
+formato de dados nem iniciar outra trilha.
 
 ## Arquivos para abrir primeiro na proxima fase
 
@@ -391,7 +416,8 @@ verde e validar `storage-plan` em `main` pos-merge.
 - Registry read-only atual esta em `main`, mas ainda nao tem HTTPS, assinatura
   de pacote, publish, auth, dependencias transitivas nem solver semantico
   completo.
-- SQLite/migracoes deve priorizar plano/dry-run e compatibilidade de dados
-  antes de expor qualquer promessa de producao persistente ampla.
-- A branch `codex/sqlite-migrations-mvp` ainda precisa PR, CI remoto e merge
-  antes de virar estado oficial da `main`.
+- SQLite/migracoes agora tem plano/dry-run/apply em `main`, mas ainda nao tem
+  ledger persistente de migracoes aplicadas, rollback, nem historico
+  versionado.
+- Backup/restore SQLite ainda precisa smoke operacional amplo antes de prometer
+  producao persistente pesada.
