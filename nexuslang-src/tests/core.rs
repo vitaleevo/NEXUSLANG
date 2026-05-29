@@ -4045,6 +4045,79 @@ model Customer {
 }
 
 #[test]
+fn sqlite_migration_plan_blocks_internal_sqlite_table_names() {
+    let source = r#"
+model Nexus_Schema_Migrations {
+    value: string
+}
+"#;
+    let program = parse_checked_source(source).unwrap();
+    let data_dir = temp_data_dir("sqlite_migration_plan_reserved_internal_table");
+    fs::create_dir_all(&data_dir).unwrap();
+    let db_path = data_dir.join("nexus.db");
+    let storage = nexuslang::server::Storage::new_sqlite(&db_path).unwrap();
+
+    let plan = storage.schema_migration_plan(&program).unwrap();
+    assert!(plan.has_blockers(), "plan: {plan:#?}");
+    assert!(plan.actions.is_empty(), "plan: {plan:#?}");
+    assert!(
+        plan.blocker_summary().contains("nexus_schema_migrations"),
+        "plan: {plan:#?}"
+    );
+
+    let error = storage.apply_schema_migration_plan(&program).unwrap_err();
+    assert!(error.contains("reservado"), "error: {error}");
+    let conn = rusqlite::Connection::open(&db_path).unwrap();
+    assert_eq!(
+        sqlite_master_count(&conn, "table", "nexus_schema_migrations"),
+        0
+    );
+}
+
+#[test]
+fn sqlite_migration_apply_rolls_back_schema_when_history_insert_fails() {
+    let source = r#"
+model Customer {
+    email: string unique
+}
+"#;
+    let program = parse_checked_source(source).unwrap();
+    let data_dir = temp_data_dir("sqlite_migration_plan_history_insert_rollback");
+    fs::create_dir_all(&data_dir).unwrap();
+    let db_path = data_dir.join("nexus.db");
+    {
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute(
+            r#"CREATE TABLE nexus_schema_migrations (
+                id TEXT PRIMARY KEY,
+                kind TEXT NOT NULL CHECK(kind <> 'model-table'),
+                resource TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )"#,
+            [],
+        )
+        .unwrap();
+    }
+    let storage = nexuslang::server::Storage::new_sqlite(&db_path).unwrap();
+
+    let plan = storage.schema_migration_plan(&program).unwrap();
+    assert!(!plan.has_blockers(), "plan: {plan:#?}");
+    assert!(plan.actions.iter().any(|action| matches!(
+        action,
+        nexuslang::server::StorageMigrationAction::CreateSqliteModelTable { table, .. }
+            if table == "customer"
+    )));
+
+    let error = storage.apply_schema_migration_plan(&program).unwrap_err();
+    assert!(error.contains("registrar migracao"), "error: {error}");
+    let conn = rusqlite::Connection::open(&db_path).unwrap();
+    assert_eq!(sqlite_master_count(&conn, "table", "customer"), 0);
+    assert_eq!(sqlite_master_count(&conn, "index", "idx_customer_email"), 0);
+    assert_eq!(sqlite_migration_history_count(&conn), 0);
+}
+
+#[test]
 fn sqlite_migration_plan_bootstraps_ledger_for_existing_safe_schema() {
     let source = r#"
 model Customer {

@@ -53,7 +53,7 @@ Foi feito:
 - Corrigido warning WASM antigo em `package_manager.rs` limitando
   `find_subsequence` ao target nao-WASM.
 - Atualizados `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md`, roadmaps,
-  triage pos-release, tarefas atuais e validator da politica de storage.
+  triage pos-release, tarefas atuais e validator da política de storage.
 - Rebuildado o WASM do playground pelo fluxo de package local.
 
 Arquivos principais:
@@ -81,8 +81,8 @@ Verificacao executada:
 ```bash
 cd <repo-root>/nexuslang-src
 cargo fmt
-CARGO_TARGET_DIR=/home/alexandre/.cache/nexuslang-target-sqlite-history cargo test -p nexuslang sqlite_migration -- --nocapture
-CARGO_TARGET_DIR=/home/alexandre/.cache/nexuslang-target-sqlite-history cargo test -p nexuslang cli_storage_plan_sqlite_dry_run_and_apply -- --nocapture
+CARGO_TARGET_DIR="${TMPDIR:-/tmp}/nexuslang-target-sqlite-history" cargo test -p nexuslang sqlite_migration -- --nocapture
+CARGO_TARGET_DIR="${TMPDIR:-/tmp}/nexuslang-target-sqlite-history" cargo test -p nexuslang cli_storage_plan_sqlite_dry_run_and_apply -- --nocapture
 
 cd <repo-root>
 bash -n scripts/package-release.sh scripts/validate-release-package.sh scripts/smoke-sqlite-backup-restore.sh scripts/quality-gate.sh scripts/validate-storage-compatibility-policy.sh
@@ -98,7 +98,7 @@ Resultado:
 - Testes focados de migracao SQLite: PASS, 6/6.
 - Teste CLI `storage-plan`: PASS, 1/1.
 - Smoke operacional SQLite backup/restore: PASS.
-- Validator da politica de storage: PASS.
+- Validator da política de storage: PASS.
 - Quality gate completo com clippy: PASS.
 - Package local gerado e validado: PASS.
 - Build WASM sem warning de `find_subsequence` apos o `cfg`.

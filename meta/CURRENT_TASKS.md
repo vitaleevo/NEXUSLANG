@@ -194,7 +194,7 @@ iniciar export/import, observabilidade ou outra trilha.
 - [x] Adicionar `scripts/smoke-sqlite-backup-restore.sh`.
 - [x] Incluir smoke SQLite no quality gate e no pacote local.
 - [x] Atualizar `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md`, roadmaps,
-  memoria e validator de politica.
+  memoria e validator de política.
 
 ## Validacao executada
 
@@ -399,10 +399,10 @@ validacao pos-merge passou com testes focados, quality gate local e CI remoto
 
 ## Proxima fase recomendada
 
-Fase 11.70: historico/versionamento de migracoes SQLite e smoke operacional
-SQLite de backup/restore, com tabela/registro de migracoes aplicadas,
-validacao de idempotencia e documentacao de rollback/restore, sem mudar o
-formato de dados nem iniciar outra trilha.
+Fase 11.71: review/PR/CI/merge do historico/versionamento de migracoes SQLite
+e smoke operacional SQLite de backup/restore, com CI remoto verde e validacao
+pos-merge do `storage-plan`, ledger e smoke SQLite antes de iniciar
+export/import, observabilidade ou outra trilha.
 
 ## Arquivos para abrir primeiro na proxima fase
 
@@ -414,6 +414,7 @@ formato de dados nem iniciar outra trilha.
 - `nexuslang-src/src/server/storage_backend.rs`
 - `nexuslang-src/tests/core.rs`
 - `nexuslang-src/tests/cli.rs`
+- `scripts/smoke-sqlite-backup-restore.sh`
 
 ## Riscos de compatibilidade
 
@@ -424,8 +425,7 @@ formato de dados nem iniciar outra trilha.
 - Registry read-only atual esta em `main`, mas ainda nao tem HTTPS, assinatura
   de pacote, publish, auth, dependencias transitivas nem solver semantico
   completo.
-- SQLite/migracoes agora tem plano/dry-run/apply em `main`, mas ainda nao tem
-  ledger persistente de migracoes aplicadas, rollback, nem historico
-  versionado.
-- Backup/restore SQLite ainda precisa smoke operacional amplo antes de prometer
-  producao persistente pesada.
+- SQLite/migracoes tem plano/dry-run/apply em `main` e ledger/smoke em branch
+  controlada; falta concluir review, CI remoto, merge e validacao pos-merge.
+- Backup/restore SQLite ja tem smoke operacional em branch, mas so vira baseline
+  de `main` apos PR/CI/merge.

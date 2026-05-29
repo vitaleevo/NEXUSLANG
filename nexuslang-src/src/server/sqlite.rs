@@ -13,6 +13,7 @@ pub struct SqliteStorage {
 }
 
 const SQLITE_MIGRATION_LEDGER_TABLE: &str = "nexus_schema_migrations";
+const SQLITE_AUTH_TABLE: &str = "nexus_auth";
 
 #[derive(Debug)]
 struct SqliteColumnInfo {
@@ -97,13 +98,16 @@ impl SqliteStorage {
         }
 
         let mut plan = StorageMigrationPlan::new(StorageDriver::Sqlite, path.to_path_buf());
+        if Self::push_reserved_storage_name_blockers(&mut plan, program) {
+            return Ok(plan);
+        }
         if Self::program_declares_storage(program) {
             Self::push_missing_migration_ledger_action(&mut plan);
         }
         if has_auth(program) {
             plan.actions
                 .push(StorageMigrationAction::CreateSqliteAuthTable {
-                    table: "nexus_auth".to_string(),
+                    table: SQLITE_AUTH_TABLE.to_string(),
                 });
         }
         for decl in &program.decls {
@@ -144,6 +148,29 @@ impl SqliteStorage {
                 .decls
                 .iter()
                 .any(|decl| matches!(decl, Decl::Model { .. }))
+    }
+
+    fn push_reserved_storage_name_blockers(
+        plan: &mut StorageMigrationPlan,
+        program: &Program,
+    ) -> bool {
+        let mut blocked = false;
+        for decl in &program.decls {
+            if let Decl::Model { name, .. } = decl {
+                let table = Self::table_name(name);
+                if table == SQLITE_MIGRATION_LEDGER_TABLE || table == SQLITE_AUTH_TABLE {
+                    plan.blockers.push(StorageMigrationBlocker::new(
+                        table.clone(),
+                        format!(
+                            "nome de model reservado para tabela SQLite interna '{}'",
+                            table
+                        ),
+                    ));
+                    blocked = true;
+                }
+            }
+        }
+        blocked
     }
 
     fn index_name(table: &str, field: &str) -> String {
@@ -187,27 +214,27 @@ impl SqliteStorage {
     }
 
     fn create_auth_table(&self) -> Result<(), String> {
-        self.conn
-            .execute(
-                "CREATE TABLE IF NOT EXISTS \"nexus_auth\" (key TEXT PRIMARY KEY, data TEXT NOT NULL)",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
+        let sql = format!(
+            "CREATE TABLE IF NOT EXISTS {} (key TEXT PRIMARY KEY, data TEXT NOT NULL)",
+            Self::quote_identifier(SQLITE_AUTH_TABLE)
+        );
+        self.conn.execute(&sql, []).map_err(|e| e.to_string())?;
         Ok(())
     }
 
-    fn create_migration_ledger_table(&self) -> Result<(), String> {
-        self.conn
-            .execute(
-                r#"CREATE TABLE IF NOT EXISTS "nexus_schema_migrations" (
+    fn create_migration_ledger_table(&self, table: &str) -> Result<(), String> {
+        let sql = format!(
+            r#"CREATE TABLE IF NOT EXISTS {} (
                     id TEXT PRIMARY KEY,
                     kind TEXT NOT NULL,
                     resource TEXT NOT NULL,
                     summary TEXT NOT NULL,
                     applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )"#,
-                [],
-            )
+            Self::quote_identifier(table)
+        );
+        self.conn
+            .execute(&sql, [])
             .map_err(|e| format!("Erro ao criar ledger de migracoes SQLite: {}", e))?;
         Ok(())
     }
@@ -299,7 +326,7 @@ impl SqliteStorage {
     }
 
     fn expected_auth_table_shape(&self) -> Result<Option<String>, String> {
-        let columns = self.table_columns("nexus_auth")?;
+        let columns = self.table_columns(SQLITE_AUTH_TABLE)?;
         let key = columns.iter().find(|column| column.name == "key");
         let data = columns.iter().find(|column| column.name == "data");
         if !matches!(key, Some(column) if column.primary_key) {
@@ -598,6 +625,9 @@ impl SqliteStorage {
 
     pub fn schema_migration_plan(&self, program: &Program) -> Result<StorageMigrationPlan, String> {
         let mut plan = StorageMigrationPlan::new(StorageDriver::Sqlite, self.path.clone());
+        if Self::push_reserved_storage_name_blockers(&mut plan, program) {
+            return Ok(plan);
+        }
 
         if Self::program_declares_storage(program) {
             if self.table_exists(SQLITE_MIGRATION_LEDGER_TABLE)? {
@@ -613,15 +643,15 @@ impl SqliteStorage {
         }
 
         if has_auth(program) {
-            if self.table_exists("nexus_auth")? {
+            if self.table_exists(SQLITE_AUTH_TABLE)? {
                 if let Some(reason) = self.expected_auth_table_shape()? {
                     plan.blockers
-                        .push(StorageMigrationBlocker::new("nexus_auth", reason));
+                        .push(StorageMigrationBlocker::new(SQLITE_AUTH_TABLE, reason));
                 }
             } else {
                 plan.actions
                     .push(StorageMigrationAction::CreateSqliteAuthTable {
-                        table: "nexus_auth".to_string(),
+                        table: SQLITE_AUTH_TABLE.to_string(),
                     });
             }
         }
@@ -716,18 +746,63 @@ impl SqliteStorage {
             ));
         }
 
-        for action in &plan.actions {
-            self.apply_migration_action(action)?;
-            self.record_migration_action(action)?;
-        }
+        self.apply_migration_actions_transactionally(&plan.actions)?;
 
         Ok(plan)
     }
 
+    fn apply_migration_actions_transactionally(
+        &self,
+        actions: &[StorageMigrationAction],
+    ) -> Result<(), String> {
+        if actions.is_empty() {
+            return Ok(());
+        }
+
+        let ledger_table = Self::migration_ledger_table_for_actions(actions);
+        self.conn
+            .execute_batch("BEGIN IMMEDIATE TRANSACTION;")
+            .map_err(|e| format!("Erro ao iniciar migracao SQLite: {}", e))?;
+
+        let result = (|| {
+            for action in actions {
+                self.apply_migration_action(action)?;
+                self.record_migration_action(ledger_table, action)?;
+            }
+            Ok(())
+        })();
+
+        match result {
+            Ok(()) => {
+                if let Err(e) = self.conn.execute_batch("COMMIT;") {
+                    let _ = self.conn.execute_batch("ROLLBACK;");
+                    return Err(format!("Erro ao confirmar migracao SQLite: {}", e));
+                }
+                Ok(())
+            }
+            Err(error) => {
+                let _ = self.conn.execute_batch("ROLLBACK;");
+                Err(error)
+            }
+        }
+    }
+
+    fn migration_ledger_table_for_actions(actions: &[StorageMigrationAction]) -> &str {
+        actions
+            .iter()
+            .find_map(|action| match action {
+                StorageMigrationAction::CreateSqliteMigrationLedger { table } => {
+                    Some(table.as_str())
+                }
+                _ => None,
+            })
+            .unwrap_or(SQLITE_MIGRATION_LEDGER_TABLE)
+    }
+
     fn apply_migration_action(&self, action: &StorageMigrationAction) -> Result<(), String> {
         match action {
-            StorageMigrationAction::CreateSqliteMigrationLedger { .. } => {
-                self.create_migration_ledger_table()
+            StorageMigrationAction::CreateSqliteMigrationLedger { table } => {
+                self.create_migration_ledger_table(table)
             }
             StorageMigrationAction::CreateSqliteModelTable { table, .. } => {
                 self.create_model_table(table)
@@ -748,11 +823,16 @@ impl SqliteStorage {
         }
     }
 
-    fn record_migration_action(&self, action: &StorageMigrationAction) -> Result<(), String> {
+    fn record_migration_action(
+        &self,
+        ledger_table: &str,
+        action: &StorageMigrationAction,
+    ) -> Result<(), String> {
         let sql = format!(
-            "INSERT OR IGNORE INTO {} (id, kind, resource, summary, applied_at) \
-             VALUES (?1, ?2, ?3, ?4, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
-            Self::quote_identifier(SQLITE_MIGRATION_LEDGER_TABLE)
+            "INSERT INTO {} (id, kind, resource, summary, applied_at) \
+             VALUES (?1, ?2, ?3, ?4, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) \
+             ON CONFLICT(id) DO NOTHING",
+            Self::quote_identifier(ledger_table)
         );
         self.conn
             .execute(

@@ -38,6 +38,15 @@ run() {
 stop_server() {
     if [ -n "$SERVER_PID" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
         kill "$SERVER_PID" 2>/dev/null || true
+        for _ in $(seq 1 50); do
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+                break
+            fi
+            sleep 0.1
+        done
+        if kill -0 "$SERVER_PID" 2>/dev/null; then
+            kill -9 "$SERVER_PID" 2>/dev/null || true
+        fi
         wait "$SERVER_PID" 2>/dev/null || true
     fi
     SERVER_PID=""
@@ -80,19 +89,24 @@ find_example() {
 start_server() {
     local nexus_bin="$1"
     local app_file="$2"
+    local retries="${NEXUS_SQLITE_STORAGE_SMOKE_START_RETRIES:-60}"
+    local interval="${NEXUS_SQLITE_STORAGE_SMOKE_START_INTERVAL_SEC:-0.5}"
 
     SERVER_LOG="$WORK_DIR/server.log"
+    if curl -fsS "$BASE/health" >/dev/null 2>&1; then
+        fail "port $PORT already has a healthy service before smoke server starts"
+    fi
     "$nexus_bin" serve "$app_file" "127.0.0.1:$PORT" --storage sqlite >"$SERVER_LOG" 2>&1 &
     SERVER_PID="$!"
 
-    for _ in $(seq 1 30); do
-        if curl -fsS "$BASE/health" >/dev/null 2>&1; then
-            return
-        fi
+    for _ in $(seq 1 "$retries"); do
         if ! kill -0 "$SERVER_PID" 2>/dev/null; then
             fail "server exited before becoming ready"
         fi
-        sleep 0.2
+        if curl -fsS "$BASE/health" >/dev/null 2>&1; then
+            return
+        fi
+        sleep "$interval"
     done
 
     fail "server did not become ready on $BASE"
