@@ -494,6 +494,8 @@ impl JsonStorage {
         backup_dir: &Path,
     ) -> Result<(), String> {
         let mut targets = Vec::new();
+        let mut backed_up = Vec::new();
+        let mut promoted = Vec::new();
         for (model, _) in model_records {
             targets.push(self.model_file(model));
         }
@@ -510,7 +512,9 @@ impl JsonStorage {
                             target.display()
                         ));
                     };
-                    fs::rename(target, backup_dir.join(file_name)).map_err(|e| e.to_string())?;
+                    let backup = backup_dir.join(file_name);
+                    fs::rename(target, &backup).map_err(|e| e.to_string())?;
+                    backed_up.push((target.clone(), backup));
                 }
             }
 
@@ -519,7 +523,8 @@ impl JsonStorage {
                 let Some(file_name) = target.file_name() else {
                     return Err(format!("Caminho de storage JSON invalido para '{}'", model));
                 };
-                fs::rename(staging_dir.join(file_name), target).map_err(|e| e.to_string())?;
+                fs::rename(staging_dir.join(file_name), &target).map_err(|e| e.to_string())?;
+                promoted.push(target);
             }
 
             if replace_auth && has_auth_json {
@@ -527,24 +532,21 @@ impl JsonStorage {
                 let Some(file_name) = target.file_name() else {
                     return Err("Caminho de auth JSON invalido".to_string());
                 };
-                fs::rename(staging_dir.join(file_name), target).map_err(|e| e.to_string())?;
+                fs::rename(staging_dir.join(file_name), &target).map_err(|e| e.to_string())?;
+                promoted.push(target);
             }
 
             Ok(())
         })();
 
         if let Err(error) = result {
-            for target in &targets {
+            for target in &promoted {
                 if target.exists() {
                     let _ = fs::remove_file(target);
                 }
             }
-            if let Ok(entries) = fs::read_dir(backup_dir) {
-                for entry in entries.flatten() {
-                    let backup = entry.path();
-                    let target = self.data_dir.join(entry.file_name());
-                    let _ = fs::rename(backup, target);
-                }
+            for (target, backup) in backed_up.into_iter().rev() {
+                let _ = fs::rename(backup, target);
             }
             return Err(error);
         }

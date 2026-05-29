@@ -225,7 +225,7 @@ publish remoto ou outra trilha na mesma etapa.
 - [x] Implementar import replace-only para JSON e SQLite, com transacao SQLite.
 - [x] Cobrir roundtrip JSON -> export -> SQLite -> export em teste CLI.
 - [x] Atualizar `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md`, roadmaps,
-  memoria e validator da política de storage.
+  memória e validator da política de storage.
 - [x] Rodar testes focados de export/import e `storage-plan`.
 - [x] Rodar `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`.
 - [x] Gerar e validar pacote local com os novos comandos.
