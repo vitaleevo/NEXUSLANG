@@ -80,6 +80,38 @@ nexus serve path/to/project/inventory.nx 127.0.0.1:5050
 After restore, check at least one create, find/list, update, delete, and filter
 route against a copy of the data before using the restored data for real work.
 
+## Logical Export/Import
+
+Use logical export/import when you need a portable data archive, a JSON-to-SQLite
+move, or an environment seed that does not depend on physical storage layout.
+Stop the server before exporting or importing.
+
+```bash
+nexus storage-export path/to/project/inventory.nx --storage json --output data.json
+nexus storage-import path/to/project/inventory.nx --storage sqlite --input data.json --replace
+```
+
+The archive format is `nexus.storage.export.v1`. It contains declared model
+records and native auth data when the program declares `auth`; it does not
+include SQLite internals such as `nexus_schema_migrations` or physical index
+names.
+
+`storage-import` is intentionally replace-only in this MVP. It validates the
+archive against the current program before writing data, applies SQLite storage
+setup through `storage-plan` internals, then replaces declared model records.
+For SQLite, the replace operation runs in a transaction.
+
+After import, validate the target:
+
+```bash
+nexus check path/to/project/inventory.nx
+nexus storage-plan path/to/project/inventory.nx --storage sqlite
+nexus storage-export path/to/project/inventory.nx --storage sqlite --output verify.json
+```
+
+Only start serving the imported data when the plan reports no blockers and the
+exported verification archive contains the expected records.
+
 ## SQLite Backup
 
 Stop the process that owns the database, then copy the database and any

@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -208,6 +209,21 @@ impl StorageMigrationBlocker {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StorageDatasetReport {
+    pub driver: StorageDriver,
+    pub model_count: usize,
+    pub record_count: usize,
+    pub auth_included: bool,
+}
+
+struct ParsedStorageDataset {
+    model_records: Vec<(String, Vec<String>)>,
+    auth_json: Option<String>,
+    replace_auth: bool,
+    report: StorageDatasetReport,
+}
+
 impl Storage {
     pub fn new_json(data_dir: &Path) -> Self {
         Storage::Json(JsonStorage::new(data_dir))
@@ -261,6 +277,93 @@ impl Storage {
                 PathBuf::from("<json-storage>"),
             )),
             Storage::Sqlite(s) => s.apply_schema_migration_plan(program),
+        }
+    }
+
+    pub fn export_dataset_json(
+        &self,
+        program: &Program,
+    ) -> Result<(String, StorageDatasetReport), String> {
+        let model_names = declared_model_names(program);
+        let mut model_entries = Vec::new();
+        let mut record_count = 0;
+
+        for model in &model_names {
+            let raw = self.read_model_raw_json(model)?;
+            let parsed = parse_json(&raw)
+                .map_err(|message| format!("Storage export '{}': {}", model, message))?;
+            let JsonValue::Array(records) = parsed else {
+                return Err(format!("Storage export '{}': esperado array", model));
+            };
+            let canonical = canonicalize_model_records(self, program, model, records)?;
+            record_count += canonical.len();
+            model_entries.push(format!(
+                r#""{}":[{}]"#,
+                escape_json(model),
+                canonical.join(",")
+            ));
+        }
+
+        let auth_json = if has_auth(program) {
+            match self.read_auth_store_json()? {
+                Some(source) => {
+                    let parsed = parse_json(&source)
+                        .map_err(|message| format!("Storage export auth invalido: {}", message))?;
+                    json_value_json(&parsed)
+                }
+                None => "null".to_string(),
+            }
+        } else {
+            "null".to_string()
+        };
+        let auth_included = auth_json != "null";
+        let report = StorageDatasetReport {
+            driver: self.driver(),
+            model_count: model_names.len(),
+            record_count,
+            auth_included,
+        };
+        let json = format!(
+            r#"{{"format":"nexus.storage.export.v1","source_driver":"{}","models":{{{}}},"auth":{}}}"#,
+            self.driver().name(),
+            model_entries.join(","),
+            auth_json
+        );
+        Ok((json, report))
+    }
+
+    pub fn import_dataset_json(
+        &self,
+        program: &Program,
+        source: &str,
+        replace: bool,
+    ) -> Result<StorageDatasetReport, String> {
+        if !replace {
+            return Err(
+                "storage-import requer --replace para substituir dados explicitamente".to_string(),
+            );
+        }
+        let dataset = parse_storage_dataset(self, program, source)?;
+        self.replace_dataset_json(
+            &dataset.model_records,
+            dataset.auth_json.as_deref(),
+            dataset.replace_auth,
+        )?;
+        Ok(StorageDatasetReport {
+            driver: self.driver(),
+            ..dataset.report
+        })
+    }
+
+    fn replace_dataset_json(
+        &self,
+        model_records: &[(String, Vec<String>)],
+        auth_json: Option<&str>,
+        replace_auth: bool,
+    ) -> Result<(), String> {
+        match self {
+            Storage::Json(s) => s.replace_dataset_json(model_records, auth_json, replace_auth),
+            Storage::Sqlite(s) => s.replace_dataset_json(model_records, auth_json, replace_auth),
         }
     }
 
@@ -589,6 +692,158 @@ impl Storage {
             Storage::Sqlite(s) => s.write_auth_store_json(source),
         }
     }
+}
+
+fn declared_model_names(program: &Program) -> Vec<String> {
+    program
+        .decls
+        .iter()
+        .filter_map(|decl| match decl {
+            Decl::Model { name, .. } => Some(name.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn canonicalize_model_records(
+    storage: &Storage,
+    program: &Program,
+    model: &str,
+    records: Vec<JsonValue>,
+) -> Result<Vec<String>, String> {
+    let fields =
+        model_fields(program, model).ok_or_else(|| format!("Model '{}' nao encontrado", model))?;
+    let mut canonical_records = Vec::new();
+    let mut prior_records = Vec::new();
+
+    for (index, record) in records.into_iter().enumerate() {
+        let JsonValue::Object(record_fields) = record else {
+            return Err(format!(
+                "Storage dataset '{}[{}]': esperado objeto",
+                model, index
+            ));
+        };
+        let context = format!("Storage dataset '{}[{}]'", model, index);
+        let canonical = model_record_from_json(storage, program, fields, record_fields, &context)?;
+        ensure_min_max_constraints(storage, program, model, fields, &canonical, &context)?;
+        ensure_unique_constraints(
+            storage,
+            program,
+            model,
+            fields,
+            &canonical,
+            &prior_records,
+            None,
+        )?;
+        let canonical_json = server_value_json(canonical);
+        prior_records.push(parse_json(&canonical_json).map_err(|message| {
+            format!(
+                "Storage dataset '{}[{}]': JSON canonico invalido: {}",
+                model, index, message
+            )
+        })?);
+        canonical_records.push(canonical_json);
+    }
+
+    Ok(canonical_records)
+}
+
+fn parse_storage_dataset(
+    storage: &Storage,
+    program: &Program,
+    source: &str,
+) -> Result<ParsedStorageDataset, String> {
+    let parsed =
+        parse_json(source).map_err(|message| format!("Storage import invalido: {}", message))?;
+    let JsonValue::Object(fields) = parsed else {
+        return Err("Storage import deve ser objeto JSON".to_string());
+    };
+    ensure_unique_object_fields(&fields, "Storage import")?;
+
+    let format = object_field(&fields, "format")
+        .ok_or_else(|| "Storage import requer campo 'format'".to_string())?;
+    if !matches!(format, JsonValue::String(value) if value == "nexus.storage.export.v1") {
+        return Err("Storage import espera format 'nexus.storage.export.v1'".to_string());
+    }
+
+    let models = object_field(&fields, "models")
+        .ok_or_else(|| "Storage import requer campo 'models'".to_string())?;
+    let JsonValue::Object(model_fields_json) = models else {
+        return Err("Storage import campo 'models' deve ser objeto".to_string());
+    };
+    ensure_unique_object_fields(model_fields_json, "Storage import models")?;
+
+    let declared = declared_model_names(program);
+    let declared_set = declared.iter().map(String::as_str).collect::<HashSet<_>>();
+    for (model, _) in model_fields_json {
+        if !declared_set.contains(model.as_str()) {
+            return Err(format!(
+                "Storage import contem model '{}' que nao existe no programa",
+                model
+            ));
+        }
+    }
+
+    let mut model_records = Vec::new();
+    let mut record_count = 0;
+    for model in &declared {
+        let records = match object_field(model_fields_json, model) {
+            Some(JsonValue::Array(records)) => records.clone(),
+            Some(_) => {
+                return Err(format!("Storage import model '{}' deve ser array", model));
+            }
+            None => Vec::new(),
+        };
+        let canonical = canonicalize_model_records(storage, program, model, records)?;
+        record_count += canonical.len();
+        model_records.push((model.clone(), canonical));
+    }
+
+    let auth_value = object_field(&fields, "auth");
+    let replace_auth = auth_value.is_some();
+    let auth_json = match auth_value {
+        Some(JsonValue::Null) | None => None,
+        Some(value) => {
+            if !has_auth(program) {
+                return Err(
+                    "Storage import contem auth, mas o programa nao declara auth".to_string(),
+                );
+            }
+            Some(json_value_json(value))
+        }
+    };
+
+    Ok(ParsedStorageDataset {
+        model_records,
+        replace_auth,
+        report: StorageDatasetReport {
+            driver: storage.driver(),
+            model_count: declared.len(),
+            record_count,
+            auth_included: auth_json.is_some(),
+        },
+        auth_json,
+    })
+}
+
+fn object_field<'a>(fields: &'a [(String, JsonValue)], name: &str) -> Option<&'a JsonValue> {
+    fields
+        .iter()
+        .find(|(candidate, _)| candidate == name)
+        .map(|(_, value)| value)
+}
+
+fn ensure_unique_object_fields(
+    fields: &[(String, JsonValue)],
+    context: &str,
+) -> Result<(), String> {
+    let mut seen = HashSet::new();
+    for (name, _) in fields {
+        if !seen.insert(name.as_str()) {
+            return Err(format!("{}: campo '{}' duplicado", context, name));
+        }
+    }
+    Ok(())
 }
 
 pub fn default_data_dir(file_path: &str) -> std::path::PathBuf {

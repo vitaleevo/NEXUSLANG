@@ -91,8 +91,11 @@ impl JsonStorage {
     }
 
     fn write_all_records(&self, model: &str, records: &[String]) -> Result<(), String> {
-        fs::write(self.model_file(model), format!("[{}]", records.join(",")))
-            .map_err(|e| e.to_string())
+        let path = self.model_file(model);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        fs::write(path, format!("[{}]", records.join(","))).map_err(|e| e.to_string())
     }
 
     pub fn ensure_storage(&self, program: &Program) -> Result<(), String> {
@@ -394,7 +397,37 @@ impl JsonStorage {
     }
 
     pub fn read_model_raw_json(&self, model: &str) -> Result<String, String> {
-        self.read_model_json(model)
+        let path = self.model_file(model);
+        if !path.exists() {
+            return Ok("[]".to_string());
+        }
+        fs::read_to_string(path).map_err(|e| e.to_string())
+    }
+
+    pub fn replace_dataset_json(
+        &self,
+        model_records: &[(String, Vec<String>)],
+        auth_json: Option<&str>,
+        replace_auth: bool,
+    ) -> Result<(), String> {
+        fs::create_dir_all(&self.data_dir).map_err(|e| e.to_string())?;
+        for (model, records) in model_records {
+            self.write_all_records(model, records)?;
+        }
+
+        if replace_auth {
+            match auth_json {
+                Some(source) => self.write_auth_store_json(source)?,
+                None => {
+                    let path = self.auth_file();
+                    if path.exists() {
+                        fs::remove_file(path).map_err(|e| e.to_string())?;
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
     pub fn paginated_array_response(

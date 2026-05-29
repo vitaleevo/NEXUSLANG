@@ -5,12 +5,14 @@ repositorio.
 
 ## Status atual
 
-Fase 11.71 concluida em `main` em 2026-05-29: PR #7 do
-historico/versionamento SQLite e smoke SQLite backup/restore foi revisado,
-corrigido, mergeado por `caf0afc`, validado localmente e confirmado no CI
-remoto da `main` run `26628153720`. A proxima etapa e Fase 11.72:
-export/import operacional de dados para storage JSON/SQLite, sem iniciar
-observabilidade ou publish remoto na mesma etapa.
+Fase 11.72 implementada em branch controlada em 2026-05-29:
+`codex/storage-export-import-mvp` adiciona `storage-export` e
+`storage-import` para dados JSON/SQLite com formato logico
+`nexus.storage.export.v1`, import replace-only, compatibilidade com ledger
+SQLite e docs de rollback/restore. Quality gate completo, package validation,
+testes focados e validator da politica de storage passaram. A proxima etapa e
+Fase 11.73: review/PR/CI/merge dessa branch, sem iniciar observabilidade,
+publish remoto ou outra trilha na mesma etapa.
 
 ## Tarefas concluidas
 
@@ -211,6 +213,22 @@ observabilidade ou publish remoto na mesma etapa.
 - [x] Rodar smoke SQLite backup/restore pos-merge: PASS.
 - [x] Rodar quality gate completo local em `main`: PASS.
 - [x] Observar CI remoto da `main` verde no run `26628153720`.
+- [x] Criar branch `codex/storage-export-import-mvp`.
+- [x] Adicionar CLI `nexus storage-export [ficheiro.nx] [--storage json|sqlite] --output data.json`.
+- [x] Adicionar CLI `nexus storage-import [ficheiro.nx] [--storage json|sqlite] --input data.json --replace`.
+- [x] Definir archive logico `nexus.storage.export.v1` com `format`,
+  `source_driver`, `models` e `auth`.
+- [x] Bloquear export SQLite quando `storage-plan` tem blockers ou actions
+  pendentes.
+- [x] Validar import inteiro antes de substituir dados e manter
+  `nexus_schema_migrations` fora do archive.
+- [x] Implementar import replace-only para JSON e SQLite, com transacao SQLite.
+- [x] Cobrir roundtrip JSON -> export -> SQLite -> export em teste CLI.
+- [x] Atualizar `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md`, roadmaps,
+  memoria e validator da politica de storage.
+- [x] Rodar testes focados de export/import e `storage-plan`.
+- [x] Rodar `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`.
+- [x] Gerar e validar pacote local com os novos comandos.
 
 ## Validacao executada
 
@@ -417,13 +435,17 @@ SQLite backup/restore foram implementados em branch. Na Fase 11.71, o PR #7
 foi revisado, corrigido, mergeado em `main` por
 `caf0afca4bd90c4f2e0f38b8bb8fd700a8c5039d`, e a validacao pos-merge passou com
 testes focados, smoke SQLite, quality gate local e CI remoto `26628153720` PASS.
+Na Fase 11.72, a branch `codex/storage-export-import-mvp` implementou
+export/import operacional de dados JSON/SQLite com `nexus.storage.export.v1`,
+`--replace` obrigatorio, transacao SQLite, preservacao do ledger interno,
+docs de rollback/restore, teste de roundtrip e package validation PASS.
 
 ## Proxima fase recomendada
 
-Fase 11.72: export/import operacional de dados para storage JSON/SQLite, com
-contrato CLI minimo, roundtrip testado, compatibilidade com ledger/migracoes e
-documentacao de rollback/restore, sem iniciar observabilidade ou publish remoto
-na mesma etapa.
+Fase 11.73: review/PR/CI/merge do export/import operacional de dados
+JSON/SQLite, com CI remoto verde e validacao pos-merge dos comandos
+`storage-export`, `storage-import`, `storage-plan` e package smoke antes de
+iniciar observabilidade, publish remoto ou outra trilha.
 
 ## Arquivos para abrir primeiro na proxima fase
 
@@ -432,11 +454,11 @@ na mesma etapa.
 - `COMPATIBILITY.md`
 - `STORAGE_BACKUP_RESTORE.md`
 - `nexuslang-src/src/main.rs`
+- `nexuslang-src/src/server/json.rs`
 - `nexuslang-src/src/server/sqlite.rs`
 - `nexuslang-src/src/server/storage_backend.rs`
-- `nexuslang-src/tests/core.rs`
 - `nexuslang-src/tests/cli.rs`
-- `scripts/smoke-sqlite-backup-restore.sh`
+- `scripts/validate-storage-compatibility-policy.sh`
 
 ## Riscos de compatibilidade
 
@@ -449,7 +471,7 @@ na mesma etapa.
   completo.
 - SQLite/migracoes tem plano/dry-run/apply, ledger e smoke em `main`, com CI
   remoto pos-merge verde.
-- Export/import operacional ainda nao existe; sem isso, recuperacao e migracao
-  entre ambientes continuam dependentes de backup fisico/manual.
+- Export/import operacional existe em branch controlada, mas ainda precisa de
+  PR/CI/merge antes de ser considerado recurso de `main`.
 - Observabilidade ainda nao existe; producao pesada ainda precisa logs/metricas
   e health operacional mais profundo.
