@@ -428,4 +428,4 @@ export/import, observabilidade ou outra trilha.
 - SQLite/migracoes tem plano/dry-run/apply em `main` e ledger/smoke em branch
   controlada; falta concluir review, CI remoto, merge e validacao pos-merge.
 - Backup/restore SQLite ja tem smoke operacional em branch, mas so vira baseline
-  de `main` apos PR/CI/merge.
+  de `main` após PR/CI/merge.
