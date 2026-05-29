@@ -909,6 +909,7 @@ fn fetch_http_url(url: &str) -> Result<Vec<u8>, String> {
     ))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack
         .windows(needle.len())

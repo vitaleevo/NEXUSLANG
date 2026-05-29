@@ -138,6 +138,9 @@ impl StorageMigrationPlan {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StorageMigrationAction {
+    CreateSqliteMigrationLedger {
+        table: String,
+    },
     CreateSqliteModelTable {
         model: String,
         table: String,
@@ -162,6 +165,9 @@ pub enum StorageMigrationAction {
 impl StorageMigrationAction {
     pub fn summary(&self) -> String {
         match self {
+            StorageMigrationAction::CreateSqliteMigrationLedger { table } => {
+                format!("create SQLite migration ledger table '{}'", table)
+            }
             StorageMigrationAction::CreateSqliteModelTable { model, table } => {
                 format!("create SQLite model table '{}' for {}", table, model)
             }

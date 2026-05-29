@@ -4,7 +4,127 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-29 (Fase 11.69 - review/PR/CI/merge SQLite/migracoes MVP)
+Ultima atualizacao: 2026-05-29 (Fase 11.70 - historico/versionamento SQLite e smoke SQLite backup/restore)
+
+## Etapa concluida: Fase 11.70 - historico/versionamento SQLite e smoke SQLite backup/restore
+
+Objetivo: adicionar historico/versionamento minimo de migracoes SQLite, validar
+idempotencia e provar backup/restore operacional em SQLite sem mudar o formato
+de dados, sem adicionar solver semantico completo e sem iniciar outra trilha.
+
+Foi feito:
+
+- Criada a branch `codex/sqlite-migration-history`.
+- Adicionada a action de plano
+  `CreateSqliteMigrationLedger { table: "nexus_schema_migrations" }`.
+- O `storage-plan` SQLite agora planeja a tabela interna
+  `nexus_schema_migrations` quando o programa declara storage via models/auth.
+- `--apply` cria o ledger e registra cada action aplicada com IDs
+  deterministas:
+  - `sqlite:migration-ledger:<table>`;
+  - `sqlite:model-table:<table>`;
+  - `sqlite:auth-table:<table>`;
+  - `sqlite:unique-index:<index>`;
+  - `sqlite:index:<index>`.
+- O ledger registra `kind`, `resource`, `summary` e `applied_at`; ele e
+  interno, usado para auditabilidade/idempotencia, nao como API SQL publica.
+- O plano bloqueia ledger interno incompatível se a tabela existir com shape
+  inesperado.
+- Schemas SQLite seguros ja existentes agora podem bootstrapar apenas o ledger;
+  depois disso o plano fica vazio.
+- Applies bloqueados continuam atomicos no nivel do plano: se houver blocker,
+  nenhuma action e aplicada, inclusive o ledger.
+- Adicionado o smoke operacional
+  `scripts/smoke-sqlite-backup-restore.sh`.
+- O smoke SQLite valida:
+  - dry-run sem criar `nexus.db`;
+  - `--apply` criando o DB e o ledger;
+  - plano pos-apply com `Actions: none` e `Blockers: none`;
+  - servidor com `--storage sqlite`;
+  - criacao/listagem de registros;
+  - parada do writer antes do backup;
+  - copia de `nexus.db` e companheiros `-wal`/`-shm` se existirem;
+  - mutacao do storage vivo;
+  - restore fisico;
+  - plano limpo e rotas funcionais depois do restore.
+- O smoke SQLite foi ligado ao `scripts/quality-gate.sh`.
+- O pacote local agora inclui e valida
+  `scripts/smoke-sqlite-backup-restore.sh`.
+- Corrigido warning WASM antigo em `package_manager.rs` limitando
+  `find_subsequence` ao target nao-WASM.
+- Atualizados `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md`, roadmaps,
+  triage pos-release, tarefas atuais e validator da política de storage.
+- Rebuildado o WASM do playground pelo fluxo de package local.
+
+Arquivos principais:
+
+- `nexuslang-src/src/server/storage_backend.rs`
+- `nexuslang-src/src/server/sqlite.rs`
+- `nexuslang-src/src/package_manager.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/tests/cli.rs`
+- `scripts/smoke-sqlite-backup-restore.sh`
+- `scripts/quality-gate.sh`
+- `scripts/package-release.sh`
+- `scripts/validate-release-package.sh`
+- `scripts/validate-storage-compatibility-policy.sh`
+- `COMPATIBILITY.md`
+- `STORAGE_BACKUP_RESTORE.md`
+- `meta/CURRENT_TASKS.md`
+- `meta/POST_RELEASE_0_2_0_TRIAGE.md`
+- `meta/ROADMAP.md`
+- `nexuslang-src/ROADMAP.md`
+- `nexuslang-src/web/nexuslang_playground.wasm`
+
+Verificacao executada:
+
+```bash
+cd <repo-root>/nexuslang-src
+cargo fmt
+CARGO_TARGET_DIR="${TMPDIR:-/tmp}/nexuslang-target-sqlite-history" cargo test -p nexuslang sqlite_migration -- --nocapture
+CARGO_TARGET_DIR="${TMPDIR:-/tmp}/nexuslang-target-sqlite-history" cargo test -p nexuslang cli_storage_plan_sqlite_dry_run_and_apply -- --nocapture
+
+cd <repo-root>
+bash -n scripts/package-release.sh scripts/validate-release-package.sh scripts/smoke-sqlite-backup-restore.sh scripts/quality-gate.sh scripts/validate-storage-compatibility-policy.sh
+git diff --check
+./scripts/smoke-sqlite-backup-restore.sh
+./scripts/validate-storage-compatibility-policy.sh
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+./scripts/package-release.sh && ./scripts/validate-release-package.sh
+```
+
+Resultado:
+
+- Testes focados de migracao SQLite: PASS, 6/6.
+- Teste CLI `storage-plan`: PASS, 1/1.
+- Smoke operacional SQLite backup/restore: PASS.
+- Validator da política de storage: PASS.
+- Quality gate completo com clippy: PASS.
+- Package local gerado e validado: PASS.
+- Build WASM sem warning de `find_subsequence` apos o `cfg`.
+- Nenhuma tag, release publica, publish de package ou trilha paralela foi
+  iniciada.
+
+Estado atual:
+
+- A Fase 11.70 esta implementada e validada localmente em branch controlada.
+- SQLite agora tem um ledger minimo para DDL aplicada e idempotencia do plano.
+- Backup/restore SQLite tem smoke operacional repetivel no quality gate e no
+  pacote local.
+- O formato de payload continua o mesmo: tabelas de model seguem `id` +
+  `data TEXT NOT NULL`; o ledger e uma tabela interna separada.
+- Para producao pesada, o risco de storage caiu, mas ainda falta review/PR/CI
+  remoto, merge em `main`, validacao pos-merge, e depois hardening posterior
+  como export/import e observabilidade.
+
+## Proximo passo recomendado
+
+Fase 11.71 - review/PR/CI/merge do historico/versionamento de migracoes SQLite
+e smoke operacional SQLite de backup/restore: abrir/revisar PR, observar CI
+remoto verde, corrigir feedback, mergear em `main` e validar pos-merge antes
+de iniciar export/import, observabilidade ou outra trilha.
+
+AVISO: O proximo passo e criar/implementar Fase 11.71 - review/PR/CI/merge do historico/versionamento de migracoes SQLite e smoke operacional SQLite de backup/restore, com CI remoto verde e validacao pos-merge do `storage-plan`, ledger e smoke SQLite antes de iniciar export/import, observabilidade ou outra trilha. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, `meta/CURRENT_TASKS.md`, `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md`, `scripts/smoke-sqlite-backup-restore.sh`, `nexuslang-src/src/server/sqlite.rs`, `nexuslang-src/src/server/storage_backend.rs`, `nexuslang-src/tests/core.rs` e `nexuslang-src/tests/cli.rs` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
 
 ## Etapa concluida: Fase 11.69 - review/PR/CI/merge SQLite/migracoes MVP
 

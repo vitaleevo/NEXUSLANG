@@ -2232,6 +2232,10 @@ model Customer {
         dry_run.contains("create SQLite model table 'customer'"),
         "stdout: {dry_run}"
     );
+    assert!(
+        dry_run.contains("create SQLite migration ledger table 'nexus_schema_migrations'"),
+        "stdout: {dry_run}"
+    );
     assert!(dry_run.contains("idx_customer_email"), "stdout: {dry_run}");
     assert!(dry_run.contains("idx_customer_status"), "stdout: {dry_run}");
     assert!(

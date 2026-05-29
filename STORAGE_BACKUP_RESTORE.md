@@ -24,6 +24,9 @@ nexus serve path/to/app.nx 127.0.0.1:5050 --storage sqlite
 ```
 
 Treat the database file and its companion `-wal` and `-shm` files as user data.
+The internal `nexus_schema_migrations` table records NexusLang-managed DDL
+actions applied by `storage-plan --apply`; keep it with the database during
+backup and restore.
 
 ## Example
 
@@ -108,13 +111,32 @@ application code. The public promise is behavior parity for the supported route
 subset plus the conservative `storage-plan` dry-run/apply contract documented
 in `COMPATIBILITY.md`.
 
+## SQLite Rollback And Migration History
+
+`nexus storage-plan --storage sqlite --apply` creates the internal
+`nexus_schema_migrations` ledger and records each safe DDL action with a stable
+action ID. Running the same plan again should report `Actions: none` and leave
+the ledger unchanged.
+
+The ledger is for auditability and idempotence, not automatic rollback. To roll
+back an applied SQLite storage change in `0.2.x`, stop the server and restore a
+known-good `nexus.db` plus any matching `nexus.db-wal` and `nexus.db-shm` files
+from backup. After restore, run:
+
+```bash
+nexus check path/to/project/inventory.nx
+nexus storage-plan path/to/project/inventory.nx --storage sqlite
+```
+
+Only start serving the restored database when the plan reports no blockers.
+
 ## Supported Schema Evolution
 
 Safe additive changes for `0.2.x`:
 
 - add an optional field;
 - add a field with a static default;
-- add validation that still allows older records to be read.
+- add validation that still allows older records to be read;
 - add `unique` or `index` metadata only after `nexus storage-plan --storage sqlite`
   reports no blockers for the copied dataset.
 
@@ -134,8 +156,15 @@ release package:
 
 ```bash
 ./scripts/smoke-storage-backup-restore.sh
+./scripts/smoke-sqlite-backup-restore.sh
 ```
 
-The script serves `storage_backup_restore_inventory.nx`, creates two records,
-backs up `.nexus-data`, mutates live storage, restores the backup, and verifies
-that the restored item is readable again.
+The JSON script serves `storage_backup_restore_inventory.nx`, creates two
+records, backs up `.nexus-data`, mutates live storage, restores the backup, and
+verifies that the restored item is readable again.
+
+The SQLite script first validates `storage-plan` dry-run/apply behavior,
+including the `nexus_schema_migrations` ledger and idempotent post-apply plan.
+It then serves with `--storage sqlite`, creates records, backs up `nexus.db`
+with any WAL/SHM companions after stopping the writer, mutates live storage,
+restores the backup, and verifies route behavior plus a clean restored plan.

@@ -169,6 +169,7 @@ assert_file "$PACKAGE_DIR/examples/erp_basico.nx"
 assert_file "$PACKAGE_DIR/examples/storage_backup_restore_inventory.nx"
 assert_executable "$PACKAGE_DIR/scripts/smoke-package.sh"
 assert_executable "$PACKAGE_DIR/scripts/smoke-storage-backup-restore.sh"
+assert_executable "$PACKAGE_DIR/scripts/smoke-sqlite-backup-restore.sh"
 assert_executable "$PACKAGE_DIR/scripts/connect-github-release.sh"
 assert_executable "$PACKAGE_DIR/scripts/validate-release-second-env.sh"
 assert_executable "$PACKAGE_DIR/scripts/sign-release-artifacts.sh"
@@ -195,6 +196,7 @@ manifest_version="$(manifest_value package_version)"
 
 run "$PACKAGE_DIR/scripts/smoke-package.sh"
 run "$PACKAGE_DIR/scripts/smoke-storage-backup-restore.sh"
+run "$PACKAGE_DIR/scripts/smoke-sqlite-backup-restore.sh"
 
 manifest_wasm_bytes="$(
     sed -n 's/^wasm_bytes=//p' "$PACKAGE_DIR/PACKAGE_MANIFEST.txt" | head -n 1
