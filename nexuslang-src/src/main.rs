@@ -8,7 +8,7 @@ use std::process;
 use std::time::Duration;
 
 use nexuslang::package_manager;
-use nexuslang::server::StorageDriver;
+use nexuslang::server::{Storage, StorageDriver};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -224,6 +224,9 @@ fn main() {
                 process::exit(1);
             }
         }
+        "storage-plan" => {
+            run_storage_plan_command(&args);
+        }
         "repl" => run_repl(),
         "new" => {
             let project_name = required_arg(&args, 2, "new <project>");
@@ -308,6 +311,11 @@ fn print_usage(out: &mut dyn Write) {
     writeln!(
         out,
         "  nexus serve --addr <addr> [--storage json|sqlite] — Servir entry do nexus.toml"
+    )
+    .ok();
+    writeln!(
+        out,
+        "  nexus storage-plan [ficheiro.nx] [--storage json|sqlite] [--apply] — Planejar/aplicar migração de storage"
     )
     .ok();
     writeln!(
@@ -879,6 +887,86 @@ fn serve_entry_addr_and_storage_driver(args: &[String]) -> (PathBuf, String, Sto
         .unwrap_or_else(|| project_entry_or_exit("serve [ficheiro.nx] [addr]"));
     let addr = addr.unwrap_or("127.0.0.1:5050").to_string();
     (file_path, addr, storage_driver)
+}
+
+fn run_storage_plan_command(args: &[String]) {
+    let (file_path, storage_driver, apply) = storage_plan_entry_driver_and_apply(args);
+    let (program, _) = nexuslang::load_and_check_with_graph(&file_path).unwrap_or_else(|e| {
+        eprintln!("Erro de validação: {}", e);
+        process::exit(1);
+    });
+    let data_dir = nexuslang::server::default_data_dir(file_path.to_string_lossy().as_ref());
+    let plan = if apply {
+        let storage = Storage::new_driver(storage_driver, &data_dir).unwrap_or_else(|e| {
+            eprintln!("Erro ao abrir storage {}: {}", storage_driver, e);
+            process::exit(1);
+        });
+        storage.apply_schema_migration_plan(&program)
+    } else {
+        Storage::schema_migration_plan_for_driver(storage_driver, &data_dir, &program)
+    }
+    .unwrap_or_else(|e| {
+        eprintln!("Erro no plano de storage: {}", e);
+        process::exit(1);
+    });
+    print!("{}", plan.render_text(apply));
+}
+
+fn storage_plan_entry_driver_and_apply(args: &[String]) -> (PathBuf, StorageDriver, bool) {
+    let mut file_path: Option<&str> = None;
+    let mut storage_driver = StorageDriver::Sqlite;
+    let mut storage_driver_seen = false;
+    let mut apply = false;
+    let mut index = 2;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--apply" => {
+                if apply {
+                    eprintln!("Opcao --apply repetida");
+                    process::exit(1);
+                }
+                apply = true;
+            }
+            "--storage" | "--driver" => {
+                if storage_driver_seen {
+                    eprintln!("Opcao --storage repetida");
+                    process::exit(1);
+                }
+                storage_driver_seen = true;
+                index += 1;
+                let value = args.get(index).unwrap_or_else(|| {
+                    eprintln!(
+                        "Uso: nexus storage-plan [ficheiro.nx] [--storage json|sqlite] [--apply]"
+                    );
+                    process::exit(1);
+                });
+                storage_driver = StorageDriver::parse(value).unwrap_or_else(|e| {
+                    eprintln!("{}", e);
+                    process::exit(1);
+                });
+            }
+            option if option.starts_with("--") => {
+                eprintln!("Opcao desconhecida para storage-plan: '{}'", option);
+                print_usage_and_exit(1);
+            }
+            value => {
+                if file_path.is_some() {
+                    eprintln!(
+                        "Uso: nexus storage-plan [ficheiro.nx] [--storage json|sqlite] [--apply]"
+                    );
+                    process::exit(1);
+                }
+                file_path = Some(value);
+            }
+        }
+        index += 1;
+    }
+
+    let file_path = file_path
+        .map(PathBuf::from)
+        .unwrap_or_else(|| project_entry_or_exit("storage-plan [ficheiro.nx]"));
+    (file_path, storage_driver, apply)
 }
 
 fn project_entry_or_exit(usage: &str) -> PathBuf {

@@ -9,7 +9,10 @@ pub mod storage_backend;
 
 pub use http::{serve_file, serve_file_with_storage_driver, HttpResponse};
 pub use openapi::generate_openapi;
-pub use storage_backend::{default_data_dir, Storage, StorageDriver, NEXUS_DATA_DIR_ENV};
+pub use storage_backend::{
+    default_data_dir, Storage, StorageDriver, StorageMigrationAction, StorageMigrationBlocker,
+    StorageMigrationPlan, NEXUS_DATA_DIR_ENV,
+};
 
 pub fn handle_request_for_test(
     source: &str,

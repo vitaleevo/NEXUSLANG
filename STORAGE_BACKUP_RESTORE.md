@@ -1,6 +1,6 @@
 # NexusLang Storage Backup And Restore
 
-This guide is the operational companion to the `0.1.x` storage compatibility
+This guide is the operational companion to the `0.2.x` storage compatibility
 policy in `COMPATIBILITY.md`.
 
 ## Scope
@@ -14,9 +14,16 @@ file per model:
 ```
 
 SQLite is covered by JSON/SQLite behavior parity tests and by the compatibility
-policy, but `0.1.x` does not yet expose a stable CLI flag for choosing SQLite
-from `nexus serve`. If an integration uses the SQLite backend directly, treat
-the database file and its companion `-wal` and `-shm` files as user data.
+policy. Use `--storage sqlite` to serve with SQLite and run the migration plan
+before using important data:
+
+```bash
+nexus storage-plan path/to/app.nx --storage sqlite
+nexus storage-plan path/to/app.nx --storage sqlite --apply
+nexus serve path/to/app.nx 127.0.0.1:5050 --storage sqlite
+```
+
+Treat the database file and its companion `-wal` and `-shm` files as user data.
 
 ## Example
 
@@ -37,7 +44,7 @@ It defines a small inventory API:
 - `PUT /items/:sku`
 - `DELETE /items/:sku`
 
-The model uses storage features that matter for `0.1.x` compatibility:
+The model uses storage features that matter for `0.2.x` compatibility:
 
 - `sku: string unique`
 - `status: string = "active" index`
@@ -97,15 +104,19 @@ cp -a path/to/backups/nexus.db-shm path/to/nexus.db-shm 2>/dev/null || true
 ```
 
 Do not depend on SQLite table names, internal index names, or raw SQL layout in
-`0.1.x`. The public promise is behavior parity for the supported route subset.
+application code. The public promise is behavior parity for the supported route
+subset plus the conservative `storage-plan` dry-run/apply contract documented
+in `COMPATIBILITY.md`.
 
 ## Supported Schema Evolution
 
-Safe additive changes for `0.1.x`:
+Safe additive changes for `0.2.x`:
 
 - add an optional field;
 - add a field with a static default;
 - add validation that still allows older records to be read.
+- add `unique` or `index` metadata only after `nexus storage-plan --storage sqlite`
+  reports no blockers for the copied dataset.
 
 Breaking changes that need explicit data transformation:
 

@@ -4,7 +4,109 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-28 (Fase 11.67 - review/merge do PR #5)
+Ultima atualizacao: 2026-05-28 (Fase 11.68 - SQLite/migracoes MVP)
+
+## Etapa concluida: Fase 11.68 - SQLite/migracoes MVP
+
+Objetivo: reduzir o bloqueio de producao pesada criando um primeiro fluxo
+conservador de SQLite/migracoes, com introspeccao de schema, plano/dry-run,
+aplicacao segura de DDL e testes de compatibilidade JSON/SQLite, sem alterar
+dados existentes nem prometer ORM completo.
+
+Foi feito:
+
+- Criada a branch `codex/sqlite-migrations-mvp`.
+- Adicionado `StorageMigrationPlan`, `StorageMigrationAction` e
+  `StorageMigrationBlocker` no backend de storage.
+- Implementado plano SQLite com introspeccao de tabelas, colunas e indices.
+- Adicionado dry-run/aplicacao para:
+  - criar tabelas de models no layout atual `id` + `data TEXT NOT NULL`;
+  - criar tabela `nexus_auth` quando o programa declara `auth`;
+  - criar indices unicos para campos `unique`;
+  - criar indices fisicos para campos declarados com `index`.
+- Adicionados blockers conservadores para:
+  - tabela legacy/incompativel sem coluna `data TEXT NOT NULL`;
+  - indice unico que falharia por valores duplicados existentes.
+- `Storage::ensure_storage` no SQLite agora aplica o plano seguro antes de
+  servir, recusando schemas bloqueados.
+- Adicionado comando CLI:
+  `nexus storage-plan [ficheiro.nx] [--storage sqlite] [--apply]`.
+- Atualizados `COMPATIBILITY.md` e `STORAGE_BACKUP_RESTORE.md` para o contrato
+  `0.2.x`, `storage-plan`, SQLite via `--storage sqlite` e limites do MVP.
+- Atualizado `scripts/validate-storage-compatibility-policy.sh` para proteger
+  a documentacao nova.
+
+Arquivos principais:
+
+- `nexuslang-src/src/server/storage_backend.rs`
+- `nexuslang-src/src/server/sqlite.rs`
+- `nexuslang-src/src/server/mod.rs`
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/tests/core.rs`
+- `nexuslang-src/tests/cli.rs`
+- `COMPATIBILITY.md`
+- `STORAGE_BACKUP_RESTORE.md`
+- `scripts/validate-storage-compatibility-policy.sh`
+- `meta/ROADMAP.md`
+- `nexuslang-src/ROADMAP.md`
+- `meta/POST_RELEASE_0_2_0_TRIAGE.md`
+
+Verificacao executada:
+
+```bash
+cd <repo-root>
+cargo fmt --manifest-path nexuslang-src/Cargo.toml
+
+cd <repo-root>/nexuslang-src
+CARGO_TARGET_DIR=/home/alexandre/.cache/nexuslang-target-sqlite-migrations cargo test -p nexuslang sqlite_migration -- --nocapture
+CARGO_TARGET_DIR=/home/alexandre/.cache/nexuslang-target-sqlite-migrations cargo test -p nexuslang cli_storage_plan_sqlite_dry_run_and_apply -- --nocapture
+CARGO_TARGET_DIR=/home/alexandre/.cache/nexuslang-target-sqlite-migrations cargo test -p nexuslang sqlite_storage_matches_json_storage_for_crud_and_critical_filters -- --nocapture
+CARGO_TARGET_DIR=/home/alexandre/.cache/nexuslang-target-sqlite-migrations cargo test -p nexuslang storage_schema_evolution_allows_additive_optional_and_defaulted_fields -- --nocapture
+CARGO_TARGET_DIR=/home/alexandre/.cache/nexuslang-target-sqlite-migrations cargo clippy --workspace --all-targets -- -D warnings
+
+cd <repo-root>
+./scripts/validate-storage-compatibility-policy.sh
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+```
+
+Resultado:
+
+- Testes focados de migracao SQLite: PASS, 3/3.
+- Teste CLI `storage-plan`: PASS, 1/1.
+- Paridade SQLite/JSON critica: PASS.
+- Evolucao aditiva optional/defaulted: PASS.
+- Clippy workspace estrito: PASS.
+- Validacao de politica de storage: PASS.
+- Quality gate completo: PASS.
+
+Estado atual:
+
+- A Fase 11.68 esta implementada e validada localmente em branch controlada.
+- O SQLite ja tem dry-run/aplicacao segura para o schema fisico MVP atual.
+- `index` deixou de ser apenas metadata no SQLite: agora ganha indice fisico
+  pelo plano de migracao.
+- A linguagem esta mais perto de producao pesada, mas ainda falta review/PR/CI
+  remoto, merge em `main` e depois hardening posterior de historico/versionamento
+  de migracoes, backup/restore SQLite amplo e observabilidade.
+
+Estado do projeto:
+
+- Fase/trilha atual: SQLite/migracoes saiu de risco principal para MVP
+  implementado localmente.
+- Solido agora: release `v0.2.0`, package registry read-only em `main`, e
+  storage SQLite com plano/dry-run/aplicacao segura em branch.
+- Falta imediato: criar PR, observar CI remoto, revisar feedback e mergear.
+- Distancia do fim: esta trilha esta no meio/avancado; o produto completo ainda
+  precisa hardening operacional para producao pesada continua.
+
+## Proximo passo recomendado
+
+Fase 11.69 - review/PR/CI/merge do SQLite/migracoes MVP: revisar feedback/CI
+e merge do PR #6, aberto em 2026-05-29 a partir da branch
+`codex/sqlite-migrations-mvp`, confirmar quality gate remoto verde e validar
+`storage-plan` em `main` pos-merge.
+
+AVISO: O proximo passo e criar/implementar Fase 11.69 - review/PR/CI/merge do SQLite/migracoes MVP, com validacao remota do `storage-plan` e quality gate verde antes de iniciar historico/versionamento de migracoes ou outra trilha. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, `meta/CURRENT_TASKS.md`, `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md` e os arquivos alterados da branch `codex/sqlite-migrations-mvp` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
 
 ## Etapa concluida: Fase 11.67 - review/merge do PR #5
 
