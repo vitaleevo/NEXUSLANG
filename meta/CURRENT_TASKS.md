@@ -10,7 +10,7 @@ Fase 11.72 implementada em branch controlada em 2026-05-29:
 `storage-import` para dados JSON/SQLite com formato logico
 `nexus.storage.export.v1`, import replace-only, compatibilidade com ledger
 SQLite e docs de rollback/restore. Quality gate completo, package validation,
-testes focados e validator da politica de storage passaram. A proxima etapa e
+testes focados e validator da política de storage passaram. A próxima etapa é
 Fase 11.73: review/PR/CI/merge dessa branch, sem iniciar observabilidade,
 publish remoto ou outra trilha na mesma etapa.
 
@@ -225,7 +225,7 @@ publish remoto ou outra trilha na mesma etapa.
 - [x] Implementar import replace-only para JSON e SQLite, com transacao SQLite.
 - [x] Cobrir roundtrip JSON -> export -> SQLite -> export em teste CLI.
 - [x] Atualizar `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md`, roadmaps,
-  memoria e validator da politica de storage.
+  memoria e validator da política de storage.
 - [x] Rodar testes focados de export/import e `storage-plan`.
 - [x] Rodar `NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh`.
 - [x] Gerar e validar pacote local com os novos comandos.

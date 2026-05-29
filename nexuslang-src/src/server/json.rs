@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::ast::*;
 
@@ -92,10 +93,21 @@ impl JsonStorage {
 
     fn write_all_records(&self, model: &str, records: &[String]) -> Result<(), String> {
         let path = self.model_file(model);
+        Self::write_all_records_to_path(&path, records)
+    }
+
+    fn write_all_records_to_path(path: &Path, records: &[String]) -> Result<(), String> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         fs::write(path, format!("[{}]", records.join(","))).map_err(|e| e.to_string())
+    }
+
+    fn write_auth_store_json_to_path(path: &Path, source: &str) -> Result<(), String> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        fs::write(path, source).map_err(|e| e.to_string())
     }
 
     pub fn ensure_storage(&self, program: &Program) -> Result<(), String> {
@@ -411,20 +423,130 @@ impl JsonStorage {
         replace_auth: bool,
     ) -> Result<(), String> {
         fs::create_dir_all(&self.data_dir).map_err(|e| e.to_string())?;
+        let import_id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0);
+        let staging_dir = self.data_dir.join(format!(
+            ".nexus-import-staging-{}-{}",
+            std::process::id(),
+            import_id
+        ));
+        let backup_dir = self.data_dir.join(format!(
+            ".nexus-import-backup-{}-{}",
+            std::process::id(),
+            import_id
+        ));
+        fs::create_dir(&staging_dir).map_err(|e| e.to_string())?;
+
         for (model, records) in model_records {
-            self.write_all_records(model, records)?;
+            let target = self.model_file(model);
+            let Some(file_name) = target.file_name() else {
+                let _ = fs::remove_dir_all(&staging_dir);
+                return Err(format!("Caminho de storage JSON invalido para '{}'", model));
+            };
+            let staged = staging_dir.join(file_name);
+            if let Err(error) = Self::write_all_records_to_path(&staged, records) {
+                let _ = fs::remove_dir_all(&staging_dir);
+                return Err(error);
+            }
         }
 
         if replace_auth {
-            match auth_json {
-                Some(source) => self.write_auth_store_json(source)?,
-                None => {
-                    let path = self.auth_file();
-                    if path.exists() {
-                        fs::remove_file(path).map_err(|e| e.to_string())?;
-                    }
+            if let Some(source) = auth_json {
+                let target = self.auth_file();
+                let Some(file_name) = target.file_name() else {
+                    let _ = fs::remove_dir_all(&staging_dir);
+                    return Err("Caminho de auth JSON invalido".to_string());
+                };
+                let staged = staging_dir.join(file_name);
+                if let Err(error) = Self::write_auth_store_json_to_path(&staged, source) {
+                    let _ = fs::remove_dir_all(&staging_dir);
+                    return Err(error);
                 }
             }
+        }
+
+        fs::create_dir(&backup_dir).map_err(|e| {
+            let _ = fs::remove_dir_all(&staging_dir);
+            e.to_string()
+        })?;
+
+        let result = self.commit_staged_dataset_json(
+            model_records,
+            replace_auth,
+            auth_json.is_some(),
+            &staging_dir,
+            &backup_dir,
+        );
+
+        let _ = fs::remove_dir_all(&staging_dir);
+        let _ = fs::remove_dir_all(&backup_dir);
+        result
+    }
+
+    fn commit_staged_dataset_json(
+        &self,
+        model_records: &[(String, Vec<String>)],
+        replace_auth: bool,
+        has_auth_json: bool,
+        staging_dir: &Path,
+        backup_dir: &Path,
+    ) -> Result<(), String> {
+        let mut targets = Vec::new();
+        for (model, _) in model_records {
+            targets.push(self.model_file(model));
+        }
+        if replace_auth {
+            targets.push(self.auth_file());
+        }
+
+        let result = (|| {
+            for target in &targets {
+                if target.exists() {
+                    let Some(file_name) = target.file_name() else {
+                        return Err(format!(
+                            "Caminho de storage JSON invalido: {}",
+                            target.display()
+                        ));
+                    };
+                    fs::rename(target, backup_dir.join(file_name)).map_err(|e| e.to_string())?;
+                }
+            }
+
+            for (model, _) in model_records {
+                let target = self.model_file(model);
+                let Some(file_name) = target.file_name() else {
+                    return Err(format!("Caminho de storage JSON invalido para '{}'", model));
+                };
+                fs::rename(staging_dir.join(file_name), target).map_err(|e| e.to_string())?;
+            }
+
+            if replace_auth && has_auth_json {
+                let target = self.auth_file();
+                let Some(file_name) = target.file_name() else {
+                    return Err("Caminho de auth JSON invalido".to_string());
+                };
+                fs::rename(staging_dir.join(file_name), target).map_err(|e| e.to_string())?;
+            }
+
+            Ok(())
+        })();
+
+        if let Err(error) = result {
+            for target in &targets {
+                if target.exists() {
+                    let _ = fs::remove_file(target);
+                }
+            }
+            if let Ok(entries) = fs::read_dir(backup_dir) {
+                for entry in entries.flatten() {
+                    let backup = entry.path();
+                    let target = self.data_dir.join(entry.file_name());
+                    let _ = fs::rename(backup, target);
+                }
+            }
+            return Err(error);
         }
 
         Ok(())

@@ -800,6 +800,11 @@ fn parse_storage_dataset(
     }
 
     let auth_value = object_field(&fields, "auth");
+    if has_auth(program) && auth_value.is_none() {
+        return Err(
+            "Storage import requer campo 'auth' para programas que declaram auth".to_string(),
+        );
+    }
     let replace_auth = auth_value.is_some();
     let auth_json = match auth_value {
         Some(JsonValue::Null) | None => None,

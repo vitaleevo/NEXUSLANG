@@ -17,7 +17,7 @@ Release: https://github.com/vitaleevo/NEXUSLANG/releases/tag/v0.2.0
 | Validacao publica de install | PASS | `NEXUS_PUBLIC_RELEASE_TAG=v0.2.0 ./scripts/validate-public-release-install.sh` passou na fase de publicacao |
 | CI remoto da publicacao | PASS | run `26600083912` passou no commit final tagueado `a05bb74a663a4e2e7cc18dd4de7adb25e3f1faeb` |
 | CI remoto da memoria/docs | PASS | run `26600474468` passou em `main` no commit `03ac46172170fd668b125e4d452bbfd620e250a5` |
-| PRs abertas | PASS | nenhuma PR aberta |
+| PRs abertas | PASS | 1 PR aberta (`#8` - 2026-05-29) |
 | Issues abertas | PASS | nenhuma issue aberta |
 
 ## Diagnostico de progresso apos 0.2.0

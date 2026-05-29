@@ -2431,6 +2431,55 @@ model Customer {
 }
 
 #[test]
+fn cli_storage_import_requires_auth_field_for_auth_program() {
+    let project = TempProject::new("storage-import-auth-field-cli");
+    fs::write(
+        project.path.join("main.nx"),
+        r#"
+model User {
+    email: string unique
+    role: string = "user"
+}
+
+auth Session {
+    model: User
+    identity: email
+    role: role
+    password_min: 15
+    session_ttl_minutes: 60
+    idle_ttl_minutes: 15
+}
+"#,
+    )
+    .expect("write main");
+    let data_dir = project.path.join(".nexus-data");
+    fs::create_dir_all(&data_dir).expect("create data dir");
+    let auth_path = data_dir.join(".nexus-auth.json");
+    fs::write(&auth_path, r#"{"sessions":[]}"#).expect("write existing auth");
+    fs::write(
+        project.path.join("missing-auth-export.json"),
+        r#"{"format":"nexus.storage.export.v1","source_driver":"seed","models":{"User":[]}}"#,
+    )
+    .expect("write missing auth export");
+
+    let stderr = assert_failure(run_nexus(
+        &project.path,
+        &[
+            "storage-import",
+            "main.nx",
+            "--storage",
+            "json",
+            "--input",
+            "missing-auth-export.json",
+            "--replace",
+        ],
+    ));
+    assert!(stderr.contains("auth"), "stderr: {stderr}");
+    let auth_after = fs::read_to_string(&auth_path).expect("read existing auth");
+    assert_eq!(auth_after, r#"{"sessions":[]}"#);
+}
+
+#[test]
 fn cli_serve_rejects_unknown_storage_driver() {
     let project = TempProject::new("serve-unknown-driver");
     fs::write(project.path.join("main.nx"), r#"print("ok")"#).expect("write main");
