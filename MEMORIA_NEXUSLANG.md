@@ -4,7 +4,101 @@ Este arquivo e o ponto de partida para continuar o projeto sem precisar reler
 todo o sistema. Antes de iniciar uma nova etapa, ler primeiro este arquivo,
 depois abrir apenas os arquivos citados na secao relevante.
 
-Ultima atualizacao: 2026-05-29 (Fase 11.71 - review/PR/CI/merge do historico SQLite)
+Ultima atualizacao: 2026-05-29 (Fase 11.72 - export/import operacional de storage)
+
+## Etapa concluida: Fase 11.72 - export/import operacional de storage
+
+Objetivo: adicionar export/import operacional de dados para storage JSON/SQLite,
+com contrato CLI minimo, roundtrip testado, compatibilidade com ledger/migracoes
+SQLite e documentacao de rollback/restore, sem iniciar observabilidade ou
+publish remoto.
+
+Foi feito:
+
+- Criada a branch `codex/storage-export-import-mvp`.
+- Adicionados comandos CLI:
+  - `nexus storage-export [ficheiro.nx] [--storage json|sqlite] --output data.json`;
+  - `nexus storage-import [ficheiro.nx] [--storage json|sqlite] --input data.json --replace`.
+- Definido o formato logico `nexus.storage.export.v1`, independente do layout
+  fisico JSON/SQLite.
+- O export inclui `format`, `source_driver`, `models` declarados e `auth`
+  quando aplicavel.
+- `storage-export` valida o programa e bloqueia export SQLite quando o
+  `storage-plan` tem blockers ou actions pendentes.
+- `storage-import` exige `--replace`, valida todo o archive antes de escrever,
+  aplica setup SQLite pelo fluxo existente e preserva o ledger
+  `nexus_schema_migrations` como metadado interno, nao como dado exportado.
+- Import JSON substitui os arrays dos models declarados e remove/grava auth
+  quando o archive inclui o campo `auth`.
+- Import SQLite roda em transacao, limpa os dados dos models declarados,
+  reinsere registros canonicos e atualiza/limpa o auth store quando aplicavel.
+- Validacao de registros usa os contratos atuais de model, defaults,
+  min/max e unique constraints.
+- Adicionado teste CLI de roundtrip JSON -> export -> SQLite -> export,
+  cobrindo default materializado, `--replace` obrigatorio, ledger limpo e
+  source driver correto.
+- Atualizados `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md` e o validator
+  da politica de storage.
+
+Arquivos principais:
+
+- `nexuslang-src/src/main.rs`
+- `nexuslang-src/src/server/storage_backend.rs`
+- `nexuslang-src/src/server/json.rs`
+- `nexuslang-src/src/server/sqlite.rs`
+- `nexuslang-src/src/server/mod.rs`
+- `nexuslang-src/tests/cli.rs`
+- `COMPATIBILITY.md`
+- `STORAGE_BACKUP_RESTORE.md`
+- `scripts/validate-storage-compatibility-policy.sh`
+- `meta/CURRENT_TASKS.md`
+- `meta/POST_RELEASE_0_2_0_TRIAGE.md`
+- `meta/ROADMAP.md`
+- `nexuslang-src/ROADMAP.md`
+- `MEMORIA_NEXUSLANG.md`
+
+Verificacao executada:
+
+```bash
+cd <repo-root>/nexuslang-src
+CARGO_TARGET_DIR="${TMPDIR:-/tmp}/nexuslang-target-storage-export-import" cargo test -p nexuslang cli_storage_export_import_roundtrips_json_to_sqlite -- --nocapture
+CARGO_TARGET_DIR="${TMPDIR:-/tmp}/nexuslang-target-storage-export-import" cargo test -p nexuslang cli_storage_plan_sqlite_dry_run_and_apply -- --nocapture
+
+cd <repo-root>
+./scripts/validate-storage-compatibility-policy.sh
+NEXUS_RUN_CLIPPY=1 ./scripts/quality-gate.sh
+./scripts/package-release.sh && ./scripts/validate-release-package.sh
+git diff --check
+```
+
+Resultado:
+
+- Teste CLI de export/import JSON/SQLite: PASS, 1/1.
+- Teste CLI `storage-plan`: PASS, 1/1.
+- Validator da politica de storage: PASS.
+- Quality gate completo com clippy: PASS.
+- Package local gerado e validado em ambiente limpo: PASS.
+- `git diff --check`: PASS.
+- Nenhuma tag, release publica, publish de package, observabilidade ou trilha
+  paralela foi iniciada.
+
+Estado atual:
+
+- Fase 11.72 implementada em branch controlada.
+- O projeto agora tem caminho operacional minimo para mover dados declarados
+  entre JSON e SQLite, seedar ambientes e verificar exports logicos.
+- A branch ainda precisa de review/PR/CI/merge antes de considerar o recurso
+  parte de `main`.
+
+## Proximo passo recomendado
+
+Fase 11.73 - review/PR/CI/merge do export/import operacional de storage:
+abrir PR da branch `codex/storage-export-import-mvp`, revisar feedback, manter
+CI remoto verde e validar pos-merge os comandos `storage-export`,
+`storage-import`, `storage-plan` e o package smoke antes de iniciar
+observabilidade ou outra trilha.
+
+AVISO: O proximo passo e criar/implementar Fase 11.73 - review/PR/CI/merge do export/import operacional de dados JSON/SQLite, com CI remoto verde e validacao pos-merge dos comandos `storage-export`, `storage-import`, `storage-plan` e package smoke antes de iniciar observabilidade, publish remoto ou outra trilha. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, `meta/CURRENT_TASKS.md`, `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md`, `nexuslang-src/src/main.rs`, `nexuslang-src/src/server/storage_backend.rs`, `nexuslang-src/src/server/json.rs`, `nexuslang-src/src/server/sqlite.rs` e `nexuslang-src/tests/cli.rs` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
 
 ## Etapa concluida: Fase 11.71 - review/PR/CI/merge do historico SQLite
 
@@ -112,14 +206,15 @@ Estado do projeto:
   operacional; o produto completo ainda esta em hardening, nao em producao
   pesada irrestrita.
 
-## Proximo passo recomendado
+## Proximo passo historico (executado na Fase 11.72)
 
 Fase 11.72 - export/import operacional de dados para storage JSON/SQLite: criar
 contrato CLI minimo, roundtrip testado, compatibilidade com ledger/migracoes e
 documentacao de rollback/restore, sem iniciar observabilidade ou publish remoto
 na mesma etapa.
 
-AVISO: O proximo passo e criar/implementar Fase 11.72 - export/import operacional de dados para storage JSON/SQLite, com contrato CLI minimo, roundtrip testado, compatibilidade com ledger/migracoes e documentacao de rollback/restore, sem iniciar observabilidade ou publish remoto na mesma etapa. Antes de iniciar, leia `MEMORIA_NEXUSLANG.md`, `meta/CURRENT_TASKS.md`, `COMPATIBILITY.md`, `STORAGE_BACKUP_RESTORE.md`, `nexuslang-src/src/main.rs`, `nexuslang-src/src/server/storage_backend.rs`, `nexuslang-src/src/server/sqlite.rs`, `nexuslang-src/tests/core.rs` e `nexuslang-src/tests/cli.rs` para continuar exatamente de onde o projeto parou, entender o que ja foi feito e integrar a solucao com o sistema atual sem reler todo o repositorio.
+Nota: este aviso foi consumido pela Fase 11.72. O aviso vigente esta no topo
+deste arquivo.
 
 ## Etapa concluida: Fase 11.70 - historico/versionamento SQLite e smoke SQLite backup/restore
 

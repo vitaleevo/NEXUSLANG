@@ -2276,6 +2276,210 @@ model Customer {
 }
 
 #[test]
+fn cli_storage_export_import_roundtrips_json_to_sqlite() {
+    let project = TempProject::new("storage-export-import-cli");
+    fs::write(
+        project.path.join("main.nx"),
+        r#"
+model Customer {
+    email: string unique
+    status: string index
+    balance: money = 0 kz
+}
+"#,
+    )
+    .expect("write main");
+    let seed_path = project.path.join("seed-export.json");
+    fs::write(
+        &seed_path,
+        r#"{"format":"nexus.storage.export.v1","source_driver":"seed","models":{"Customer":[{"email":"ana@example.com","status":"active","balance":{"amount":100,"currency":"kz"}},{"email":"beto@example.com","status":"inactive"}]},"auth":null}"#,
+    )
+    .expect("write seed");
+
+    let missing_replace = assert_failure(run_nexus(
+        &project.path,
+        &[
+            "storage-import",
+            "main.nx",
+            "--storage",
+            "json",
+            "--input",
+            "seed-export.json",
+        ],
+    ));
+    assert!(
+        missing_replace.contains("--replace"),
+        "stderr: {missing_replace}"
+    );
+
+    let imported_json = assert_success(run_nexus(
+        &project.path,
+        &[
+            "storage-import",
+            "main.nx",
+            "--storage",
+            "json",
+            "--input",
+            "seed-export.json",
+            "--replace",
+        ],
+    ));
+    assert!(
+        imported_json.contains("Storage import (json)"),
+        "stdout: {imported_json}"
+    );
+    assert!(
+        imported_json.contains("Records: 2"),
+        "stdout: {imported_json}"
+    );
+    let json_storage = fs::read_to_string(project.path.join(".nexus-data/customer.json"))
+        .expect("read json storage");
+    assert!(
+        json_storage.contains("ana@example.com") && json_storage.contains("beto@example.com"),
+        "json storage: {json_storage}"
+    );
+    assert!(
+        json_storage.contains(r#""balance":{"amount":0,"currency":"kz"}"#),
+        "json storage should materialize defaulted fields: {json_storage}"
+    );
+
+    let json_export_path = project.path.join("json-export.json");
+    let exported_json = assert_success(run_nexus(
+        &project.path,
+        &[
+            "storage-export",
+            "main.nx",
+            "--storage",
+            "json",
+            "--output",
+            "json-export.json",
+        ],
+    ));
+    assert!(
+        exported_json.contains("Storage export (json)"),
+        "stdout: {exported_json}"
+    );
+    assert!(
+        exported_json.contains("Records: 2"),
+        "stdout: {exported_json}"
+    );
+    let json_export = fs::read_to_string(&json_export_path).expect("read json export");
+    assert!(
+        json_export.contains(r#""format":"nexus.storage.export.v1""#),
+        "export: {json_export}"
+    );
+    assert!(
+        json_export.contains(r#""source_driver":"json""#),
+        "export: {json_export}"
+    );
+
+    let imported_sqlite = assert_success(run_nexus(
+        &project.path,
+        &[
+            "storage-import",
+            "main.nx",
+            "--storage",
+            "sqlite",
+            "--input",
+            "json-export.json",
+            "--replace",
+        ],
+    ));
+    assert!(
+        imported_sqlite.contains("Storage import (sqlite)"),
+        "stdout: {imported_sqlite}"
+    );
+    assert!(
+        project.path.join(".nexus-data/nexus.db").exists(),
+        "sqlite import should create nexus.db"
+    );
+
+    let sqlite_plan = assert_success(run_nexus(
+        &project.path,
+        &["storage-plan", "main.nx", "--storage", "sqlite"],
+    ));
+    assert!(
+        sqlite_plan.contains("Actions: none") && sqlite_plan.contains("Blockers: none"),
+        "stdout: {sqlite_plan}"
+    );
+
+    let exported_sqlite = assert_success(run_nexus(
+        &project.path,
+        &[
+            "storage-export",
+            "main.nx",
+            "--storage",
+            "sqlite",
+            "--output",
+            "sqlite-export.json",
+        ],
+    ));
+    assert!(
+        exported_sqlite.contains("Storage export (sqlite)"),
+        "stdout: {exported_sqlite}"
+    );
+    let sqlite_export =
+        fs::read_to_string(project.path.join("sqlite-export.json")).expect("read sqlite export");
+    assert!(
+        sqlite_export.contains(r#""source_driver":"sqlite""#),
+        "export: {sqlite_export}"
+    );
+    assert!(
+        sqlite_export.contains("ana@example.com") && sqlite_export.contains("beto@example.com"),
+        "export: {sqlite_export}"
+    );
+}
+
+#[test]
+fn cli_storage_import_requires_auth_field_for_auth_program() {
+    let project = TempProject::new("storage-import-auth-field-cli");
+    fs::write(
+        project.path.join("main.nx"),
+        r#"
+model User {
+    email: string unique
+    role: string = "user"
+}
+
+auth Session {
+    model: User
+    identity: email
+    role: role
+    password_min: 15
+    session_ttl_minutes: 60
+    idle_ttl_minutes: 15
+}
+"#,
+    )
+    .expect("write main");
+    let data_dir = project.path.join(".nexus-data");
+    fs::create_dir_all(&data_dir).expect("create data dir");
+    let auth_path = data_dir.join(".nexus-auth.json");
+    fs::write(&auth_path, r#"{"sessions":[]}"#).expect("write existing auth");
+    fs::write(
+        project.path.join("missing-auth-export.json"),
+        r#"{"format":"nexus.storage.export.v1","source_driver":"seed","models":{"User":[]}}"#,
+    )
+    .expect("write missing auth export");
+
+    let stderr = assert_failure(run_nexus(
+        &project.path,
+        &[
+            "storage-import",
+            "main.nx",
+            "--storage",
+            "json",
+            "--input",
+            "missing-auth-export.json",
+            "--replace",
+        ],
+    ));
+    assert!(stderr.contains("auth"), "stderr: {stderr}");
+    let auth_after = fs::read_to_string(&auth_path).expect("read existing auth");
+    assert_eq!(auth_after, r#"{"sessions":[]}"#);
+}
+
+#[test]
 fn cli_serve_rejects_unknown_storage_driver() {
     let project = TempProject::new("serve-unknown-driver");
     fs::write(project.path.join("main.nx"), r#"print("ok")"#).expect("write main");

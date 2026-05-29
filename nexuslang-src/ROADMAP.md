@@ -400,8 +400,8 @@ compatibility risk before adding broad new language surface.
 
 Current source line: post-`v0.2.0` stable development, with the read-only
 registry MVP merged on `main` after PR #5, the SQLite/migrations MVP merged on
-`main` after PR #6, and SQLite migration history/backup hardening implemented
-in a controlled branch for review.
+`main` after PR #6, SQLite migration history/backup hardening merged after
+PR #7, and storage export/import implemented in a controlled branch for review.
 
 ### 0.1.1 maintenance focus
 
@@ -465,10 +465,11 @@ Real risks to retire in `0.1.1`:
   public web product.
 - Public release validation now exists, but it should stay part of every
   release handoff so regressions are caught after upload, not only before tag.
-- Backup/restore is now documented and smoked for JSON storage. SQLite has a
-  public `--storage sqlite` selection, `storage-plan`, a migration ledger in
-  branch, and an operational backup/restore smoke in branch; merge/review is
-  still required before heavy production claims.
+- Backup/restore is now documented and smoked for JSON and SQLite storage.
+  SQLite has a public `--storage sqlite` selection, `storage-plan`, a migration
+  ledger in `main`, and an operational backup/restore smoke in `main`.
+  Logical export/import exists in branch and still needs review/merge before
+  heavy production claims.
 - `v0.1.1` has completed commit/push, GitHub Actions observation, strict
   dry-run, tag/release publication, and post-release public install validation.
 
@@ -483,10 +484,15 @@ Real risks to retire in `0.1.1`:
   creation, non-unique-index blockers and focused tests.
 - Harden SQLite migrations with a migration history/ledger, idempotence checks,
   rollback/restore documentation and an operational SQLite backup/restore
-  smoke before claiming heavy persistent production readiness. IMPLEMENTED in
-  branch with `nexus_schema_migrations`, deterministic action IDs, focused
-  idempotence tests, docs, and `scripts/smoke-sqlite-backup-restore.sh`;
-  pending PR/CI/merge.
+  smoke before claiming heavy persistent production readiness. DONE in `main`
+  by PR #7 with `nexus_schema_migrations`, deterministic action IDs, focused
+  idempotence tests, docs, and `scripts/smoke-sqlite-backup-restore.sh`.
+- Add operational storage export/import for JSON/SQLite data movement before
+  claiming heavy persistent production readiness. IMPLEMENTED in branch with
+  `nexus storage-export`, `nexus storage-import`, archive
+  `nexus.storage.export.v1`, replace-only import, SQLite transaction handling,
+  ledger preservation, docs, and a JSON-to-SQLite roundtrip CLI test; pending
+  PR/CI/merge.
 - Decide whether docs generation belongs in the CLI as a first-class command
   before expanding documentation UI in the playground.
 - Improve runtime diagnostics with structured locations where feasible, so

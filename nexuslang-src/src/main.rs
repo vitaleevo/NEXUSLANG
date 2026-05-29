@@ -227,6 +227,12 @@ fn main() {
         "storage-plan" => {
             run_storage_plan_command(&args);
         }
+        "storage-export" => {
+            run_storage_export_command(&args);
+        }
+        "storage-import" => {
+            run_storage_import_command(&args);
+        }
         "repl" => run_repl(),
         "new" => {
             let project_name = required_arg(&args, 2, "new <project>");
@@ -316,6 +322,16 @@ fn print_usage(out: &mut dyn Write) {
     writeln!(
         out,
         "  nexus storage-plan [ficheiro.nx] [--storage json|sqlite] [--apply] — Planejar/aplicar migração de storage"
+    )
+    .ok();
+    writeln!(
+        out,
+        "  nexus storage-export [ficheiro.nx] [--storage json|sqlite] --output data.json — Exportar dados de storage"
+    )
+    .ok();
+    writeln!(
+        out,
+        "  nexus storage-import [ficheiro.nx] [--storage json|sqlite] --input data.json --replace — Importar dados de storage"
     )
     .ok();
     writeln!(
@@ -912,6 +928,109 @@ fn run_storage_plan_command(args: &[String]) {
     print!("{}", plan.render_text(apply));
 }
 
+fn run_storage_export_command(args: &[String]) {
+    let (file_path, storage_driver, output_path) = storage_export_entry_driver_and_output(args);
+    let (program, _) = nexuslang::load_and_check_with_graph(&file_path).unwrap_or_else(|e| {
+        eprintln!("Erro de validação: {}", e);
+        process::exit(1);
+    });
+    let data_dir = nexuslang::server::default_data_dir(file_path.to_string_lossy().as_ref());
+    let plan = Storage::schema_migration_plan_for_driver(storage_driver, &data_dir, &program)
+        .unwrap_or_else(|e| {
+            eprintln!("Erro no plano de storage: {}", e);
+            process::exit(1);
+        });
+    if plan.has_blockers() {
+        eprintln!(
+            "Storage export bloqueado: resolva o plano de storage primeiro: {}",
+            plan.blocker_summary()
+        );
+        process::exit(1);
+    }
+    if !plan.actions.is_empty() {
+        eprintln!(
+            "Storage export bloqueado: inicialize o storage primeiro com `nexus storage-plan {} --storage {} --apply`",
+            file_path.display(),
+            storage_driver
+        );
+        process::exit(1);
+    }
+
+    let storage = Storage::new_driver(storage_driver, &data_dir).unwrap_or_else(|e| {
+        eprintln!("Erro ao abrir storage {}: {}", storage_driver, e);
+        process::exit(1);
+    });
+    let (json, report) = storage.export_dataset_json(&program).unwrap_or_else(|e| {
+        eprintln!("Erro ao exportar storage: {}", e);
+        process::exit(1);
+    });
+    if let Some(parent) = output_path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).unwrap_or_else(|e| {
+                eprintln!("Erro ao criar diretorio '{}': {}", parent.display(), e);
+                process::exit(1);
+            });
+        }
+    }
+    fs::write(&output_path, format!("{}\n", json)).unwrap_or_else(|e| {
+        eprintln!("Erro ao escrever '{}': {}", output_path.display(), e);
+        process::exit(1);
+    });
+    println!("Storage export ({})", report.driver);
+    println!("Output: {}", output_path.display());
+    println!("Models: {}", report.model_count);
+    println!("Records: {}", report.record_count);
+    println!(
+        "Auth: {}",
+        if report.auth_included {
+            "included"
+        } else {
+            "none"
+        }
+    );
+}
+
+fn run_storage_import_command(args: &[String]) {
+    let (file_path, storage_driver, input_path, replace) =
+        storage_import_entry_driver_input_replace(args);
+    let (program, _) = nexuslang::load_and_check_with_graph(&file_path).unwrap_or_else(|e| {
+        eprintln!("Erro de validação: {}", e);
+        process::exit(1);
+    });
+    let source = fs::read_to_string(&input_path).unwrap_or_else(|e| {
+        eprintln!("Erro ao ler '{}': {}", input_path.display(), e);
+        process::exit(1);
+    });
+    let data_dir = nexuslang::server::default_data_dir(file_path.to_string_lossy().as_ref());
+    let storage = Storage::new_driver(storage_driver, &data_dir).unwrap_or_else(|e| {
+        eprintln!("Erro ao abrir storage {}: {}", storage_driver, e);
+        process::exit(1);
+    });
+    storage.ensure_storage(&program).unwrap_or_else(|e| {
+        eprintln!("Erro ao preparar storage {}: {}", storage_driver, e);
+        process::exit(1);
+    });
+    let report = storage
+        .import_dataset_json(&program, &source, replace)
+        .unwrap_or_else(|e| {
+            eprintln!("Erro ao importar storage: {}", e);
+            process::exit(1);
+        });
+    println!("Storage import ({})", report.driver);
+    println!("Input: {}", input_path.display());
+    println!("Mode: replace");
+    println!("Models: {}", report.model_count);
+    println!("Records: {}", report.record_count);
+    println!(
+        "Auth: {}",
+        if report.auth_included {
+            "included"
+        } else {
+            "none"
+        }
+    );
+}
+
 fn storage_plan_entry_driver_and_apply(args: &[String]) -> (PathBuf, StorageDriver, bool) {
     let mut file_path: Option<&str> = None;
     let mut storage_driver = StorageDriver::Sqlite;
@@ -967,6 +1086,162 @@ fn storage_plan_entry_driver_and_apply(args: &[String]) -> (PathBuf, StorageDriv
         .map(PathBuf::from)
         .unwrap_or_else(|| project_entry_or_exit("storage-plan [ficheiro.nx]"));
     (file_path, storage_driver, apply)
+}
+
+fn storage_export_entry_driver_and_output(args: &[String]) -> (PathBuf, StorageDriver, PathBuf) {
+    let mut file_path: Option<&str> = None;
+    let mut output_path: Option<&str> = None;
+    let mut storage_driver = StorageDriver::DEFAULT;
+    let mut storage_driver_seen = false;
+    let mut index = 2;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--output" | "-o" => {
+                index += 1;
+                let value = args.get(index).unwrap_or_else(|| {
+                    eprintln!(
+                        "Uso: nexus storage-export [ficheiro.nx] [--storage json|sqlite] --output data.json"
+                    );
+                    process::exit(1);
+                });
+                if output_path.replace(value.as_str()).is_some() {
+                    eprintln!("Opcao --output repetida");
+                    process::exit(1);
+                }
+            }
+            "--storage" | "--driver" => {
+                if storage_driver_seen {
+                    eprintln!("Opcao --storage repetida");
+                    process::exit(1);
+                }
+                storage_driver_seen = true;
+                index += 1;
+                let value = args.get(index).unwrap_or_else(|| {
+                    eprintln!(
+                        "Uso: nexus storage-export [ficheiro.nx] [--storage json|sqlite] --output data.json"
+                    );
+                    process::exit(1);
+                });
+                storage_driver = StorageDriver::parse(value).unwrap_or_else(|e| {
+                    eprintln!("{}", e);
+                    process::exit(1);
+                });
+            }
+            option if option.starts_with("--") => {
+                eprintln!("Opcao desconhecida para storage-export: '{}'", option);
+                print_usage_and_exit(1);
+            }
+            value => {
+                if file_path.is_some() {
+                    eprintln!(
+                        "Uso: nexus storage-export [ficheiro.nx] [--storage json|sqlite] --output data.json"
+                    );
+                    process::exit(1);
+                }
+                file_path = Some(value);
+            }
+        }
+        index += 1;
+    }
+
+    let file_path = file_path.map(PathBuf::from).unwrap_or_else(|| {
+        project_entry_or_exit("storage-export [ficheiro.nx] --output data.json")
+    });
+    let output_path = output_path.unwrap_or_else(|| {
+        eprintln!(
+            "Uso: nexus storage-export [ficheiro.nx] [--storage json|sqlite] --output data.json"
+        );
+        process::exit(1);
+    });
+    (file_path, storage_driver, PathBuf::from(output_path))
+}
+
+fn storage_import_entry_driver_input_replace(
+    args: &[String],
+) -> (PathBuf, StorageDriver, PathBuf, bool) {
+    let mut file_path: Option<&str> = None;
+    let mut input_path: Option<&str> = None;
+    let mut storage_driver = StorageDriver::DEFAULT;
+    let mut storage_driver_seen = false;
+    let mut replace = false;
+    let mut index = 2;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--input" | "-i" => {
+                index += 1;
+                let value = args.get(index).unwrap_or_else(|| {
+                    eprintln!(
+                        "Uso: nexus storage-import [ficheiro.nx] [--storage json|sqlite] --input data.json --replace"
+                    );
+                    process::exit(1);
+                });
+                if input_path.replace(value.as_str()).is_some() {
+                    eprintln!("Opcao --input repetida");
+                    process::exit(1);
+                }
+            }
+            "--replace" => {
+                if replace {
+                    eprintln!("Opcao --replace repetida");
+                    process::exit(1);
+                }
+                replace = true;
+            }
+            "--storage" | "--driver" => {
+                if storage_driver_seen {
+                    eprintln!("Opcao --storage repetida");
+                    process::exit(1);
+                }
+                storage_driver_seen = true;
+                index += 1;
+                let value = args.get(index).unwrap_or_else(|| {
+                    eprintln!(
+                        "Uso: nexus storage-import [ficheiro.nx] [--storage json|sqlite] --input data.json --replace"
+                    );
+                    process::exit(1);
+                });
+                storage_driver = StorageDriver::parse(value).unwrap_or_else(|e| {
+                    eprintln!("{}", e);
+                    process::exit(1);
+                });
+            }
+            option if option.starts_with("--") => {
+                eprintln!("Opcao desconhecida para storage-import: '{}'", option);
+                print_usage_and_exit(1);
+            }
+            value => {
+                if file_path.is_some() {
+                    eprintln!(
+                        "Uso: nexus storage-import [ficheiro.nx] [--storage json|sqlite] --input data.json --replace"
+                    );
+                    process::exit(1);
+                }
+                file_path = Some(value);
+            }
+        }
+        index += 1;
+    }
+
+    if !replace {
+        eprintln!("Uso: nexus storage-import [ficheiro.nx] [--storage json|sqlite] --input data.json --replace");
+        eprintln!("Erro: storage-import requer --replace para substituir dados explicitamente");
+        process::exit(1);
+    }
+    let file_path = file_path.map(PathBuf::from).unwrap_or_else(|| {
+        project_entry_or_exit("storage-import [ficheiro.nx] --input data.json --replace")
+    });
+    let input_path = input_path.unwrap_or_else(|| {
+        eprintln!("Uso: nexus storage-import [ficheiro.nx] [--storage json|sqlite] --input data.json --replace");
+        process::exit(1);
+    });
+    (
+        file_path,
+        storage_driver,
+        PathBuf::from(input_path),
+        replace,
+    )
 }
 
 fn project_entry_or_exit(usage: &str) -> PathBuf {

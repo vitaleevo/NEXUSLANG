@@ -1087,6 +1087,75 @@ impl SqliteStorage {
         Ok(format!("[{}]", items.join(",")))
     }
 
+    pub fn replace_dataset_json(
+        &self,
+        model_records: &[(String, Vec<String>)],
+        auth_json: Option<&str>,
+        replace_auth: bool,
+    ) -> Result<(), String> {
+        self.conn
+            .execute_batch("BEGIN IMMEDIATE TRANSACTION;")
+            .map_err(|e| format!("Erro ao iniciar import SQLite: {}", e))?;
+
+        let result = (|| {
+            for (model, records) in model_records {
+                let table = Self::table_name(model);
+                self.conn
+                    .execute(
+                        &format!("DELETE FROM {}", Self::quote_identifier(&table)),
+                        [],
+                    )
+                    .map_err(|e| format!("Erro ao limpar '{}': {}", model, e))?;
+                for record in records {
+                    self.insert_record(model, record)?;
+                }
+            }
+
+            if replace_auth {
+                match auth_json {
+                    Some(source) => {
+                        self.create_auth_table()?;
+                        let sql = format!(
+                            "INSERT INTO {} (key, data) VALUES ('auth_store', ?1) \
+                             ON CONFLICT(key) DO UPDATE SET data = excluded.data",
+                            Self::quote_identifier(SQLITE_AUTH_TABLE)
+                        );
+                        self.conn
+                            .execute(&sql, rusqlite::params![source])
+                            .map_err(|e| format!("Erro ao gravar auth SQLite: {}", e))?;
+                    }
+                    None => {
+                        if self.table_exists(SQLITE_AUTH_TABLE)? {
+                            let sql = format!(
+                                "DELETE FROM {} WHERE key = 'auth_store'",
+                                Self::quote_identifier(SQLITE_AUTH_TABLE)
+                            );
+                            self.conn
+                                .execute(&sql, [])
+                                .map_err(|e| format!("Erro ao limpar auth SQLite: {}", e))?;
+                        }
+                    }
+                }
+            }
+
+            Ok(())
+        })();
+
+        match result {
+            Ok(()) => {
+                if let Err(e) = self.conn.execute_batch("COMMIT;") {
+                    let _ = self.conn.execute_batch("ROLLBACK;");
+                    return Err(format!("Erro ao confirmar import SQLite: {}", e));
+                }
+                Ok(())
+            }
+            Err(error) => {
+                let _ = self.conn.execute_batch("ROLLBACK;");
+                Err(error)
+            }
+        }
+    }
+
     pub fn paginated_array_response(
         &self,
         value: ServerValue,

@@ -187,6 +187,38 @@ semantic migration system: NexusLang does not yet track rename/drop/data
 transform history, rollback scripts, model-version graphs, or dependency-aware
 schema solvers.
 
+### Storage Export/Import MVP
+
+Level: release candidate for operational data movement; not a semantic
+migration transformer.
+
+NexusLang can export and import application records through a logical JSON
+archive that is independent of the physical JSON/SQLite layout:
+
+```bash
+nexus storage-export path/to/app.nx --storage json --output data.json
+nexus storage-import path/to/app.nx --storage sqlite --input data.json --replace
+```
+
+The export format is `nexus.storage.export.v1`. It contains:
+
+- `format`, currently `nexus.storage.export.v1`;
+- `source_driver`, either `json` or `sqlite` for Nexus-generated exports;
+- `models`, an object keyed by declared model name, with JSON arrays of model
+  records;
+- `auth`, either the native auth store JSON or `null`.
+
+`storage-export` validates records against the current program and refuses to
+export SQLite data until the storage plan has no blockers and no pending
+actions. `storage-import` requires `--replace`, validates the whole archive
+before replacing data, applies SQLite storage setup through the existing
+migration plan, and preserves the `nexus_schema_migrations` ledger instead of
+serializing it as application data.
+
+This MVP is for controlled backup movement, JSON-to-SQLite migration, and
+environment seeding. It does not merge datasets, solve field renames, transform
+types, generate rollback scripts, or publish remote packages.
+
 ### Migration Policy For 0.2.x
 
 NexusLang `0.2.x` supports only conservative, user-auditable storage evolution.
